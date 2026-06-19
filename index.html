@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VERDANT — Heleo2 Studio</title>
+  <meta name="description" content="VERDANT — a low-poly forest survival shooter. Hold the line against endless waves in a golden wilderness." />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Animated forest backdrop -->
+  <div class="bg-scene" aria-hidden="true">
+    <div class="bg-sun"></div>
+    <div class="bg-rays"></div>
+    <div class="bg-ridge ridge-1"></div>
+    <div class="bg-ridge ridge-2"></div>
+    <div class="bg-ridge ridge-3"></div>
+    <div class="bg-fog"></div>
+    <div class="bg-particles" id="particles"></div>
+  </div>
+
+  <!-- Top navigation -->
+  <header class="nav">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="34" height="34"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg>
+      </span>
+      <span class="brand-text">VERDANT</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How to Play</a>
+      <a href="#enemies">Threats</a>
+      <a href="#leaderboard">Scores</a>
+    </nav>
+    <a class="btn btn-primary nav-cta" href="game.html">Play Now</a>
+  </header>
+
+  <!-- Hero -->
+  <main id="top">
+    <section class="hero">
+      <div class="hero-emblem" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="72" height="72"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg>
+      </div>
+      <h1 class="hero-title">VERDANT</h1>
+      <p class="hero-studio">Heleo2 Studio</p>
+      <p class="hero-tagline">
+        The sun is dying and the forest has turned. Survive the endless waves
+        in a golden low-poly wilderness — one rifle, one last stand.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="game.html">▶ Enter the Forest</a>
+        <a class="btn btn-ghost btn-lg" href="#how">How to Play</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-num" data-count="∞">∞</span><span class="stat-label">Endless Waves</span></div>
+        <div class="stat"><span class="stat-num" data-count="100">0</span><span class="stat-label">% Browser-Based</span></div>
+        <div class="stat"><span class="stat-num" data-count="60">0</span><span class="stat-label">FPS Low-Poly</span></div>
+      </div>
+      <div class="scroll-hint" aria-hidden="true">scroll ▾</div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="section">
+      <h2 class="section-title">Built for the <span class="accent">Last Stand</span></h2>
+      <div class="cards">
+        <article class="card">
+          <div class="card-icon">🌲</div>
+          <h3>Living Wilderness</h3>
+          <p>A handcrafted low-poly forest drenched in dying sunlight, rolling fog and god-rays. Every wave feels like dusk.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon">🎯</div>
+          <h3>Pure Gunplay</h3>
+          <p>Tight raycast shooting, recoil, reloads and a satisfying <em>KILL</em> punch on every confirmed takedown.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon">🌊</div>
+          <h3>Endless Waves</h3>
+          <p>Each wave grows hungrier and faster. Push your score, your accuracy and your nerve as far as they'll go.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon">⚡</div>
+          <h3>Zero Install</h3>
+          <p>Powered by WebGL &amp; Three.js — runs instantly in your browser. No downloads, no launchers, just play.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- How to play -->
+    <section id="how" class="section section-alt">
+      <h2 class="section-title">How to <span class="accent">Play</span></h2>
+      <div class="keys">
+        <div class="key-row"><span class="keycap">W A S D</span><span>Move through the forest</span></div>
+        <div class="key-row"><span class="keycap">Mouse</span><span>Aim your rifle</span></div>
+        <div class="key-row"><span class="keycap">Left Click</span><span>Fire</span></div>
+        <div class="key-row"><span class="keycap">R</span><span>Reload (30 / mag)</span></div>
+        <div class="key-row"><span class="keycap">Shift</span><span>Sprint</span></div>
+        <div class="key-row"><span class="keycap">Esc</span><span>Release cursor / pause</span></div>
+      </div>
+      <p class="how-note">Clear every enemy in a wave to advance. The forest never runs out of them — how long can you hold?</p>
+      <a class="btn btn-primary btn-lg" href="game.html">Take the Field</a>
+    </section>
+
+    <!-- Enemies -->
+    <section id="enemies" class="section">
+      <h2 class="section-title">Know your <span class="accent">Threats</span></h2>
+      <div class="cards">
+        <article class="card enemy-card">
+          <div class="enemy-swatch swatch-grunt"></div>
+          <h3>Crimson Grunt</h3>
+          <p>Slow, relentless and everywhere. The backbone of every wave. Two clean shots and it's done.</p>
+        </article>
+        <article class="card enemy-card">
+          <div class="enemy-swatch swatch-runner"></div>
+          <h3>Scorched Runner</h3>
+          <p>Fast and fragile. It will close the gap before you can blink. Lead your shots.</p>
+        </article>
+        <article class="card enemy-card">
+          <div class="enemy-swatch swatch-brute"></div>
+          <h3>Ember Brute</h3>
+          <p>A wall of muscle that soaks up rounds. Appears in later waves to break your rhythm.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Leaderboard -->
+    <section id="leaderboard" class="section section-alt">
+      <h2 class="section-title">Local <span class="accent">Hall of Fame</span></h2>
+      <p class="how-note">Your best runs, saved right here in your browser.</p>
+      <ol class="leaderboard" id="leaderboard-list">
+        <li class="lb-empty">No runs yet — be the first to survive.</li>
+      </ol>
+      <a class="btn btn-primary btn-lg" href="game.html">Set a Record</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="24" height="24"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg>
+      </span>
+      <span class="brand-text">VERDANT</span>
+    </div>
+    <p>A Heleo2 Studio production · Built with Three.js · © 2026</p>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
