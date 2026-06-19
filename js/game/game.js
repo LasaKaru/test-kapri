@@ -343,8 +343,17 @@ class Game {
       this.hud.setHealth(this.player.hp, this.player.maxHp);
 
       this.pickups.update(dt, this.player.position, (kind) => this._collect(kind));
+      // water splash while wading & moving
+      if (this.player.wading) {
+        this._splashT = (this._splashT || 0) - dt;
+        if (this._splashT <= 0) {
+          const f = new THREE.Vector3(this.player.position.x, 0.25, this.player.position.z);
+          this.effects.smoke(f, { color: 0xbfe6dd, size: 0.5, life: 0.5, rise: 0.5, opacity: 0.45 });
+          this._splashT = 0.18;
+        }
+      }
       this.effects.update(dt, this.player.position);
-      this.world.update(dt);
+      this.world.update(dt, this.camera);
 
       // camera shake
       if (this.shake > 0) {
@@ -356,7 +365,7 @@ class Game {
       this._idleT = (this._idleT || 0) + dt;
       this.camera.position.set(0, this.player.eyeHeight, 30);
       this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
-      this.world.update(dt);
+      this.world.update(dt, this.camera);
       this.effects.update(dt, this.camera.position);
     }
 

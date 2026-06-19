@@ -18,9 +18,12 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - **Arsenal of 4 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
     LR-7 Marksman (scoped sniper) — each with its own ammo, fire mode, spread,
     recoil and tracers. Switch with `1–4` or the scroll wheel.
-  - Procedural battlefield: gradient **sky dome** with drifting clouds, a ring
-    of **distant mountains**, rolling terrain, pines, rocks, grass, a dirt path,
-    a low golden sun and fog.
+  - Procedural battlefield: gradient **sky dome** with drifting clouds, **layered
+    mountain ranges** with snow caps, rolling terrain, pines, **boulder fields**
+    with moss, grass, a dirt path, a low golden sun and fog.
+  - **Animated water lakes** — carved basins with a procedural wave shader
+    (fresnel reflection + sun specular), reed fringes, and a **wading** slowdown
+    with splash spray when you cross them.
   - A **ruined town**: buildings with glowing windows, watchtowers, sandbag
     walls, crate stacks, fences, and **explosive red barrels** you can shoot to
     blow up clustered enemies.

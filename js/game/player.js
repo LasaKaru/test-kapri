@@ -84,6 +84,9 @@ export class Player {
     let spd = this.speed;
     this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'];
     if (this.sprinting) spd *= this.sprintMul;
+    // wading through water slows you down
+    this.wading = this.world.waterAt(this.position.x, this.position.z);
+    if (this.wading) spd *= 0.5;
 
     if (move.lengthSq() > 0) {
       move.normalize().multiplyScalar(spd * dt);

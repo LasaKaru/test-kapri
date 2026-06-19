@@ -9,6 +9,14 @@ export class World {
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
     this.bounds = 130;
     this._clouds = [];
+    this._time = 0;
+    this._waterMats = [];
+    // lake basins (kept off the path & town); carved into the terrain
+    this.lakes = [
+      { x: -58, z: 38, r: 20 },
+      { x: 62, z: 8, r: 24 },
+      { x: 34, z: 64, r: 17 },
+    ];
     this._build();
   }
 
@@ -19,6 +27,7 @@ export class World {
     this._buildMountains();
     this._plantForest();
     this._buildTown();
+    this._buildWater();
     this._scatterRocks();
     this._scatterGrass();
   }
@@ -120,6 +129,15 @@ export class World {
       const dist = Math.sqrt(x * x + z * z);
       let h = Math.sin(x * 0.05) * Math.cos(z * 0.045) * 2.4 + Math.sin(x * 0.13 + z * 0.1) * 0.9;
       h *= Math.min(1, dist / 40);
+      // carve lake basins (smooth bowl down to ~ -2.6)
+      for (const lk of this.lakes) {
+        const d = Math.hypot(x - lk.x, z - lk.z);
+        if (d < lk.r * 1.25) {
+          const t = 1 - Math.min(1, d / (lk.r * 1.25)); // 0 at rim -> 1 at center
+          const bowl = t * t * (3 - 2 * t); // smoothstep
+          h = h * (1 - bowl) + (-2.6) * bowl;
+        }
+      }
       pos.setY(i, h);
     }
     geo.computeVertexNormals();
@@ -136,21 +154,108 @@ export class World {
     this.scene.add(path);
   }
 
-  // ---------- Distant mountains ----------
+  // ---------- Distant mountains (layered ranges + snow caps) ----------
   _buildMountains() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x2a3d1a, roughness: 1, flatShading: true });
     const ring = new THREE.Group();
-    const count = 30;
-    for (let i = 0; i < count; i++) {
-      const ang = (i / count) * Math.PI * 2;
-      const r = 230 + Math.random() * 40;
-      const h = 40 + Math.random() * 60;
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(40 + Math.random() * 30, h, 5), mat);
-      cone.position.set(Math.cos(ang) * r, h / 2 - 6, Math.sin(ang) * r);
-      cone.rotation.y = Math.random() * Math.PI;
-      ring.add(cone);
+    // three depth layers: nearer & darker -> farther & hazier
+    const layers = [
+      { r: 175, count: 26, baseR: 36, h: [34, 70], color: 0x35491f, snow: false },
+      { r: 235, count: 30, baseR: 46, h: [55, 105], color: 0x2a3a22, snow: true },
+      { r: 300, count: 32, baseR: 58, h: [80, 150], color: 0x33405a, snow: true },
+    ];
+    const snowMat = new THREE.MeshStandardMaterial({ color: 0xeaf2ff, roughness: 1, flatShading: true });
+    for (const L of layers) {
+      const mat = new THREE.MeshStandardMaterial({ color: L.color, roughness: 1, flatShading: true });
+      for (let i = 0; i < L.count; i++) {
+        const ang = (i / L.count) * Math.PI * 2 + Math.random() * 0.1;
+        const r = L.r + Math.random() * 40;
+        const h = L.h[0] + Math.random() * (L.h[1] - L.h[0]);
+        const baseR = L.baseR + Math.random() * 24;
+        const peak = new THREE.Mesh(new THREE.ConeGeometry(baseR, h, 5 + (Math.random() * 3 | 0)), mat);
+        peak.position.set(Math.cos(ang) * r, h / 2 - 8, Math.sin(ang) * r);
+        peak.rotation.y = Math.random() * Math.PI;
+        ring.add(peak);
+        if (L.snow && h > 70) {
+          const capH = h * 0.28;
+          const cap = new THREE.Mesh(new THREE.ConeGeometry(baseR * (capH / h) * 1.05, capH, 5), snowMat);
+          cap.position.set(peak.position.x, h - 8 - capH / 2, peak.position.z);
+          cap.rotation.y = peak.rotation.y;
+          ring.add(cap);
+        }
+      }
     }
     this.scene.add(ring);
+  }
+
+  // ---------- Water (procedural animated lakes) ----------
+  _buildWater() {
+    const sun = new THREE.Vector3(-40, 34, -90).normalize();
+    for (const lk of this.lakes) {
+      const mat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false,
+        uniforms: {
+          uTime: { value: 0 },
+          uSun: { value: sun },
+          uCam: { value: new THREE.Vector3() },
+          uDeep: { value: new THREE.Color(0x12303f) },
+          uShallow: { value: new THREE.Color(0x2f8f86) },
+          uSky: { value: new THREE.Color(0xe8b85a) },
+        },
+        vertexShader: `
+          varying vec3 vW; varying vec3 vN; uniform float uTime;
+          void main(){
+            vec3 p = position;
+            float w = sin(position.x*0.25 + uTime*1.3)*0.10 + sin(position.z*0.33 + uTime*1.0)*0.08
+                    + sin((position.x+position.z)*0.5 + uTime*1.8)*0.04;
+            p.y += w;
+            float dx = cos(position.x*0.25+uTime*1.3)*0.10*0.25 + cos((position.x+position.z)*0.5+uTime*1.8)*0.04*0.5;
+            float dz = cos(position.z*0.33+uTime*1.0)*0.08*0.33 + cos((position.x+position.z)*0.5+uTime*1.8)*0.04*0.5;
+            vN = normalize(vec3(-dx, 1.0, -dz));
+            vec4 wp = modelMatrix * vec4(p,1.0);
+            vW = wp.xyz;
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }`,
+        fragmentShader: `
+          varying vec3 vW; varying vec3 vN;
+          uniform vec3 uSun; uniform vec3 uCam; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky;
+          void main(){
+            vec3 N = normalize(vN);
+            vec3 V = normalize(uCam - vW);
+            float fres = pow(1.0 - max(dot(N,V),0.0), 3.0);
+            vec3 base = mix(uDeep, uShallow, 0.45);
+            // keep the lake reading as water — cap how much sky it mirrors
+            vec3 col = mix(base, uSky, clamp(fres,0.0,1.0) * 0.6);
+            vec3 H = normalize(uSun + V);
+            float spec = pow(max(dot(N,H),0.0), 140.0);
+            col += vec3(1.0,0.93,0.78) * spec * 1.8;
+            gl_FragColor = vec4(col, 0.86);
+          }`,
+      });
+      const geo = new THREE.CircleGeometry(lk.r * 1.12, 48);
+      geo.rotateX(-Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(lk.x, -0.15, lk.z);
+      this.scene.add(mesh);
+      this._waterMats.push(mat);
+
+      // reedy ring around the lake
+      const reedMat = new THREE.MeshStandardMaterial({ color: 0x5f7a26, roughness: 1, flatShading: true });
+      for (let i = 0; i < 26; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rr = lk.r * (1.05 + Math.random() * 0.12);
+        const reed = new THREE.Mesh(new THREE.ConeGeometry(0.12, 1.6 + Math.random(), 4), reedMat);
+        reed.position.set(lk.x + Math.cos(a) * rr, 0.4, lk.z + Math.sin(a) * rr);
+        this.scene.add(reed);
+      }
+    }
+  }
+
+  // true if (x,z) is over open water (used for wading)
+  waterAt(x, z) {
+    for (const lk of this.lakes) {
+      if (Math.hypot(x - lk.x, z - lk.z) < lk.r) return true;
+    }
+    return false;
   }
 
   // ---------- Trees ----------
@@ -180,6 +285,7 @@ export class World {
       const dist = 12 + Math.random() * 130;
       const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
       if (Math.abs(x) < 5 && Math.abs(z) < 100) continue;
+      if (this.waterAt(x, z)) continue;
       const tree = this._makeTree();
       const s = 0.8 + Math.random() * 0.9;
       tree.scale.setScalar(s);
@@ -220,7 +326,8 @@ export class World {
     // perimeter fence posts here and there
     for (let i = 0; i < 18; i++) {
       const ang = Math.random() * Math.PI * 2, r = 40 + Math.random() * 70;
-      this._fencePost(Math.cos(ang) * r, Math.sin(ang) * r);
+      const fx = Math.cos(ang) * r, fz = Math.sin(ang) * r;
+      if (!this.waterAt(fx, fz)) this._fencePost(fx, fz);
     }
   }
 
@@ -329,16 +436,46 @@ export class World {
     this.scene.add(post);
   }
 
+  _rock(x, z, r, mat, mossMat) {
+    if (this.waterAt(x, z)) return;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), mat);
+    // squash + jitter verts a touch for a less uniform look
+    rock.scale.set(1, 0.7 + Math.random() * 0.5, 1);
+    rock.position.set(x, r * 0.35, z);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = true; rock.receiveShadow = true;
+    this.scene.add(rock);
+    // mossy cap on bigger boulders
+    if (r > 0.9 && mossMat) {
+      const moss = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.92, 0), mossMat);
+      moss.scale.set(1, 0.35, 1);
+      moss.position.set(x, r * 0.6, z);
+      moss.rotation.copy(rock.rotation);
+      this.scene.add(moss);
+    }
+    if (Math.hypot(x, z) < this.bounds) this.colliders.push({ x, z, r: r * 0.7 });
+  }
+
   _scatterRocks() {
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6f5a, roughness: 1, flatShading: true });
-    for (let i = 0; i < 44; i++) {
-      const ang = Math.random() * Math.PI * 2, dist = 8 + Math.random() * 115;
-      const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
-      const r = 0.4 + Math.random() * 1.1;
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), rockMat);
-      rock.position.set(x, r * 0.4, z); rock.rotation.set(Math.random(), Math.random(), Math.random());
-      rock.castShadow = true; rock.receiveShadow = true; this.scene.add(rock);
-      if (dist < this.bounds) this.colliders.push({ x, z, r: r * 0.7 });
+    const darkRock = new THREE.MeshStandardMaterial({ color: 0x52564a, roughness: 1, flatShading: true });
+    const mossMat = new THREE.MeshStandardMaterial({ color: 0x4f7d1e, roughness: 1, flatShading: true });
+
+    // scattered singles
+    for (let i = 0; i < 50; i++) {
+      const ang = Math.random() * Math.PI * 2, dist = 8 + Math.random() * 118;
+      this._rock(Math.cos(ang) * dist, Math.sin(ang) * dist, 0.4 + Math.random() * 1.0,
+        Math.random() < 0.5 ? rockMat : darkRock, mossMat);
+    }
+    // boulder clusters (cover)
+    for (let c = 0; c < 9; c++) {
+      const ang = Math.random() * Math.PI * 2, dist = 20 + Math.random() * 95;
+      const cx = Math.cos(ang) * dist, cz = Math.sin(ang) * dist;
+      const n = 3 + (Math.random() * 4 | 0);
+      for (let k = 0; k < n; k++) {
+        this._rock(cx + (Math.random() - 0.5) * 5, cz + (Math.random() - 0.5) * 5,
+          0.7 + Math.random() * 1.7, Math.random() < 0.5 ? rockMat : darkRock, mossMat);
+      }
     }
   }
 
@@ -349,9 +486,10 @@ export class World {
     const dummy = new THREE.Object3D();
     for (let i = 0; i < 700; i++) {
       const ang = Math.random() * Math.PI * 2, dist = 4 + Math.random() * 90;
-      dummy.position.set(Math.cos(ang) * dist, 0.4, Math.sin(ang) * dist);
+      const gx = Math.cos(ang) * dist, gz = Math.sin(ang) * dist;
+      dummy.position.set(gx, 0.4, gz);
       dummy.rotation.y = Math.random() * Math.PI;
-      dummy.scale.setScalar(0.6 + Math.random());
+      dummy.scale.setScalar(this.waterAt(gx, gz) ? 0 : 0.6 + Math.random());
       dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     }
     this.scene.add(mesh);
@@ -391,10 +529,15 @@ export class World {
     return { x, z };
   }
 
-  update(dt) {
+  update(dt, camera) {
+    this._time += dt;
     for (const c of this._clouds) {
       c.s.position.x += c.speed * dt;
       if (c.s.position.x > 320) c.s.position.x = -320;
+    }
+    for (const m of this._waterMats) {
+      m.uniforms.uTime.value = this._time;
+      if (camera) m.uniforms.uCam.value.copy(camera.position);
     }
   }
 }
