@@ -3,18 +3,18 @@ import * as THREE from 'three';
 // Enemy archetypes seen/implied in VERDANT.
 const TYPES = {
   grunt:  { hp: 2, speed: 3.2, scale: 1.0, color: 0xe03a2f, score: 100, dmg: 8 },
-  runner: { hp: 1, speed: 6.0, scale: 0.85, color: 0xff7a3a, score: 150, dmg: 6 },
-  brute:  { hp: 6, speed: 2.0, scale: 1.5, color: 0xb01818, score: 300, dmg: 16 },
+  runner: { hp: 1, speed: 6.2, scale: 0.85, color: 0xff7a3a, score: 150, dmg: 6 },
+  brute:  { hp: 8, speed: 2.0, scale: 1.5, color: 0xb01818, score: 350, dmg: 16 },
 };
 
 export class Enemy {
-  constructor(scene, type, pos) {
+  constructor(scene, type, pos, hpScale = 1) {
     this.scene = scene;
     this.type = type;
     const def = TYPES[type];
     this.def = def;
-    this.hp = def.hp;
-    this.maxHp = def.hp;
+    this.hp = Math.ceil(def.hp * hpScale);
+    this.maxHp = this.hp;
     this.speed = def.speed;
     this.dmg = def.dmg;
     this.score = def.score;
@@ -210,7 +210,8 @@ export class WaveManager {
     const ang = Math.random() * Math.PI * 2;
     const dist = 45 + Math.random() * 30;
     const pos = new THREE.Vector3(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
-    this.enemies.push(new Enemy(this.scene, type, pos));
+    const hpScale = 1 + (this.wave - 1) * 0.08; // tougher each wave
+    this.enemies.push(new Enemy(this.scene, type, pos, hpScale));
   }
 
   get remaining() {
@@ -261,6 +262,13 @@ export class WaveManager {
       }
     }
     return best;
+  }
+
+  // Directional raycast from an origin along dir, up to far distance.
+  raycastRay(raycaster, origin, dir, far) {
+    raycaster.set(origin, dir);
+    raycaster.far = far;
+    return this.raycast(raycaster);
   }
 
   removeDead(onKill) {

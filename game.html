@@ -21,10 +21,12 @@
 
     <!-- HUD -->
     <div id="hud" class="hidden">
-      <!-- Top-left: health -->
+      <!-- Top-left: health + armor -->
       <div class="hud-tl">
         <div class="hud-label">VITALITY</div>
         <div class="health-bar"><div class="health-fill" id="health-fill"></div></div>
+        <div class="hud-label armor-label">ARMOR</div>
+        <div class="armor-bar"><div class="armor-fill" id="armor-fill"></div></div>
       </div>
 
       <!-- Top-right: wave + score -->
@@ -32,13 +34,23 @@
         <div class="wave-tag">WAVE <span id="wave-num">1</span></div>
         <div class="score-tag">SCORE <span id="score-num">0000</span></div>
         <div class="enemies-tag"><span id="enemies-left">0</span> LEFT</div>
+        <div class="streak-tag hidden" id="streak-tag">🔥 <span id="streak-num">0</span> STREAK</div>
       </div>
 
-      <!-- Bottom-right: ammo -->
+      <!-- Bottom-right: weapon + ammo -->
       <div class="hud-br">
-        <span class="ammo-icon">❂</span>
-        <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
+        <div class="weapon-name" id="weapon-name">KR-15 RIFLE</div>
+        <div class="ammo-line">
+          <span class="ammo-icon">❂</span>
+          <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
+        </div>
       </div>
+
+      <!-- Bottom-left: weapon slots -->
+      <div class="hud-weapons" id="hud-weapons"></div>
+
+      <!-- kill feed -->
+      <div class="kill-feed" id="kill-feed"></div>
 
       <!-- crosshair -->
       <div class="crosshair" id="crosshair"><span></span><span></span><span></span><span></span></div>
@@ -46,9 +58,15 @@
       <!-- center popups (KILL / WAVE) -->
       <div class="center-pop" id="center-pop"></div>
 
-      <!-- hit / damage flash -->
+      <!-- hit / damage flash + low health vignette -->
       <div class="dmg-flash" id="dmg-flash"></div>
+      <div class="lowhp-vignette" id="lowhp-vignette"></div>
       <div class="reload-note" id="reload-note">RELOADING…</div>
+
+      <!-- sniper scope overlay -->
+      <div class="scope" id="scope">
+        <div class="scope-ring"><span class="scope-v"></span><span class="scope-h"></span></div>
+      </div>
     </div>
 
     <!-- Title / start screen -->
@@ -59,8 +77,9 @@
         <p class="title-studio">Heleo2 Studio</p>
         <button class="btn btn-primary btn-lg" id="start-btn">▶ Start Survival</button>
         <div class="controls-hint">
-          <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>Click</b> Fire</span>
-          <span><b>R</b> Reload</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+          <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
+          <span><b>R-Click</b> Aim Down Sights</span><span><b>R</b> Reload</span>
+          <span><b>1-4 / Wheel</b> Weapons</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
         </div>
         <a class="back-link" href="index.html">← Back to site</a>
       </div>

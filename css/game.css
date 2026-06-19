@@ -29,8 +29,13 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .health-bar{width:230px;height:16px;background:rgba(8,16,4,.65);border:2px solid rgba(188,224,74,.5);
   border-radius:9px;overflow:hidden;box-shadow:0 0 14px rgba(0,0,0,.4)}
 .health-fill{height:100%;width:100%;border-radius:6px;
-  background:linear-gradient(90deg,#7ed11f,#bce04a,#d8ff5e);transition:width .25s,background .25s}
+  background:linear-gradient(90deg,#7ed11f,#bce04a,#d8ff5e);transition:width .2s,background .25s}
 .health-fill.low{background:linear-gradient(90deg,#e03a2f,#ff7a3a)}
+.armor-label{margin-top:9px}
+.armor-bar{width:230px;height:11px;background:rgba(8,16,4,.65);border:2px solid rgba(74,163,255,.5);
+  border-radius:7px;overflow:hidden}
+.armor-fill{height:100%;width:0%;border-radius:5px;
+  background:linear-gradient(90deg,#2f7ad1,#4aa3ff,#9bd0ff);transition:width .2s}
 
 /* Top-right wave/score */
 .hud-tr{position:absolute;top:20px;right:26px;text-align:right;font-family:'Orbitron'}
@@ -39,15 +44,53 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .score-tag{font-size:1.05rem;font-weight:700;letter-spacing:.14em;color:var(--gold);margin-top:2px}
 .enemies-tag{font-family:'Rajdhani';font-weight:600;font-size:.85rem;letter-spacing:.18em;
   color:var(--crimson);margin-top:4px}
+.streak-tag{font-family:'Orbitron';font-weight:700;font-size:.95rem;letter-spacing:.1em;
+  color:var(--gold);margin-top:6px;filter:drop-shadow(0 0 8px rgba(255,207,74,.5))}
 
-/* Bottom-right ammo */
-.hud-br{position:absolute;bottom:24px;right:30px;font-family:'Orbitron';display:flex;align-items:baseline;gap:4px}
+/* Bottom-right weapon + ammo */
+.hud-br{position:absolute;bottom:24px;right:30px;font-family:'Orbitron';text-align:right}
+.weapon-name{font-size:1rem;font-weight:700;letter-spacing:.16em;color:var(--lime-bright);margin-bottom:2px}
+.ammo-line{display:flex;align-items:baseline;gap:4px;justify-content:flex-end}
 .ammo-icon{color:var(--lime);font-size:1.5rem;margin-right:8px;filter:drop-shadow(0 0 8px rgba(188,224,74,.6))}
 .ammo-mag{font-size:2.6rem;font-weight:900;color:#fff}
 .ammo-sep{font-size:1.6rem;color:var(--muted);margin:0 2px}
 .ammo-reserve{font-size:1.5rem;font-weight:700;color:var(--muted)}
 .ammo-mag.empty{color:var(--crimson);animation:blink .5s steps(2) infinite}
 @keyframes blink{50%{opacity:.3}}
+
+/* Bottom-left weapon slots */
+.hud-weapons{position:absolute;bottom:24px;left:24px;display:flex;flex-direction:column;gap:6px}
+.wslot{display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:8px;
+  background:rgba(8,16,4,.55);border:1px solid rgba(188,224,74,.18);font-family:'Orbitron';
+  color:var(--muted);font-size:.78rem;letter-spacing:.08em;transition:all .15s;opacity:.6}
+.wslot .wkey{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;
+  background:rgba(188,224,74,.15);color:var(--lime);font-size:.7rem}
+.wslot.active{opacity:1;border-color:var(--lime);color:var(--lime-bright);
+  background:rgba(47,107,30,.4);box-shadow:0 0 14px rgba(188,224,74,.25)}
+
+/* kill feed */
+.kill-feed{position:absolute;top:120px;right:26px;display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.kill-feed .kf{font-family:'Orbitron';font-size:.8rem;letter-spacing:.06em;color:#f3eecf;
+  background:rgba(8,16,4,.55);border-left:3px solid var(--crimson);padding:4px 10px;border-radius:4px;
+  animation:kf-in .3s ease-out}
+@keyframes kf-in{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+/* low-health vignette */
+.lowhp-vignette{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;
+  box-shadow:inset 0 0 200px 60px rgba(224,40,30,.55)}
+.lowhp-vignette.show{opacity:1;animation:hppulse 1.4s ease-in-out infinite}
+@keyframes hppulse{0%,100%{opacity:.55}50%{opacity:.9}}
+
+/* sniper scope */
+.scope{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:radial-gradient(circle at 50% 50%,transparent 0,transparent 30vh,rgba(0,0,0,.97) 31vh)}
+.scope.show{opacity:1}
+.scope-ring{position:absolute;top:50%;left:50%;width:60vh;height:60vh;transform:translate(-50%,-50%);
+  border:2px solid rgba(0,0,0,.9);border-radius:50%}
+.scope-v{position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(20,20,20,.8);transform:translateX(-50%)}
+.scope-h{position:absolute;top:50%;left:0;right:0;height:1px;background:rgba(20,20,20,.8);transform:translateY(-50%)}
+.scope-ring::after{content:"";position:absolute;top:50%;left:50%;width:10px;height:10px;
+  border:2px solid var(--crimson);border-radius:50%;transform:translate(-50%,-50%)}
 
 /* Crosshair */
 .crosshair{position:absolute;top:50%;left:50%;width:26px;height:26px;transform:translate(-50%,-50%)}
