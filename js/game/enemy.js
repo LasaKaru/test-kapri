@@ -285,7 +285,8 @@ export class WaveManager {
 
   _spawnOne() {
     const type = this.spawnQueue.shift();
-    const hpScale = 1 + (this.wave - 1) * 0.08;
+    const nf = this.world.nightFactor ? this.world.nightFactor() : 1;
+    const hpScale = (1 + (this.wave - 1) * 0.08) * nf;
     // spread spawns around the player rather than clumping
     const ang = Math.random() * Math.PI * 2;
     const dist = 42 + Math.random() * 34;

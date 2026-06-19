@@ -5,41 +5,41 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-// Cinematic grade: warm tint, contrast, vignette, film grain, mild aberration.
+// Cinematic grade. A single `amount` (0..1) lerps the whole effect from the
+// raw "natural" image (0) to the full cinematic look (1): warm tint, contrast,
+// vignette, film grain and edge chromatic aberration all scale together.
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null },
     time: { value: 0 },
-    vignette: { value: 1.0 },
-    grain: { value: 0.05 },
-    warmth: { value: 1.0 },
+    amount: { value: 1.0 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
   fragmentShader: `
-    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time;
-    uniform float vignette; uniform float grain; uniform float warmth;
+    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time; uniform float amount;
     void main(){
       vec2 uv = vUv;
-      // subtle chromatic aberration toward edges
       vec2 d = uv - 0.5;
       float r2 = dot(d,d);
-      float ab = 0.0018 * r2 * 6.0;
+      // chromatic aberration (scaled by amount)
+      float ab = 0.0018 * r2 * 6.0 * amount;
+      vec3 raw = texture2D(tDiffuse, uv).rgb;
       vec3 col;
       col.r = texture2D(tDiffuse, uv + d*ab).r;
-      col.g = texture2D(tDiffuse, uv).g;
+      col.g = raw.g;
       col.b = texture2D(tDiffuse, uv - d*ab).b;
-      // warm golden grade
-      col *= mix(vec3(1.0), vec3(1.06,1.0,0.9), warmth);
-      // contrast & lift
-      col = (col - 0.5) * 1.09 + 0.5;
-      col = pow(max(col,0.0), vec3(0.96));
+      // warm grade + contrast + lift
+      col *= mix(vec3(1.0), vec3(1.06,1.0,0.9), amount);
+      col = (col - 0.5) * (1.0 + 0.09*amount) + 0.5;
+      col = pow(max(col,0.0), vec3(mix(1.0, 0.96, amount)));
       // vignette
       float v = smoothstep(0.85, 0.32, length(d));
-      col *= mix(1.0 - vignette*0.55, 1.0, v);
+      col *= mix(1.0, mix(1.0 - 0.55, 1.0, v), amount);
       // film grain
       float g = fract(sin(dot(uv*(time*60.0+1.0), vec2(12.9898,78.233))) * 43758.5453);
-      col += (g - 0.5) * grain;
-      gl_FragColor = vec4(col, 1.0);
+      col += (g - 0.5) * 0.05 * amount;
+      // blend back toward the raw image by (1-amount) for a clean natural look
+      gl_FragColor = vec4(mix(raw, col, 1.0), 1.0);
     }`,
 };
 
@@ -61,6 +61,20 @@ export class PostFX {
 
     this.composer.addPass(new OutputPass());
     this._t = 0;
+    this.realism = 1;      // 0..1 master
+    this._baseBloom = 0.55;
+    this.setRealism(1);
+  }
+
+  // 0 = flat natural low-poly look, 1 = full cinematic
+  setRealism(amount) {
+    this.realism = Math.max(0, Math.min(1, amount));
+    this.grade.uniforms.amount.value = this.realism;
+    this._baseBloom = 0.12 + this.realism * 0.55; // some bloom even when low, off near 0
+    if (this.realism <= 0.02) this._baseBloom = 0;
+    this.bloom.enabled = this.realism > 0.02;
+    // soften tone mapping toward neutral when natural
+    this.renderer.toneMappingExposure = 1.0 + this.realism * 0.05;
   }
 
   setSize(w, h) {
@@ -68,13 +82,14 @@ export class PostFX {
     this.bloom.setSize(w, h);
   }
 
-  // momentary punch (e.g. explosions) — pushed back to baseline each frame
-  pulseBloom(amount) { this.bloom.strength = Math.min(1.6, this.bloom.strength + amount); }
+  pulseBloom(amount) {
+    if (this.bloom.enabled) this.bloom.strength = Math.min(1.8, this.bloom.strength + amount * (0.4 + this.realism));
+  }
 
   render(dt) {
     this._t += dt;
     this.grade.uniforms.time.value = this._t;
-    this.bloom.strength += (0.55 - this.bloom.strength) * Math.min(1, dt * 4); // ease back
+    this.bloom.strength += (this._baseBloom - this.bloom.strength) * Math.min(1, dt * 4);
     this.composer.render();
   }
 }
