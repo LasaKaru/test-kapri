@@ -8,6 +8,8 @@ import { WeaponManager, WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { Effects } from './effects.js';
 import { Pickups } from './pickups.js';
 import { PostFX } from './postfx.js';
+import { Minimap } from './minimap.js';
+import { Settings } from './settings.js';
 
 const BASE_FOV = 75;
 
@@ -33,6 +35,8 @@ class Game {
     this.hud = new HUD();
     this.audio = new Audio();
     this.raycaster = new THREE.Raycaster();
+    this.minimap = new Minimap(document.getElementById('minimap'));
+    this.baseFov = BASE_FOV;
 
     this.state = 'title';
     this.score = 0;
@@ -40,6 +44,16 @@ class Game {
     this.streak = 0;
     this.firing = false;
     this.shake = 0;
+
+    // grenades
+    this.grenades = [];
+    this.nades = 3;
+    this.maxNades = 4;
+    this._nadeGeo = new THREE.SphereGeometry(0.16, 8, 6);
+    this._nadeMat = new THREE.MeshStandardMaterial({ color: 0x2b3320, roughness: 0.6, metalness: 0.4 });
+
+    this.settings = new Settings(this);
+    this.settings.applyAll();
 
     this.clock = new THREE.Clock();
     this._resize();
@@ -66,11 +80,32 @@ class Game {
     if (this.postfx) this.postfx.setSize(w, h);
   }
 
+  setBaseFov(fov) {
+    this.baseFov = fov;
+    this.weapons.baseFov = fov;
+    if (!this.weapons.ads) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+  }
+
   _bindUI() {
     document.getElementById('start-btn').addEventListener('click', () => this.start());
     document.getElementById('restart-btn').addEventListener('click', () => this.start());
     document.getElementById('restart-btn-pause').addEventListener('click', () => this.start());
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
+
+    // settings panel (reachable from pause & title)
+    const openSettings = (from) => {
+      this._settingsReturn = from;
+      this.settings.buildUI(document.getElementById('settings-grid'));
+      document.getElementById(from).classList.add('hidden');
+      document.getElementById('settings').classList.remove('hidden');
+    };
+    document.getElementById('settings-btn').addEventListener('click', () => openSettings('pause'));
+    const titleSet = document.getElementById('settings-btn-title');
+    if (titleSet) titleSet.addEventListener('click', () => openSettings('title'));
+    document.getElementById('settings-close').addEventListener('click', () => {
+      document.getElementById('settings').classList.add('hidden');
+      document.getElementById(this._settingsReturn || 'pause').classList.remove('hidden');
+    });
   }
 
   _bindInput() {
@@ -78,6 +113,7 @@ class Game {
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
+      if (e.code === 'KeyG') this._throwGrenade();
       // weapon switch via number keys
       const m = /^Digit([1-4])$/.exec(e.code);
       if (m) {
@@ -144,6 +180,9 @@ class Game {
     this.player.reset();
     this.weapons.reset();
     this.pickups.reset();
+    this._clearGrenades();
+    this.nades = 3;
+    this.hud.setGrenades(this.nades);
     this.score = 0; this.kills = 0; this.streak = 0; this.firing = false; this.shake = 0;
 
     this.hud.setScore(0);
@@ -212,28 +251,80 @@ class Game {
     if (anyHit) this.hud.hitMarker();
   }
 
-  _explode(blast) {
+  // barrel hit from a bullet
+  _explode(blast) { this._detonate(blast.x, blast.z, blast.radius || 7, 5, 20); }
+
+  // general explosion: FX + AoE damage + barrel chain reaction
+  _detonate(x, z, radius, enemyDmg = 6, playerMax = 24, _chained = false) {
     this.audio.explosion();
-    this.shake = Math.min(0.8, this.shake + 0.5);
-    const center = new THREE.Vector3(blast.x, 1, blast.z);
-    this.effects.explosionFX(center);
+    this.shake = Math.min(0.9, this.shake + 0.5);
+    this.effects.explosionFX(new THREE.Vector3(x, 1, z));
     this.postfx.pulseBloom(0.7);
-    // damage enemies in radius
+
     for (const e of this.waves.enemies) {
       if (e.dead) continue;
-      const d = Math.hypot(e.group.position.x - blast.x, e.group.position.z - blast.z);
-      if (d < blast.radius) {
-        if (e.hit(5)) { /* killed by blast, handled in removeDead */ }
+      const d = Math.hypot(e.group.position.x - x, e.group.position.z - z);
+      if (d < radius) {
+        e.hit(enemyDmg);
         this.effects.bloodHit(e.group.position.clone().add(new THREE.Vector3(0, 1, 0)));
       }
     }
-    // damage player if too close
-    const pd = Math.hypot(this.player.position.x - blast.x, this.player.position.z - blast.z);
-    if (pd < blast.radius) {
-      this.player.takeDamage(20 * (1 - pd / blast.radius));
+    const pd = Math.hypot(this.player.position.x - x, this.player.position.z - z);
+    if (pd < radius) {
+      this.player.takeDamage(playerMax * (1 - pd / radius));
       this.hud.damageFlash();
       this._afterPlayerDamage();
     }
+
+    // chain nearby explosive barrels (one hop)
+    if (!_chained) {
+      for (const b of this.world.chainBarrels(x, z, radius)) {
+        this._detonate(b.x, b.z, b.radius, enemyDmg, playerMax, true);
+      }
+    }
+  }
+
+  _throwGrenade() {
+    if (this.state !== 'playing' || this.nades <= 0) return;
+    this.nades -= 1;
+    this.hud.setGrenades(this.nades);
+    this.audio.swap();
+    const origin = new THREE.Vector3();
+    this.camera.getWorldPosition(origin);
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const mesh = new THREE.Mesh(this._nadeGeo, this._nadeMat);
+    mesh.castShadow = true;
+    mesh.position.copy(origin).addScaledVector(dir, 0.6);
+    this.scene.add(mesh);
+    const vel = dir.clone().multiplyScalar(22);
+    vel.y += 4; // arc
+    this.grenades.push({ mesh, vel, fuse: 1.7, spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6) });
+  }
+
+  _updateGrenades(dt) {
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const g = this.grenades[i];
+      g.vel.y -= 24 * dt;
+      const p = g.mesh.position;
+      p.addScaledVector(g.vel, dt);
+      g.mesh.rotation.x += g.spin.x * dt; g.mesh.rotation.y += g.spin.y * dt;
+      // collide with ground / props
+      if (p.y <= 0.2) { p.y = 0.2; g.vel.y *= -0.4; g.vel.x *= 0.55; g.vel.z *= 0.55; }
+      const r = this.world.resolve(p.x, p.z, 0.2);
+      if (r.x !== p.x || r.z !== p.z) { g.vel.x *= -0.4; g.vel.z *= -0.4; p.x = r.x; p.z = r.z; }
+      g.fuse -= dt;
+      if (g.fuse <= 0) {
+        this.scene.remove(g.mesh);
+        this.grenades.splice(i, 1);
+        this._detonate(p.x, p.z, 8.5, 6, 30);
+      }
+    }
+  }
+
+  _clearGrenades() {
+    for (const g of this.grenades) this.scene.remove(g.mesh);
+    this.grenades = [];
   }
 
   _onPlayerHit(dmg) {
@@ -332,6 +423,8 @@ class Game {
           this.audio.wave();
           this.weapons.addAmmo(0.3);
           this.player.addArmor(20);
+          this.nades = Math.min(this.maxNades, this.nades + 2);
+          this.hud.setGrenades(this.nades);
           this.hud.setArmor(this.player.armor, this.player.maxArmor);
           this._syncWeaponHud();
         },
@@ -352,8 +445,10 @@ class Game {
           this._splashT = 0.18;
         }
       }
+      this._updateGrenades(dt);
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
+      this.minimap.update(this.player, this.waves.enemies, this.pickups.items, this.world.lakes);
 
       // camera shake
       if (this.shake > 0) {

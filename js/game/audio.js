@@ -3,6 +3,7 @@ export class Audio {
   constructor() {
     this.ctx = null;
     this.enabled = true;
+    this.master = 0.7;
   }
   _ensure() {
     if (!this.ctx) {
@@ -15,6 +16,7 @@ export class Audio {
   _blip(freq, dur, type = 'square', vol = 0.15, slideTo = null) {
     const ctx = this._ensure();
     if (!ctx || !this.enabled) return;
+    vol *= this.master;
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = type;
@@ -34,7 +36,7 @@ export class Audio {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.setValueAtTime(vol * this.master, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     const filt = ctx.createBiquadFilter();
     filt.type = 'lowpass'; filt.frequency.value = cutoff;

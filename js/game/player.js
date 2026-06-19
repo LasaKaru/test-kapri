@@ -28,6 +28,7 @@ export class Player {
     // look/recoil
     this.recoilPitch = 0;
     this.lookSensMul = 1;       // reduced while ADS
+    this.sensitivity = 1;       // user setting multiplier
 
     this._bob = 0;
   }
@@ -35,7 +36,7 @@ export class Player {
   onKey(code, down) { this.keys[code] = down; }
 
   addLook(dx, dy) {
-    const sens = 0.0022 * this.lookSensMul;
+    const sens = 0.0022 * this.lookSensMul * this.sensitivity;
     this.yaw -= dx * sens;
     this.pitch -= dy * sens;
     const lim = Math.PI / 2 - 0.05;

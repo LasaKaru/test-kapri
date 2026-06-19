@@ -514,6 +514,21 @@ export class World {
     return null;
   }
 
+  // detonate all explosive barrels within radius (one chain hop); returns blast centers
+  chainBarrels(x, z, radius) {
+    const res = [];
+    for (const b of this.barrels) {
+      if (b.dead) continue;
+      if (Math.hypot(b.x - x, b.z - z) < radius) {
+        b.dead = true;
+        this.scene.remove(b.group);
+        this.colliders = this.colliders.filter((c) => !(Math.abs(c.x - b.x) < 0.01 && Math.abs(c.z - b.z) < 0.01));
+        res.push({ x: b.x, z: b.z, radius: 7 });
+      }
+    }
+    return res;
+  }
+
   resolve(x, z, radius) {
     for (const c of this.colliders) {
       const dx = x - c.x, dz = z - c.z;
