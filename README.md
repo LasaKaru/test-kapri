@@ -33,6 +33,10 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - Raycast gunplay with muzzle flash, **bullet tracers**, impact sparks, blood
     hits, **kill streaks** with bonus scoring, a kill feed, hit markers, recoil,
     head-bob and **camera shake** on explosions.
+  - **Cinematic post-processing**: ACES tone mapping, **bloom**, warm color
+    grade, vignette, film grain and subtle chromatic aberration.
+  - **Particle FX**: drifting ambient embers, explosion fireballs &amp; smoke,
+    blood bursts and fading ground decals (blood / scorch).
   - Procedural WebAudio sound effects, per-weapon (no asset downloads).
   - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.
@@ -78,7 +82,8 @@ js/game/
   player.js         Controls, movement, health, armor, regen, recoil
   weapons.js        Arsenal definitions, view models, ADS, firing, reload
   enemy.js          Enemy types + wave manager
-  effects.js        Bullet tracers, impacts, hit sparks (pooled)
+  effects.js        Tracers, impacts, smoke, embers, blood, ground decals
+  postfx.js         Post-processing (bloom, color grade, vignette, grain)
   pickups.js        Health / armor / ammo drops
   hud.js            HUD updates, weapon panel, kill feed, scope, popups
   audio.js          Procedural per-weapon sound effects
