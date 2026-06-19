@@ -25,24 +25,36 @@ export class Audio {
     o.connect(g); g.connect(ctx.destination);
     o.start(); o.stop(ctx.currentTime + dur);
   }
-  shoot() {
+  _noise(dur, vol, cutoff) {
     const ctx = this._ensure();
     if (!ctx || !this.enabled) return;
-    // noise burst
-    const dur = 0.09;
     const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.25, ctx.currentTime);
+    g.gain.setValueAtTime(vol, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     const filt = ctx.createBiquadFilter();
-    filt.type = 'lowpass'; filt.frequency.value = 1800;
+    filt.type = 'lowpass'; filt.frequency.value = cutoff;
     src.connect(filt); filt.connect(g); g.connect(ctx.destination);
     src.start();
   }
+  shoot(kind = 'rifle') {
+    switch (kind) {
+      case 'smg': this._noise(0.06, 0.18, 2400); break;
+      case 'shotgun': this._noise(0.16, 0.32, 1400); this._blip(90, 0.12, 'square', 0.12, 50); break;
+      case 'sniper': this._noise(0.22, 0.35, 1100); this._blip(120, 0.18, 'sawtooth', 0.16, 60); break;
+      default: this._noise(0.09, 0.25, 1800);
+    }
+  }
+  explosion() {
+    this._noise(0.5, 0.45, 700);
+    this._blip(70, 0.5, 'sawtooth', 0.3, 30);
+  }
+  pickup() { this._blip(660, 0.1, 'sine', 0.18, 990); setTimeout(() => this._blip(990, 0.1, 'sine', 0.15, 1320), 80); }
+  swap() { this._blip(300, 0.05, 'square', 0.08); }
   empty() { this._blip(180, 0.06, 'square', 0.08); }
   kill() { this._blip(660, 0.12, 'triangle', 0.18, 1100); }
   hurt() { this._blip(150, 0.25, 'sawtooth', 0.2, 60); }

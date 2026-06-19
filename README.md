@@ -14,15 +14,27 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
 - **Marketing landing page** (`index.html`) — animated forest backdrop, hero,
   feature cards, controls guide, enemy bestiary, and a local hall-of-fame.
 - **Full playable game** (`game.html`):
-  - Pointer-lock FPS controls (WASD + mouse), sprint, reload.
-  - Procedurally built low-poly forest: rolling terrain, pines, rocks, grass,
-    a dirt path, a low golden sun, god-rays and fog.
-  - Three enemy archetypes — **Grunt**, **Runner**, **Brute** — with
-    billboard health bars and walk/attack animation.
-  - Endless, escalating waves with a between-wave breather and ammo top-ups.
-  - Raycast gunplay with muzzle flash, hit markers, recoil and head-bob.
-  - Procedural WebAudio sound effects (no asset downloads).
-  - Damage flash, vitality bar, score, and a **KILL** popup.
+  - Pointer-lock FPS controls (WASD + mouse), sprint, **aim-down-sights** (zoom).
+  - **Arsenal of 4 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
+    LR-7 Marksman (scoped sniper) — each with its own ammo, fire mode, spread,
+    recoil and tracers. Switch with `1–4` or the scroll wheel.
+  - Procedural battlefield: gradient **sky dome** with drifting clouds, a ring
+    of **distant mountains**, rolling terrain, pines, rocks, grass, a dirt path,
+    a low golden sun and fog.
+  - A **ruined town**: buildings with glowing windows, watchtowers, sandbag
+    walls, crate stacks, fences, and **explosive red barrels** you can shoot to
+    blow up clustered enemies.
+  - Three enemy archetypes — **Grunt**, **Runner**, **Brute** — with billboard
+    health bars, walk/attack animation and per-wave HP scaling.
+  - Endless, escalating waves with a between-wave breather, ammo top-ups and
+    fresh armor each wave.
+  - **Survivability:** vitality bar, regenerating health, an **armor** layer,
+    and **pickups** (medkits / armor / ammo) dropped by the fallen.
+  - Raycast gunplay with muzzle flash, **bullet tracers**, impact sparks, blood
+    hits, **kill streaks** with bonus scoring, a kill feed, hit markers, recoil,
+    head-bob and **camera shake** on explosions.
+  - Procedural WebAudio sound effects, per-weapon (no asset downloads).
+  - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.
 
 ## 🎮 Controls
@@ -32,6 +44,8 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
 | `W A S D` | Move |
 | `Mouse` | Aim |
 | `Left Click` | Fire (hold for auto) |
+| `Right Click` | Aim down sights (zoom) |
+| `1 – 4` / `Wheel` | Switch weapons |
 | `R` | Reload |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |
@@ -59,12 +73,15 @@ css/style.css       Landing styles
 css/game.css        HUD & overlay styles
 js/main.js          Landing interactions (particles, reveal, leaderboard)
 js/game/
-  game.js           Entry point, loop, state machine
-  world.js          Terrain, trees, lighting, fog, collisions
-  player.js         Controls, weapon, shooting, health
+  game.js           Entry point, loop, state machine, combat orchestration
+  world.js          Sky, mountains, terrain, town/buildings, props, collisions
+  player.js         Controls, movement, health, armor, regen, recoil
+  weapons.js        Arsenal definitions, view models, ADS, firing, reload
   enemy.js          Enemy types + wave manager
-  hud.js            HUD updates & popups
-  audio.js          Procedural sound effects
+  effects.js        Bullet tracers, impacts, hit sparks (pooled)
+  pickups.js        Health / armor / ammo drops
+  hud.js            HUD updates, weapon panel, kill feed, scope, popups
+  audio.js          Procedural per-weapon sound effects
 assets/favicon.svg
 ```
 

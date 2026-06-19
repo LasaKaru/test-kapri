@@ -4,17 +4,24 @@ export class HUD {
     this.el = {
       hud: document.getElementById('hud'),
       health: document.getElementById('health-fill'),
+      armor: document.getElementById('armor-fill'),
       wave: document.getElementById('wave-num'),
       score: document.getElementById('score-num'),
       enemies: document.getElementById('enemies-left'),
+      streak: document.getElementById('streak-tag'),
+      streakNum: document.getElementById('streak-num'),
       mag: document.getElementById('ammo-mag'),
       reserve: document.getElementById('ammo-reserve'),
+      weaponName: document.getElementById('weapon-name'),
+      weapons: document.getElementById('hud-weapons'),
+      killFeed: document.getElementById('kill-feed'),
       crosshair: document.getElementById('crosshair'),
       pop: document.getElementById('center-pop'),
       dmg: document.getElementById('dmg-flash'),
+      lowhp: document.getElementById('lowhp-vignette'),
       reload: document.getElementById('reload-note'),
+      scope: document.getElementById('scope'),
     };
-    this._popTimer = null;
   }
 
   show() { this.el.hud.classList.remove('hidden'); }
@@ -24,6 +31,10 @@ export class HUD {
     const f = Math.max(0, hp / max) * 100;
     this.el.health.style.width = f + '%';
     this.el.health.classList.toggle('low', f <= 30);
+    this.el.lowhp.classList.toggle('show', f <= 30 && f > 0);
+  }
+  setArmor(armor, max) {
+    this.el.armor.style.width = Math.max(0, armor / max) * 100 + '%';
   }
   setWave(n) { this.el.wave.textContent = n; }
   setScore(s) { this.el.score.textContent = String(s).padStart(4, '0'); }
@@ -34,6 +45,48 @@ export class HUD {
     this.el.mag.classList.toggle('empty', mag === 0);
   }
   setReloading(on) { this.el.reload.classList.toggle('show', on); }
+  setScope(on) {
+    this.el.scope.classList.toggle('show', on);
+    this.el.crosshair.style.opacity = on ? '0' : '1';
+  }
+
+  setStreak(n) {
+    if (n >= 3) {
+      this.el.streak.classList.remove('hidden');
+      this.el.streakNum.textContent = n;
+    } else {
+      this.el.streak.classList.add('hidden');
+    }
+  }
+
+  setWeaponName(name) { this.el.weaponName.textContent = name; }
+
+  buildWeaponSlots(order, defs, current) {
+    this.el.weapons.innerHTML = '';
+    this._slotEls = {};
+    order.forEach((key) => {
+      const d = defs[key];
+      const div = document.createElement('div');
+      div.className = 'wslot' + (key === current ? ' active' : '');
+      div.innerHTML = `<span class="wkey">${d.slot}</span><span>${d.name}</span>`;
+      this.el.weapons.appendChild(div);
+      this._slotEls[key] = div;
+    });
+  }
+  setActiveWeapon(key) {
+    if (!this._slotEls) return;
+    Object.entries(this._slotEls).forEach(([k, el]) => el.classList.toggle('active', k === key));
+  }
+
+  killFeed(text) {
+    const div = document.createElement('div');
+    div.className = 'kf';
+    div.textContent = text;
+    this.el.killFeed.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+    // cap entries
+    while (this.el.killFeed.children.length > 5) this.el.killFeed.firstChild.remove();
+  }
 
   hitMarker() {
     this.el.crosshair.classList.add('hit');
@@ -51,7 +104,6 @@ export class HUD {
     const p = this.el.pop;
     p.className = 'center-pop kill';
     p.textContent = 'KILL';
-    // re-trigger animation
     void p.offsetWidth;
     p.classList.add('kill');
   }
