@@ -1,0 +1,66 @@
+// HUD updates & popups
+export class HUD {
+  constructor() {
+    this.el = {
+      hud: document.getElementById('hud'),
+      health: document.getElementById('health-fill'),
+      wave: document.getElementById('wave-num'),
+      score: document.getElementById('score-num'),
+      enemies: document.getElementById('enemies-left'),
+      mag: document.getElementById('ammo-mag'),
+      reserve: document.getElementById('ammo-reserve'),
+      crosshair: document.getElementById('crosshair'),
+      pop: document.getElementById('center-pop'),
+      dmg: document.getElementById('dmg-flash'),
+      reload: document.getElementById('reload-note'),
+    };
+    this._popTimer = null;
+  }
+
+  show() { this.el.hud.classList.remove('hidden'); }
+  hide() { this.el.hud.classList.add('hidden'); }
+
+  setHealth(hp, max) {
+    const f = Math.max(0, hp / max) * 100;
+    this.el.health.style.width = f + '%';
+    this.el.health.classList.toggle('low', f <= 30);
+  }
+  setWave(n) { this.el.wave.textContent = n; }
+  setScore(s) { this.el.score.textContent = String(s).padStart(4, '0'); }
+  setEnemies(n) { this.el.enemies.textContent = n; }
+  setAmmo(mag, reserve) {
+    this.el.mag.textContent = mag;
+    this.el.reserve.textContent = reserve;
+    this.el.mag.classList.toggle('empty', mag === 0);
+  }
+  setReloading(on) { this.el.reload.classList.toggle('show', on); }
+
+  hitMarker() {
+    this.el.crosshair.classList.add('hit');
+    clearTimeout(this._hitT);
+    this._hitT = setTimeout(() => this.el.crosshair.classList.remove('hit'), 90);
+  }
+
+  damageFlash() {
+    this.el.dmg.classList.add('show');
+    clearTimeout(this._dmgT);
+    this._dmgT = setTimeout(() => this.el.dmg.classList.remove('show'), 110);
+  }
+
+  popKill() {
+    const p = this.el.pop;
+    p.className = 'center-pop kill';
+    p.textContent = 'KILL';
+    // re-trigger animation
+    void p.offsetWidth;
+    p.classList.add('kill');
+  }
+
+  popWave(n, sub) {
+    const p = this.el.pop;
+    p.className = 'center-pop wave';
+    p.innerHTML = `WAVE ${n}<span class="sub">${sub || 'INCOMING'}</span>`;
+    void p.offsetWidth;
+    p.classList.add('wave');
+  }
+}

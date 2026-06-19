@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>VERDANT — Play</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/game.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://esm.sh/three@0.160.0"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <!-- Top-left: health -->
+      <div class="hud-tl">
+        <div class="hud-label">VITALITY</div>
+        <div class="health-bar"><div class="health-fill" id="health-fill"></div></div>
+      </div>
+
+      <!-- Top-right: wave + score -->
+      <div class="hud-tr">
+        <div class="wave-tag">WAVE <span id="wave-num">1</span></div>
+        <div class="score-tag">SCORE <span id="score-num">0000</span></div>
+        <div class="enemies-tag"><span id="enemies-left">0</span> LEFT</div>
+      </div>
+
+      <!-- Bottom-right: ammo -->
+      <div class="hud-br">
+        <span class="ammo-icon">❂</span>
+        <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
+      </div>
+
+      <!-- crosshair -->
+      <div class="crosshair" id="crosshair"><span></span><span></span><span></span><span></span></div>
+
+      <!-- center popups (KILL / WAVE) -->
+      <div class="center-pop" id="center-pop"></div>
+
+      <!-- hit / damage flash -->
+      <div class="dmg-flash" id="dmg-flash"></div>
+      <div class="reload-note" id="reload-note">RELOADING…</div>
+    </div>
+
+    <!-- Title / start screen -->
+    <div id="title" class="overlay">
+      <div class="overlay-inner">
+        <div class="emblem"><svg viewBox="0 0 48 48" width="64" height="64"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg></div>
+        <h1 class="title-word">VERDANT</h1>
+        <p class="title-studio">Heleo2 Studio</p>
+        <button class="btn btn-primary btn-lg" id="start-btn">▶ Start Survival</button>
+        <div class="controls-hint">
+          <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>Click</b> Fire</span>
+          <span><b>R</b> Reload</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+        </div>
+        <a class="back-link" href="index.html">← Back to site</a>
+      </div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pause" class="overlay hidden">
+      <div class="overlay-inner">
+        <h2 class="pause-word">PAUSED</h2>
+        <button class="btn btn-primary btn-lg" id="resume-btn">Resume</button>
+        <button class="btn btn-ghost" id="restart-btn-pause">Restart</button>
+        <a class="back-link" href="index.html">← Quit to site</a>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div id="gameover" class="overlay hidden">
+      <div class="overlay-inner">
+        <h2 class="over-word">YOU FELL</h2>
+        <p class="over-sub">The forest reclaims another.</p>
+        <div class="over-stats">
+          <div><span class="os-num" id="final-score">0000</span><span class="os-lbl">Score</span></div>
+          <div><span class="os-num" id="final-wave">1</span><span class="os-lbl">Wave Reached</span></div>
+          <div><span class="os-num" id="final-kills">0</span><span class="os-lbl">Kills</span></div>
+        </div>
+        <p class="over-best" id="over-best"></p>
+        <button class="btn btn-primary btn-lg" id="restart-btn">Try Again</button>
+        <a class="back-link" href="index.html">← Back to site</a>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="overlay">
+      <div class="overlay-inner">
+        <div class="emblem pulse"><svg viewBox="0 0 48 48" width="48" height="48"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg></div>
+        <p class="loading-text">Growing the forest…</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/game/game.js"></script>
+</body>
+</html>
