@@ -7,6 +7,7 @@ import { Audio } from './audio.js';
 import { WeaponManager, WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { Effects } from './effects.js';
 import { Pickups } from './pickups.js';
+import { PostFX } from './postfx.js';
 
 const BASE_FOV = 75;
 
@@ -28,6 +29,7 @@ class Game {
     this.waves = new WaveManager(this.scene, this.world);
     this.effects = new Effects(this.scene);
     this.pickups = new Pickups(this.scene);
+    this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
     this.raycaster = new THREE.Raycaster();
@@ -61,6 +63,7 @@ class Game {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.postfx) this.postfx.setSize(w, h);
   }
 
   _bindUI() {
@@ -187,7 +190,7 @@ class Game {
       if (enemyHit) {
         endPoint = enemyHit.point; isEnemy = true; anyHit = true;
         const killed = enemyHit.enemy.hit(shot.def.dmg);
-        this.effects.bloodHit(endPoint);
+        this.effects.bloodBurst(endPoint);
         if (killed) anyKill = true;
       } else {
         // intersect ground plane y=0
@@ -202,6 +205,10 @@ class Game {
       this.effects.tracer(muzzle, endPoint, shot.def.tracer);
     }
 
+    // muzzle smoke for the bigger guns
+    if (shot.def.key === 'shotgun' || shot.def.key === 'sniper') {
+      this.effects.smoke(muzzle, { color: 0x9a9a9a, size: 0.5, life: 0.5, rise: 0.8, opacity: 0.4 });
+    }
     if (anyHit) this.hud.hitMarker();
   }
 
@@ -209,8 +216,8 @@ class Game {
     this.audio.explosion();
     this.shake = Math.min(0.8, this.shake + 0.5);
     const center = new THREE.Vector3(blast.x, 1, blast.z);
-    this.effects.impact(center, 0xffa040, true);
-    this.effects.impact(center.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xff7020, true);
+    this.effects.explosionFX(center);
+    this.postfx.pulseBloom(0.7);
     // damage enemies in radius
     for (const e of this.waves.enemies) {
       if (e.dead) continue;
@@ -336,8 +343,17 @@ class Game {
       this.hud.setHealth(this.player.hp, this.player.maxHp);
 
       this.pickups.update(dt, this.player.position, (kind) => this._collect(kind));
-      this.effects.update(dt);
-      this.world.update(dt);
+      // water splash while wading & moving
+      if (this.player.wading) {
+        this._splashT = (this._splashT || 0) - dt;
+        if (this._splashT <= 0) {
+          const f = new THREE.Vector3(this.player.position.x, 0.25, this.player.position.z);
+          this.effects.smoke(f, { color: 0xbfe6dd, size: 0.5, life: 0.5, rise: 0.5, opacity: 0.45 });
+          this._splashT = 0.18;
+        }
+      }
+      this.effects.update(dt, this.player.position);
+      this.world.update(dt, this.camera);
 
       // camera shake
       if (this.shake > 0) {
@@ -349,13 +365,14 @@ class Game {
       this._idleT = (this._idleT || 0) + dt;
       this.camera.position.set(0, this.player.eyeHeight, 30);
       this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
-      this.world.update(dt);
+      this.world.update(dt, this.camera);
+      this.effects.update(dt, this.camera.position);
     }
 
-    this._render();
+    this._render(dt);
   }
 
-  _render() { this.renderer.render(this.scene, this.camera); }
+  _render(dt = 0.016) { this.postfx.render(dt); }
 }
 
 window.addEventListener('error', (e) => {

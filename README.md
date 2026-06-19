@@ -18,9 +18,12 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - **Arsenal of 4 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
     LR-7 Marksman (scoped sniper) — each with its own ammo, fire mode, spread,
     recoil and tracers. Switch with `1–4` or the scroll wheel.
-  - Procedural battlefield: gradient **sky dome** with drifting clouds, a ring
-    of **distant mountains**, rolling terrain, pines, rocks, grass, a dirt path,
-    a low golden sun and fog.
+  - Procedural battlefield: gradient **sky dome** with drifting clouds, **layered
+    mountain ranges** with snow caps, rolling terrain, pines, **boulder fields**
+    with moss, grass, a dirt path, a low golden sun and fog.
+  - **Animated water lakes** — carved basins with a procedural wave shader
+    (fresnel reflection + sun specular), reed fringes, and a **wading** slowdown
+    with splash spray when you cross them.
   - A **ruined town**: buildings with glowing windows, watchtowers, sandbag
     walls, crate stacks, fences, and **explosive red barrels** you can shoot to
     blow up clustered enemies.
@@ -33,6 +36,10 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - Raycast gunplay with muzzle flash, **bullet tracers**, impact sparks, blood
     hits, **kill streaks** with bonus scoring, a kill feed, hit markers, recoil,
     head-bob and **camera shake** on explosions.
+  - **Cinematic post-processing**: ACES tone mapping, **bloom**, warm color
+    grade, vignette, film grain and subtle chromatic aberration.
+  - **Particle FX**: drifting ambient embers, explosion fireballs &amp; smoke,
+    blood bursts and fading ground decals (blood / scorch).
   - Procedural WebAudio sound effects, per-weapon (no asset downloads).
   - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.
@@ -78,7 +85,8 @@ js/game/
   player.js         Controls, movement, health, armor, regen, recoil
   weapons.js        Arsenal definitions, view models, ADS, firing, reload
   enemy.js          Enemy types + wave manager
-  effects.js        Bullet tracers, impacts, hit sparks (pooled)
+  effects.js        Tracers, impacts, smoke, embers, blood, ground decals
+  postfx.js         Post-processing (bloom, color grade, vignette, grain)
   pickups.js        Health / armor / ammo drops
   hud.js            HUD updates, weapon panel, kill feed, scope, popups
   audio.js          Procedural per-weapon sound effects
