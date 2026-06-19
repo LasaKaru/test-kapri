@@ -127,11 +127,12 @@ class Game {
       this.player.onKey(e.code, true);
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
       if (e.code === 'KeyG') this._throwGrenade();
+      if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
       // weapon switch via number keys
-      const m = /^Digit([1-4])$/.exec(e.code);
+      const m = /^Digit([1-6])$/.exec(e.code);
       if (m) {
         const key = WEAPON_ORDER[parseInt(m[1], 10) - 1];
-        if (this.weapons.switchTo(key)) { this.audio.swap(); this._syncWeaponHud(); }
+        if (key && this.weapons.switchTo(key)) { this.audio.swap(); this._syncWeaponHud(); }
       }
     });
     document.addEventListener('keyup', (e) => {
@@ -184,7 +185,7 @@ class Game {
   _syncWeaponHud() {
     const live = this.weapons.live;
     this.hud.setActiveWeapon(this.weapons.current);
-    this.hud.setWeaponName(this.weapons.def.name);
+    this.hud.setWeaponName(this.weapons.def.name, this.weapons.getLevel());
     this.hud.setAmmo(live.ammo, live.reserve);
   }
 
@@ -199,6 +200,7 @@ class Game {
     this.nades = 3;
     this.hud.setGrenades(this.nades);
     this.score = 0; this.kills = 0; this.streak = 0; this.firing = false; this.shake = 0;
+    this._meleeCd = 0;
     this.credits = 0; this.creditMul = 1; this.lifesteal = 0;
     this.shop.reset();
     this.hud.setCredits(0);
@@ -263,7 +265,7 @@ class Game {
       return;
     }
     this.audio.shoot(this.weapons.def.key);
-    this.player.addRecoil(shot.recoil);
+    this.player.addRecoil(shot.recoilPitch, shot.recoilYaw);
     this.shake = Math.min(0.5, this.shake + shot.def.kick * 1.2);
 
     const origin = new THREE.Vector3();
@@ -271,17 +273,19 @@ class Game {
     const muzzle = new THREE.Vector3();
     this.weapons.muzzleWorldPos(muzzle);
 
-    let anyHit = false, anyKill = false;
+    let anyHit = false, anyHead = false;
     for (const dir of shot.rays) {
       const enemyHit = this.waves.raycastRay(this.raycaster, origin, dir, shot.def.range);
 
       // ground / world endpoint for tracer + impact
-      let endPoint, impactColor = 0xd8c79a, isEnemy = false;
+      let endPoint, impactColor = 0xd8c79a;
       if (enemyHit) {
-        endPoint = enemyHit.point; isEnemy = true; anyHit = true;
-        const killed = enemyHit.enemy.hit(shot.def.dmg);
+        endPoint = enemyHit.point; anyHit = true;
+        const head = enemyHit.zone === 'head';
+        if (head) anyHead = true;
+        const dmg = shot.dmg * (head ? 2.5 : 1);
+        enemyHit.enemy.hit(dmg);
         this.effects.bloodBurst(endPoint);
-        if (killed) anyKill = true;
       } else {
         // intersect ground plane y=0
         let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
@@ -296,10 +300,27 @@ class Game {
     }
 
     // muzzle smoke for the bigger guns
-    if (shot.def.key === 'shotgun' || shot.def.key === 'sniper') {
+    if (shot.def.key === 'shotgun' || shot.def.key === 'sniper' || shot.def.key === 'lmg') {
       this.effects.smoke(muzzle, { color: 0x9a9a9a, size: 0.5, life: 0.5, rise: 0.8, opacity: 0.4 });
     }
     if (anyHit) this.hud.hitMarker();
+    if (anyHead) { this.hud.popHeadshot(); this._pendingHeadshot = true; }
+  }
+
+  _melee() {
+    if (this.state !== 'playing' || (this._meleeCd || 0) > 0) return;
+    this._meleeCd = 0.55;
+    this.weapons.playMelee();
+    this.audio.melee();
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    this.raycaster.far = 2.8;
+    const hit = this.waves.raycast(this.raycaster);
+    if (hit && hit.distance < 2.8) {
+      hit.enemy.hit(5);
+      this.effects.bloodBurst(hit.point);
+      this.hud.hitMarker();
+      this.shake = Math.min(0.5, this.shake + 0.15);
+    }
   }
 
   // barrel hit from a bullet
@@ -428,13 +449,15 @@ class Game {
   _onKill(enemy) {
     this.kills++;
     this.streak++;
+    const head = this._pendingHeadshot; this._pendingHeadshot = false;
     let pts = enemy.score;
     if (this.streak >= 3) pts += Math.min(200, this.streak * 15); // streak bonus
+    if (head) pts += 75; // headshot bonus
     this.score += pts;
     this.hud.setScore(this.score);
     this.hud.setStreak(this.streak);
-    this.hud.popKill();
-    this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}  +${pts}`);
+    if (!head) this.hud.popKill();
+    this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}${head ? ' ☠' : ''}  +${pts}`);
     this.audio.kill();
     // credits + lifesteal
     this.credits += Math.round(enemy.score * 0.12 * this.creditMul);
@@ -442,6 +465,12 @@ class Game {
     if (this.lifesteal > 0) {
       this.player.heal(this.lifesteal);
       this.hud.setHealth(this.player.hp, this.player.maxHp);
+    }
+    // weapon XP / leveling
+    const newLvl = this.weapons.addXp(enemy.isBoss ? 200 : 20);
+    if (newLvl) {
+      this.hud.killFeed(`${this.weapons.def.name} → LV${newLvl}`);
+      this._syncWeaponHud();
     }
     // chance to drop a pickup
     this.pickups.maybeDrop(enemy.group.position, this.player.hp / this.player.maxHp);
@@ -495,6 +524,7 @@ class Game {
       }
       if (!this.firing) this._firedThisClick = false;
 
+      if (this._meleeCd > 0) this._meleeCd -= dt;
       this.player.update(dt);
       this.weapons.update(dt);
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;

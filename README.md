@@ -15,9 +15,14 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   feature cards, controls guide, enemy bestiary, and a local hall-of-fame.
 - **Full playable game** (`game.html`):
   - Pointer-lock FPS controls (WASD + mouse), sprint, **aim-down-sights** (zoom).
-  - **Arsenal of 4 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
-    LR-7 Marksman (scoped sniper) — each with its own ammo, fire mode, spread,
-    recoil and tracers. Switch with `1–4` or the scroll wheel.
+  - **Arsenal of 6 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
+    LR-7 Marksman (scoped sniper), SD-9 Sidearm (pistol) and HG-50 Gatling (LMG)
+    — each with its own ammo, fire mode, **learnable recoil pattern** and
+    tracers. Switch with `1–6` or the scroll wheel.
+  - **Melee strike** (`V`) for point-blank kills, with a swing animation.
+  - **Headshots** deal 2.5× damage with a HEADSHOT callout and score bonus.
+  - **Weapon leveling** — each gun earns XP from kills and levels up (to LV10)
+    for more damage; progression persists across runs in `localStorage`.
   - Procedural battlefield: gradient **sky dome** with drifting clouds, **layered
     mountain ranges** with snow caps, rolling terrain, pines, **boulder fields**
     with moss, grass, a dirt path, a low golden sun and fog.

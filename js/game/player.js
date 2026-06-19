@@ -43,9 +43,9 @@ export class Player {
     this.pitch = Math.max(-lim, Math.min(lim, this.pitch));
   }
 
-  addRecoil(amount) {
-    this.recoilPitch += amount;
-    this.yaw += (Math.random() - 0.5) * amount * 0.4;
+  addRecoil(pitch, yaw = 0) {
+    this.recoilPitch += pitch;
+    this.yaw += yaw;
   }
 
   takeDamage(dmg) {

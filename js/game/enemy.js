@@ -54,6 +54,7 @@ export class Enemy {
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.55 * s, 0.55 * s, 0.55 * s), mat);
     head.position.y = 1.95 * s; head.castShadow = true;
+    head.userData.zone = 'head';
     this.group.add(head);
 
     // glowing eyes (boss/spitter glow a different hue)
@@ -329,7 +330,7 @@ export class WaveManager {
       const hits = raycaster.intersectObject(e.group, true);
       if (hits.length && hits[0].distance < bestDist) {
         bestDist = hits[0].distance;
-        best = { enemy: e, point: hits[0].point, distance: hits[0].distance };
+        best = { enemy: e, point: hits[0].point, distance: hits[0].distance, zone: hits[0].object.userData.zone || 'body' };
       }
     }
     return best;

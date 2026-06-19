@@ -167,6 +167,8 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .center-pop.kill{font-size:clamp(3rem,11vw,7rem);letter-spacing:.05em;
   color:#f3eecf;-webkit-text-stroke:2px rgba(80,60,10,.6);
   text-shadow:0 6px 24px rgba(0,0,0,.6);animation:killpop .7s ease-out forwards}
+.center-pop.headshot{font-size:clamp(2.2rem,8vw,5rem);color:#ffd54a;
+  -webkit-text-stroke:2px rgba(120,70,0,.7)}
 @keyframes killpop{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}
   30%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
   70%{opacity:1;transform:translate(-50%,-50%) scale(1)}
