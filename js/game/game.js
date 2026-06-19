@@ -10,6 +10,7 @@ import { Pickups } from './pickups.js';
 import { PostFX } from './postfx.js';
 import { Minimap } from './minimap.js';
 import { Settings } from './settings.js';
+import { Shop } from './shop.js';
 
 const BASE_FOV = 75;
 
@@ -45,6 +46,11 @@ class Game {
     this.firing = false;
     this.shake = 0;
 
+    // progression
+    this.credits = 0;
+    this.creditMul = 1;
+    this.lifesteal = 0;
+
     // grenades
     this.grenades = [];
     this.nades = 3;
@@ -54,6 +60,7 @@ class Game {
 
     this.settings = new Settings(this);
     this.settings.applyAll();
+    this.shop = new Shop(this);
 
     this.clock = new THREE.Clock();
     this._resize();
@@ -166,7 +173,7 @@ class Game {
   }
 
   _requestLock() { this.canvas.requestPointerLock(); }
-  _hideOverlays() { ['title', 'pause', 'gameover'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
   _syncWeaponHud() {
     const live = this.weapons.live;
@@ -184,6 +191,9 @@ class Game {
     this.nades = 3;
     this.hud.setGrenades(this.nades);
     this.score = 0; this.kills = 0; this.streak = 0; this.firing = false; this.shake = 0;
+    this.credits = 0; this.creditMul = 1; this.lifesteal = 0;
+    this.shop.reset();
+    this.hud.setCredits(0);
 
     this.hud.setScore(0);
     this.hud.setHealth(this.player.hp, this.player.maxHp);
@@ -199,9 +209,42 @@ class Game {
     this.audio._ensure();
 
     const n = this.waves.startNextWave();
+    this._applyWaveStart(n, 'SURVIVE');
+  }
+
+  _applyWaveStart(n, sub = 'INCOMING') {
     this.hud.setWave(n);
-    this.hud.popWave(n, 'SURVIVE');
+    this.hud.popWave(n, sub);
     this.audio.wave();
+    this._syncWeaponHud();
+  }
+
+  // wave cleared -> open the between-wave shop
+  _openShop(clearedWave) {
+    this.state = 'shop';
+    this.firing = false;
+    this.weapons.setAds(false);
+    const bonus = 100 + clearedWave * 50;
+    this.credits += bonus;
+    this.hud.setCredits(this.credits);
+    this.hud.killFeed(`WAVE ${clearedWave} CLEARED  +${bonus}◈`);
+    this.hud.popWave(clearedWave + 1, 'REARM');
+    document.exitPointerLock();
+    this.shop.open(clearedWave + 1);
+  }
+
+  _deployNextWave() {
+    this.shop.close();
+    // free per-wave resupply on top of anything bought
+    this.player.addArmor(20);
+    this.nades = Math.min(8, this.nades + 2);
+    this.hud.setGrenades(this.nades);
+    this.hud.setArmor(this.player.armor, this.player.maxArmor);
+    const n = this.waves.startNextWave();
+    this._applyWaveStart(n, 'INCOMING');
+    this.state = 'playing';
+    this.hud.show();
+    this._requestLock();
   }
 
   _fire() {
@@ -353,6 +396,13 @@ class Game {
     this.hud.popKill();
     this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}  +${pts}`);
     this.audio.kill();
+    // credits + lifesteal
+    this.credits += Math.round(enemy.score * 0.12 * this.creditMul);
+    this.hud.setCredits(this.credits);
+    if (this.lifesteal > 0) {
+      this.player.heal(this.lifesteal);
+      this.hud.setHealth(this.player.hp, this.player.maxHp);
+    }
     // chance to drop a pickup
     this.pickups.maybeDrop(enemy.group.position, this.player.hp / this.player.maxHp);
   }
@@ -416,18 +466,7 @@ class Game {
 
       this.waves.update(dt, this.player, this.camera, {
         onPlayerHit: (d) => this._onPlayerHit(d),
-        onWaveCleared: (w) => this.hud.popWave(w + 1, 'CLEARED — BRACE'),
-        onWaveStart: (n) => {
-          this.hud.setWave(n);
-          this.hud.popWave(n, 'INCOMING');
-          this.audio.wave();
-          this.weapons.addAmmo(0.3);
-          this.player.addArmor(20);
-          this.nades = Math.min(this.maxNades, this.nades + 2);
-          this.hud.setGrenades(this.nades);
-          this.hud.setArmor(this.player.armor, this.player.maxArmor);
-          this._syncWeaponHud();
-        },
+        onWaveCleared: (w) => this._openShop(w),
       });
       this.waves.removeDead((e) => this._onKill(e));
       this.hud.setEnemies(this.waves.remaining);
@@ -462,6 +501,10 @@ class Game {
       this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
       this.world.update(dt, this.camera);
       this.effects.update(dt, this.camera.position);
+    } else if (this.state === 'shop') {
+      // keep the world alive behind the shop overlay
+      this.world.update(dt, this.camera);
+      this.effects.update(dt, this.player.position);
     }
 
     this._render(dt);

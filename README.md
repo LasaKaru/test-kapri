@@ -40,6 +40,10 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - **Settings menu** (from the title or pause) — master volume, SFX toggle,
     mouse sensitivity, field of view, bloom, shadows and detail toggles, all
     saved to `localStorage`.
+  - **Progression & shop** — earn **credits** from kills and wave clears, then
+    spend them between waves at the **REARM shop** on resupply (ammo / armor /
+    health / grenades) and permanent run **perks**: Vitality, Armor Plating,
+    Fast Hands, Adrenaline, Lifesteal and Scavenger (multi-level).
   - Raycast gunplay with muzzle flash, **bullet tracers**, impact sparks, blood
     hits, **kill streaks** with bonus scoring, a kill feed, hit markers, recoil,
     head-bob and **camera shake** on explosions.
@@ -99,6 +103,7 @@ js/game/
   hud.js            HUD updates, weapon panel, kill feed, scope, popups
   minimap.js        Rotating top-down radar (enemies, pickups, lakes)
   settings.js       Settings menu (volume, sensitivity, FOV, graphics)
+  shop.js           Between-wave shop: credits, resupply & perks
   audio.js          Procedural per-weapon sound effects
 assets/favicon.svg
 ```

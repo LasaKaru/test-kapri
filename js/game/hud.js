@@ -39,6 +39,7 @@ export class HUD {
   }
   setWave(n) { this.el.wave.textContent = n; }
   setScore(s) { this.el.score.textContent = String(s).padStart(4, '0'); }
+  setCredits(c) { const el = document.getElementById('credit-num'); if (el) el.textContent = c; }
   setEnemies(n) { this.el.enemies.textContent = n; }
   setAmmo(mag, reserve) {
     this.el.mag.textContent = mag;

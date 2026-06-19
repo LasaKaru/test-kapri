@@ -104,6 +104,7 @@ export class WeaponManager {
     this.fireCd = 0;
     this.ads = false;
     this.adsT = 0; // 0..1 aim progress
+    this.reloadMul = 1; // perk: Fast Hands
 
     // build & mount all models, hide inactive
     this.rig = new THREE.Group();
@@ -148,7 +149,7 @@ export class WeaponManager {
     const w = this.def, s = this.live;
     if (this.reloading || s.ammo >= w.mag || s.reserve <= 0) return false;
     this.reloading = true;
-    this.reloadTimer = w.reload;
+    this.reloadTimer = w.reload * this.reloadMul;
     this.ads = false;
     return true;
   }
@@ -202,6 +203,7 @@ export class WeaponManager {
     this.current = 'rifle';
     for (const k of WEAPON_ORDER) this.models[k].visible = k === 'rifle';
     this.reloading = false; this.fireCd = 0; this.ads = false; this.adsT = 0;
+    this.reloadMul = 1;
     this.camera.fov = this.baseFov; this.camera.updateProjectionMatrix();
   }
 

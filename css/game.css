@@ -42,6 +42,8 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .wave-tag{font-size:1.7rem;font-weight:900;letter-spacing:.12em;color:var(--lime-bright);
   filter:drop-shadow(0 0 10px rgba(188,224,74,.5))}
 .score-tag{font-size:1.05rem;font-weight:700;letter-spacing:.14em;color:var(--gold);margin-top:2px}
+.credits-tag{font-family:'Orbitron';font-weight:700;font-size:1rem;letter-spacing:.1em;
+  color:#7fe0ff;margin-top:3px;filter:drop-shadow(0 0 8px rgba(74,163,255,.5))}
 .enemies-tag{font-family:'Rajdhani';font-weight:600;font-size:.85rem;letter-spacing:.18em;
   color:var(--crimson);margin-top:4px}
 .streak-tag{font-family:'Orbitron';font-weight:700;font-size:.95rem;letter-spacing:.1em;
@@ -80,6 +82,33 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   border-radius:8px;padding:6px 16px;min-width:64px}
 .set-toggle.off{border-color:var(--muted);color:var(--muted);background:rgba(20,20,20,.4)}
 .set-control{display:flex;align-items:center;gap:12px;flex:1;justify-content:flex-end}
+
+/* Shop */
+.shop-inner{min-width:min(720px,94vw);max-height:92vh;overflow-y:auto}
+.shop-word{font-family:'Orbitron';font-weight:900;letter-spacing:.16em;font-size:clamp(2rem,7vw,3.4rem);
+  color:#7fe0ff;text-shadow:0 0 26px rgba(74,163,255,.4)}
+.shop-sub{color:var(--muted);margin-top:-4px}
+.shop-sub b{color:var(--lime-bright)}
+.shop-bank{font-family:'Orbitron';font-weight:700;letter-spacing:.1em;color:#7fe0ff;
+  font-size:1.2rem;margin:10px 0 4px}
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;width:100%;
+  margin:8px 0 18px}
+.shop-section{grid-column:1/-1;font-family:'Orbitron';font-size:.78rem;letter-spacing:.18em;
+  color:var(--lime);text-align:left;margin-top:8px;padding-bottom:4px;border-bottom:1px solid rgba(188,224,74,.18)}
+.shop-card{cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
+  background:rgba(10,18,6,.7);border:1px solid rgba(188,224,74,.2);border-radius:10px;padding:12px 14px;
+  color:var(--text);transition:transform .12s,border-color .15s,box-shadow .15s}
+.shop-card:hover{transform:translateY(-3px);border-color:var(--lime);box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.shop-card .sc-icon{font-size:1.5rem}
+.shop-card .sc-name{font-family:'Orbitron';font-weight:700;font-size:.85rem;letter-spacing:.04em;color:var(--lime-bright)}
+.shop-card .sc-desc{font-size:.82rem;color:var(--muted);line-height:1.25}
+.shop-card .sc-cost{font-family:'Orbitron';font-weight:700;color:#7fe0ff;margin-top:4px;font-size:.9rem}
+.shop-card .sc-lvl{font-family:'Orbitron';font-size:.68rem;letter-spacing:.08em;color:var(--gold)}
+.shop-card.disabled{opacity:.45;cursor:not-allowed}
+.shop-card.disabled:hover{transform:none;border-color:rgba(188,224,74,.2);box-shadow:none}
+.shop-card.maxed .sc-cost{color:var(--muted);text-decoration:line-through}
+.shop-card.shake{animation:cardshake .3s}
+@keyframes cardshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 
 /* Bottom-left weapon slots */
 .hud-weapons{position:absolute;bottom:24px;left:24px;display:flex;flex-direction:column;gap:6px}

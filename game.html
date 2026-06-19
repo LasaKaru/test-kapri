@@ -34,6 +34,7 @@
       <div class="hud-tr">
         <div class="wave-tag">WAVE <span id="wave-num">1</span></div>
         <div class="score-tag">SCORE <span id="score-num">0000</span></div>
+        <div class="credits-tag">◈ <span id="credit-num">0</span></div>
         <div class="enemies-tag"><span id="enemies-left">0</span> LEFT</div>
         <div class="streak-tag hidden" id="streak-tag">🔥 <span id="streak-num">0</span> STREAK</div>
       </div>
@@ -109,6 +110,17 @@
         <h2 class="pause-word">SETTINGS</h2>
         <div class="settings-grid" id="settings-grid"></div>
         <button class="btn btn-primary btn-lg" id="settings-close">Done</button>
+      </div>
+    </div>
+
+    <!-- Shop / rearm (between waves) -->
+    <div id="shop" class="overlay hidden">
+      <div class="overlay-inner shop-inner">
+        <h2 class="shop-word">REARM</h2>
+        <p class="shop-sub">Wave cleared · next up <b>Wave <span id="shop-wave">2</span></b></p>
+        <div class="shop-bank">CREDITS ◈ <span id="shop-credits">0</span></div>
+        <div class="shop-grid" id="shop-grid"></div>
+        <button class="btn btn-primary btn-lg" id="shop-deploy">Deploy to Wave 2</button>
       </div>
     </div>
 
