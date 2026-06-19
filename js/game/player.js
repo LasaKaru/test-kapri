@@ -109,6 +109,8 @@ export class Player {
   reset() {
     this.position.set(0, 0, 30);
     this.yaw = Math.PI; this.pitch = 0;
+    // restore base stats (perks from a previous run are cleared)
+    this.maxHp = 100; this.maxArmor = 100; this.speed = 7;
     this.hp = this.maxHp; this.armor = 0;
     this.hurtCd = 0; this.recoilPitch = 0; this._bob = 0;
     this._updateCamera();

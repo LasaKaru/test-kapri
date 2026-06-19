@@ -235,18 +235,11 @@ export class WaveManager {
       if (attacked) callbacks.onPlayerHit(e.dmg);
     }
 
+    // Wave cleared -> hand control to the game (it opens the shop). The next
+    // wave is started explicitly via startNextWave() when the player deploys.
     if ((this.state === 'active') && this.enemies.length === 0) {
       this.state = 'between';
-      this.betweenTimer = 3.0;
       callbacks.onWaveCleared(this.wave);
-    }
-
-    if (this.state === 'between') {
-      this.betweenTimer -= dt;
-      if (this.betweenTimer <= 0) {
-        const n = this.startNextWave();
-        callbacks.onWaveStart(n);
-      }
     }
   }
 
