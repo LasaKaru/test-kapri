@@ -1,6 +1,6 @@
 // Player-facing settings: persisted to localStorage and applied to the game.
 const KEY = 'verdant_settings';
-const DEFAULTS = { volume: 70, sfx: true, sensitivity: 100, fov: 75, bloom: true, shadows: true, highDetail: true };
+const DEFAULTS = { volume: 70, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true };
 
 export class Settings {
   constructor(game) {
@@ -18,7 +18,9 @@ export class Settings {
     g.audio.enabled = this.v.sfx;
     g.player.sensitivity = this.v.sensitivity / 100;
     g.setBaseFov(this.v.fov);
-    g.postfx.bloom.enabled = this.v.bloom;
+    g.postfx.setRealism(this.v.realism / 100);
+    g.world.setDayNight(this.v.daynight);
+    g.world.setWeatherEnabled(this.v.weather);
     g.renderer.shadowMap.enabled = this.v.shadows;
     g.renderer.shadowMap.needsUpdate = true;
     g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1);
@@ -52,7 +54,9 @@ export class Settings {
     toggle('Sound Effects', 'sfx', () => { g.audio.enabled = this.v.sfx; });
     slider('Mouse Sensitivity', 'sensitivity', 30, 250, '%', () => { g.player.sensitivity = this.v.sensitivity / 100; });
     slider('Field of View', 'fov', 65, 100, '°', () => { g.setBaseFov(this.v.fov); });
-    toggle('Bloom', 'bloom', () => { g.postfx.bloom.enabled = this.v.bloom; });
+    slider('Realism', 'realism', 0, 100, '%', () => { g.postfx.setRealism(this.v.realism / 100); });
+    toggle('Day / Night Cycle', 'daynight', () => { g.world.setDayNight(this.v.daynight); });
+    toggle('Weather', 'weather', () => { g.world.setWeatherEnabled(this.v.weather); });
     toggle('Shadows', 'shadows', () => { g.renderer.shadowMap.enabled = this.v.shadows; g.renderer.shadowMap.needsUpdate = true; });
     toggle('High Detail', 'highDetail', () => { g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1); });
   }

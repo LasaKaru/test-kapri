@@ -54,23 +54,32 @@ export class World {
     });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 16), skyMat);
     scene.add(sky);
+    this._skyU = uniforms;
 
     scene.fog = new THREE.Fog(0xc09a3a, 55, 230);
+    this._fog = scene.fog;
 
-    // sun disc + glow low on the horizon
+    // sun disc + glow
     const sunDisc = new THREE.Mesh(
       new THREE.CircleGeometry(28, 32),
       new THREE.MeshBasicMaterial({ color: 0xfff3c0, fog: false })
     );
-    sunDisc.position.set(-50, 30, -260);
-    sunDisc.lookAt(0, 10, 0);
     scene.add(sunDisc);
+    this._sunDisc = sunDisc;
     const glow = new THREE.Mesh(
       new THREE.CircleGeometry(70, 32),
       new THREE.MeshBasicMaterial({ color: 0xffd866, transparent: true, opacity: 0.4, fog: false })
     );
-    glow.position.set(-50, 30, -259); glow.lookAt(0, 10, 0);
     scene.add(glow);
+    this._sunGlow = glow;
+
+    // moon (shown at night)
+    const moon = new THREE.Mesh(
+      new THREE.CircleGeometry(20, 32),
+      new THREE.MeshBasicMaterial({ color: 0xdfe6ff, fog: false, transparent: true, opacity: 0 })
+    );
+    scene.add(moon);
+    this._moon = moon;
 
     // clouds (soft sprites)
     const tex = this._cloudTexture();
@@ -102,7 +111,9 @@ export class World {
   // ---------- Lights ----------
   _buildLights() {
     const scene = this.scene;
-    scene.add(new THREE.HemisphereLight(0xfff0b0, 0x1f3a10, 0.8));
+    const hemi = new THREE.HemisphereLight(0xfff0b0, 0x1f3a10, 0.8);
+    scene.add(hemi);
+    this._hemi = hemi;
     const sun = new THREE.DirectionalLight(0xffe39a, 2.2);
     sun.position.set(-40, 34, -90);
     sun.castShadow = true;
@@ -113,9 +124,160 @@ export class World {
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 260;
     sun.shadow.bias = -0.0004;
     scene.add(sun);
+    this._sunLight = sun;
     const fill = new THREE.DirectionalLight(0xbce04a, 0.4);
     fill.position.set(40, 20, 40);
     scene.add(fill);
+
+    // day/night + weather state
+    this.dayNightEnabled = true;
+    this.weatherEnabled = true;
+    this.phase = 0.03;          // 0..1 (starts at golden morning)
+    this.dayLen = 160;          // seconds per full cycle
+    this.weather = 'clear';
+    this._weatherTimer = 14 + Math.random() * 14;
+    this._rainAmt = 0;
+    this._elev = 0.2;
+    this._buildRain();
+    this._applyTimeOfDay(this._sunElevation(this.phase));
+  }
+
+  // ---------- Rain ----------
+  _buildRain() {
+    const N = 1400;
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    this._rainArea = { w: 70, h: 45, d: 70 };
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * this._rainArea.w;
+      pos[i * 3 + 1] = Math.random() * this._rainArea.h;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * this._rainArea.d;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xaebfcf, size: 0.18, transparent: true, opacity: 0, depthWrite: false, fog: true });
+    this._rain = new THREE.Points(geo, mat);
+    this._rain.frustumCulled = false;
+    this._rain.visible = false;
+    this.scene.add(this._rain);
+  }
+
+  _sunElevation(phase) { return Math.sin(phase * Math.PI * 2); }
+
+  // e in [-1,1]: 1 = noon, 0 = dawn/dusk (golden), -1 = deep night
+  _applyTimeOfDay(e) {
+    this._elev = e;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const C = (hex) => new THREE.Color(hex);
+
+    // keyframe palettes
+    const goldT = { top: C(0x2a4a6e), mid: C(0xb59428), bot: C(0xe8951f), fog: C(0xc09a3a), light: C(0xffe39a), li: 2.0, hemi: 0.8 };
+    const dayK = { top: C(0x3f7fd0), mid: C(0xbfe0ff), bot: C(0xeaf4ff), fog: C(0xc6d8e6), light: C(0xfff4d8), li: 2.5, hemi: 0.95 };
+    const nightK = { top: C(0x081024), mid: C(0x141f3a), bot: C(0x1f2d46), fog: C(0x121a30), light: C(0x9fb6ff), li: 0.55, hemi: 0.32 };
+
+    let k;
+    if (e >= 0) { const t = e * e; k = this._blendK(goldT, dayK, t); }
+    else { const t = (-e) * (-e); k = this._blendK(goldT, nightK, t); }
+
+    this._skyU.top.value.copy(k.top);
+    this._skyU.mid.value.copy(k.mid);
+    this._skyU.bot.value.copy(k.bot);
+    this._fog.color.copy(k.fog);
+    // weather darkens & pulls fog in
+    const rain = this._rainAmt;
+    if (rain > 0) {
+      this._fog.color.lerp(C(0x6c7682), rain * 0.6);
+      this._fog.far = lerp(230, 120, rain);
+      this._skyU.top.value.lerp(C(0x5a6470), rain * 0.5);
+      this._skyU.mid.value.lerp(C(0x6c7682), rain * 0.5);
+    } else {
+      this._fog.far = 230;
+    }
+
+    this._sunLight.color.copy(k.light);
+    this._sunLight.intensity = k.li * (1 - rain * 0.4);
+    this._hemi.intensity = k.hemi * (1 - rain * 0.3);
+
+    // position the light & celestial bodies along the arc
+    const az = -0.9; // azimuth bias
+    const horiz = Math.cos(this.phase * Math.PI * 2);
+    const sx = Math.cos(az) * horiz * 80;
+    const sy = e * 70 + 6;
+    const sz = -90 + Math.sin(az) * 30;
+    this._sunLight.position.set(sx, Math.max(8, sy + 28), sz);
+
+    const place = (m, sign) => { m.position.set(sign * sx * 3, sign * (e * 70) + 30, -260); m.lookAt(0, 10, 0); };
+    place(this._sunDisc, 1);
+    place(this._sunGlow, 1);
+    this._sunGlow.position.z = -259;
+    place(this._moon, -1);
+    const dayVis = Math.max(0, Math.min(1, e + 0.25));
+    this._sunDisc.material.opacity = dayVis;
+    this._sunDisc.visible = dayVis > 0.02;
+    this._sunGlow.material.opacity = 0.4 * dayVis;
+    this._sunGlow.visible = dayVis > 0.02;
+    const nightVis = Math.max(0, Math.min(1, -e + 0.05));
+    this._moon.material.opacity = nightVis;
+    this._moon.visible = nightVis > 0.02;
+  }
+
+  _blendK(a, b, t) {
+    const C = () => new THREE.Color();
+    return {
+      top: C().copy(a.top).lerp(b.top, t),
+      mid: C().copy(a.mid).lerp(b.mid, t),
+      bot: C().copy(a.bot).lerp(b.bot, t),
+      fog: C().copy(a.fog).lerp(b.fog, t),
+      light: C().copy(a.light).lerp(b.light, t),
+      li: a.li + (b.li - a.li) * t,
+      hemi: a.hemi + (b.hemi - a.hemi) * t,
+    };
+  }
+
+  setDayNight(on) {
+    this.dayNightEnabled = on;
+    if (!on) { this.phase = 0.03; this._applyTimeOfDay(this._sunElevation(this.phase)); }
+  }
+
+  setWeatherEnabled(on) {
+    this.weatherEnabled = on;
+    if (!on) { this.weather = 'clear'; }
+  }
+
+  // 1.0 in daylight, up to ~1.25 deep at night (enemies tougher)
+  nightFactor() { return 1 + Math.max(0, -this._elev) * 0.25; }
+
+  _updateWeather(dt) {
+    this._weatherTimer -= dt;
+    if (this._weatherTimer <= 0) {
+      if (this.weatherEnabled && this.weather === 'clear' && Math.random() < 0.4) {
+        this.weather = 'rain'; this._weatherTimer = 18 + Math.random() * 20;
+      } else {
+        this.weather = 'clear'; this._weatherTimer = 16 + Math.random() * 22;
+      }
+    }
+    const target = this.weather === 'rain' ? 1 : 0;
+    this._rainAmt += (target - this._rainAmt) * Math.min(1, dt * 0.7);
+    const m = this._rain.material;
+    m.opacity = this._rainAmt * 0.55;
+    this._rain.visible = this._rainAmt > 0.02;
+  }
+
+  _updateRainParticles(dt, camera) {
+    if (!this._rain.visible || !camera) return;
+    const pos = this._rain.geometry.attributes.position;
+    const a = pos.array;
+    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+    const A = this._rainArea;
+    for (let i = 0; i < a.length; i += 3) {
+      a[i + 1] -= 38 * dt;
+      a[i] += 4 * dt; // slight slant
+      if (a[i + 1] < cy - 6) {
+        a[i] = cx + (Math.random() - 0.5) * A.w;
+        a[i + 1] = cy + A.h * 0.6;
+        a[i + 2] = cz + (Math.random() - 0.5) * A.d;
+      }
+    }
+    pos.needsUpdate = true;
   }
 
   // ---------- Terrain ----------
@@ -554,5 +716,17 @@ export class World {
       m.uniforms.uTime.value = this._time;
       if (camera) m.uniforms.uCam.value.copy(camera.position);
     }
+    // weather
+    this._updateWeather(dt);
+    this._updateRainParticles(dt, camera);
+    // day/night
+    if (this.dayNightEnabled) {
+      this.phase = (this.phase + dt / this.dayLen) % 1;
+      this._applyTimeOfDay(this._sunElevation(this.phase));
+    } else if (this._rainAmt > 0.001 || this._lastRain) {
+      // keep fog/sky responsive to weather even with a fixed time of day
+      this._applyTimeOfDay(this._elev);
+    }
+    this._lastRain = this._rainAmt > 0.001;
   }
 }

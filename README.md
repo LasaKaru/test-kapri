@@ -41,8 +41,12 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - **Minimap / radar** — rotating top-down view of nearby enemies, pickups
     and lakes, with the player at centre.
   - **Settings menu** (from the title or pause) — master volume, SFX toggle,
-    mouse sensitivity, field of view, bloom, shadows and detail toggles, all
-    saved to `localStorage`.
+    mouse sensitivity, field of view, a **Realism slider (0–100%)**, day/night
+    and weather toggles, shadows and detail, all saved to `localStorage`.
+  - **Day/night cycle** — sun & moon arc across the sky with dynamic sky
+    colours, fog and lighting; enemies hit harder at night.
+  - **Weather** — rolling **rain** with falling particles, grayer fog and
+    dimmed light.
   - **Progression & shop** — earn **credits** from kills and wave clears, then
     spend them between waves at the **REARM shop** on resupply (ammo / armor /
     health / grenades) and permanent run **perks**: Vitality, Armor Plating,
@@ -51,7 +55,8 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
     hits, **kill streaks** with bonus scoring, a kill feed, hit markers, recoil,
     head-bob and **camera shake** on explosions.
   - **Cinematic post-processing**: ACES tone mapping, **bloom**, warm color
-    grade, vignette, film grain and subtle chromatic aberration.
+    grade, vignette, film grain and subtle chromatic aberration — scaled by the
+    **Realism slider** (0% = flat natural low-poly look, 100% = full cinematic).
   - **Particle FX**: drifting ambient embers, explosion fireballs &amp; smoke,
     blood bursts and fading ground decals (blood / scorch).
   - Procedural WebAudio sound effects, per-weapon (no asset downloads).
