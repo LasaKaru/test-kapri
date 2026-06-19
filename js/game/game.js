@@ -284,8 +284,9 @@ class Game {
         const head = enemyHit.zone === 'head';
         if (head) anyHead = true;
         const dmg = shot.dmg * (head ? 2.5 : 1);
-        enemyHit.enemy.hit(dmg);
-        this.effects.bloodBurst(endPoint);
+        enemyHit.enemy.hit(dmg, enemyHit.zone);
+        if (enemyHit.zone === 'shield') this.effects.impact(endPoint, 0xcfe6ff, false); // clang spark
+        else this.effects.bloodBurst(endPoint);
       } else {
         // intersect ground plane y=0
         let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
@@ -472,6 +473,10 @@ class Game {
       this.hud.killFeed(`${this.weapons.def.name} → LV${newLvl}`);
       this._syncWeaponHud();
     }
+    // exploders detonate on death
+    if (enemy.explode) {
+      this._detonate(enemy.group.position.x, enemy.group.position.z, 7, 6, 28);
+    }
     // chance to drop a pickup
     this.pickups.maybeDrop(enemy.group.position, this.player.hp / this.player.maxHp);
   }
@@ -538,6 +543,7 @@ class Game {
         onPlayerHit: (d) => this._onPlayerHit(d),
         onWaveCleared: (w) => this._openShop(w),
         onEnemyShoot: (s) => this._spawnEnemyShot(s),
+        onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
       });
       this.waves.removeDead((e) => this._onKill(e));
       this.hud.setEnemies(this.waves.remaining);

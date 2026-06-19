@@ -32,10 +32,12 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - A **ruined town**: buildings with glowing windows, watchtowers, sandbag
     walls, crate stacks, fences, and **explosive red barrels** you can shoot to
     blow up clustered enemies.
-  - Five enemy archetypes — **Grunt**, **Runner**, **Brute**, ranged **Spitter**
-    (keeps its distance and fires projectiles) and a colossal **Boss** every 5th
-    wave with a dedicated top-screen health bar — all with billboard health
-    bars, walk/attack animation and per-wave HP scaling.
+  - Eight enemy archetypes — **Grunt**, **Runner**, **Brute**, ranged **Spitter**,
+    **Exploder** (rushes & detonates), **Shielded** (frontal plate blocks most
+    fire — flank, headshot or blast it), **Summoner** (spawns adds), and a
+    colossal **Boss** every 5th wave with a top-screen health bar.
+  - **Ragdoll-style deaths** (topple, sink &amp; fade) and **basic pathfinding**
+    so enemies steer around buildings instead of grinding into them.
   - A **spawn director** paces spawns and caps how many enemies are alive at once.
   - Endless, escalating waves with a between-wave breather, ammo top-ups and
     fresh armor each wave.

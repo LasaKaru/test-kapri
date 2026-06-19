@@ -8,6 +8,13 @@ const TYPES = {
   // ranged: keeps its distance and spits projectiles
   spitter: { hp: 3,   speed: 2.8, scale: 0.95, color: 0xc23ad0, score: 220,  dmg: 11,
              ranged: true, prefDist: 17, fireCd: 2.2, projSpeed: 30 },
+  // rushes the player and detonates on contact or death
+  exploder:{ hp: 2,   speed: 5.0, scale: 1.0,  color: 0xd0e03a, score: 250,  dmg: 0, explode: true },
+  // frontal shield plate blocks most damage; flank, headshot or blast it
+  shielded:{ hp: 5,   speed: 2.4, scale: 1.15, color: 0x4a7ab0, score: 300,  dmg: 12, shield: true },
+  // hangs back and summons grunts
+  summoner:{ hp: 5,   speed: 2.2, scale: 1.1,  color: 0x9a40d0, score: 320,  dmg: 8,
+             prefDist: 22, summonCd: 6 },
   // boss: huge, tanky, heavy melee + ranged volleys
   boss:    { hp: 110, speed: 1.8, scale: 3.0,  color: 0x8a1020, score: 3000, dmg: 32,
              ranged: true, prefDist: 9, fireCd: 3.0, projSpeed: 26, volley: 3, boss: true },
@@ -26,12 +33,19 @@ export class Enemy {
     this.score = def.score;
     this.ranged = !!def.ranged;
     this.isBoss = !!def.boss;
+    this.explode = !!def.explode;
+    this.shield = !!def.shield;
+    this.isSummoner = !!def.summonCd;
     this.prefDist = def.prefDist || 0;
     this.projSpeed = def.projSpeed || 0;
     this.volley = def.volley || 1;
     this.dead = false;
+    this.scored = false;
+    this.dyingT = 0;
+    this.wantsSummon = false;
     this.attackCd = 0;
     this.fireCd = (def.fireCd || 0) * (0.5 + Math.random());
+    this.summonCd = (def.summonCd || 0) * (0.6 + Math.random() * 0.6);
     this.radius = 0.6 * def.scale;
 
     this.group = new THREE.Group();
@@ -86,9 +100,9 @@ export class Enemy {
       this.legs.push(leg);
     });
 
-    // ranged enemies carry a glowing orb (the muzzle origin)
-    if (this.ranged) {
-      const orbHex = this.isBoss ? 0xff4030 : 0xd86bff;
+    // ranged enemies (and summoner) carry a glowing orb (the muzzle/cast origin)
+    if (this.ranged || this.isSummoner) {
+      const orbHex = this.isBoss ? 0xff4030 : this.isSummoner ? 0xc080ff : 0xd86bff;
       const orb = new THREE.Mesh(
         new THREE.SphereGeometry(0.18 * s, 8, 6),
         new THREE.MeshBasicMaterial({ color: orbHex })
@@ -97,6 +111,27 @@ export class Enemy {
       this.group.add(orb);
       this._orb = orb;
       this._orbHex = orbHex;
+    }
+
+    // exploder: glowing volatile core
+    if (this.explode) {
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3 * s, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffff66 })
+      );
+      core.position.y = 1.15 * s;
+      this.group.add(core);
+      this._core = core;
+    }
+
+    // shielded: a thick frontal plate that absorbs damage (its own hit zone)
+    if (this.shield) {
+      const shieldMat = new THREE.MeshStandardMaterial({ color: 0x9fc4f0, roughness: 0.4, metalness: 0.6, flatShading: true });
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(1.2 * s, 1.5 * s, 0.18 * s), shieldMat);
+      plate.position.set(0, 1.2 * s, 0.5 * s);
+      plate.userData.zone = 'shield';
+      plate.castShadow = true;
+      this.group.add(plate);
     }
 
     // boss shoulder plates
@@ -141,26 +176,56 @@ export class Enemy {
     this.hbGroup.visible = this.isBoss || this.hp < this.maxHp;
   }
 
-  hit(dmg) {
+  hit(dmg, zone) {
     if (this.dead) return false;
-    this.hp -= dmg;
+    let d = dmg;
+    if (zone === 'shield') d *= 0.15;       // frontal plate absorbs most of it
+    this.hp -= d;
     this._updateHealthBar();
     this._mat.emissive.setHex(0xffffff);
     this._mat.emissiveIntensity = 1;
     this._flash = 0.1;
-    if (this.hp <= 0) { this.dead = true; return true; }
+    if (this.hp <= 0) { this._startDeath(); return true; }
     return false;
   }
 
-  // returns { melee: bool, shots: [{origin, dir}] }
+  _startDeath() {
+    this.dead = true;
+    this.dyingT = 0.9;
+    this.hbGroup.visible = false;
+    // topple direction
+    this._fallAxis = Math.random() < 0.5 ? 'x' : 'z';
+    this._fallDir = Math.random() < 0.5 ? 1 : -1;
+  }
+
+  // returns { melee, shots, summon }
   update(dt, target, camera, world) {
-    const result = { melee: false, shots: null };
+    const result = { melee: false, shots: null, summon: false };
+
+    // ---- death / ragdoll animation ----
+    if (this.dead) {
+      this.dyingT -= dt;
+      const g = this.group;
+      // topple over and sink, then fade
+      const fall = Math.min(1, (0.9 - this.dyingT) / 0.5);
+      g.rotation[this._fallAxis] = this._fallDir * fall * Math.PI * 0.5;
+      g.position.y = -0.2 * Math.max(0, (0.4 - this.dyingT) / 0.4);
+      if (this.dyingT < 0.4) {
+        const o = Math.max(0, this.dyingT / 0.4);
+        this.group.traverse((m) => {
+          if (m.material && 'opacity' in m.material) { m.material.transparent = true; m.material.opacity = o; }
+        });
+      }
+      return result;
+    }
+
     if (this._flash > 0) {
       this._flash -= dt;
       if (this._flash <= 0) { this._mat.emissive.setHex(0x300000); this._mat.emissiveIntensity = 0.4; }
     }
     if (this.attackCd > 0) this.attackCd -= dt;
     if (this.fireCd > 0) this.fireCd -= dt;
+    if (this.summonCd > 0) this.summonCd -= dt;
 
     const g = this.group;
     const dx = target.x - g.position.x;
@@ -168,16 +233,23 @@ export class Enemy {
     const dist = Math.hypot(dx, dz);
     g.rotation.y = Math.atan2(dx, dz);
 
+    if (this._core) this._core.scale.setScalar(1 + Math.sin(this._time = (this._time || 0) + dt * 8) * 0.15);
+
     let moveDir = 0; // +1 approach, -1 retreat, 0 hold
-    if (this.ranged) {
+    if (this.isSummoner) {
+      if (dist > this.prefDist * 1.2) moveDir = 1;
+      else if (dist < this.prefDist * 0.8) moveDir = -1;
+      if (this.summonCd <= 0) { this.summonCd = this.def.summonCd; result.summon = true; this.wantsSummon = true; }
+    } else if (this.ranged) {
       if (dist > this.prefDist * 1.25) moveDir = 1;
       else if (dist < this.prefDist * 0.8) moveDir = -1;
-      // shoot when roughly in range and cooled down (needs line of sight-ish)
       if (this.fireCd <= 0 && dist < this.prefDist * 2.2) {
         this.fireCd = this.def.fireCd;
         result.shots = this._buildShots(target);
-        if (this._orb) { this._mat && null; }
       }
+    } else if (this.explode) {
+      moveDir = 1; // always rush
+      if (dist <= 1.8) { this._startDeath(); this._exploded = true; } // detonate on contact
     } else {
       moveDir = dist > 1.4 ? 1 : 0;
       if (moveDir === 0 && this.attackCd <= 0) {
@@ -186,16 +258,18 @@ export class Enemy {
         if (this.arms) this.arms.forEach((a) => (a.rotation.x = -1.2));
       }
     }
-    // boss also melees when adjacent
     if (this.isBoss && dist <= this.prefDist + 1 && this.attackCd <= 0) {
       this.attackCd = 1.2; result.melee = true;
     }
 
-    if (moveDir !== 0 && dist > 0.001) {
-      const step = this.speed * dt * moveDir;
-      const nx = g.position.x + (dx / dist) * step;
-      const nz = g.position.z + (dz / dist) * step;
-      const r = world.resolve(nx, nz, this.radius);
+    if (moveDir !== 0 && dist > 0.001 && !this.dead) {
+      // desired direction + obstacle-avoidance steering (basic pathfinding)
+      let ddx = (dx / dist) * moveDir, ddz = (dz / dist) * moveDir;
+      const steer = world.steerAround(g.position.x, g.position.z, ddx, ddz, this.radius);
+      ddx += steer.x * 1.6; ddz += steer.z * 1.6;
+      const dl = Math.hypot(ddx, ddz) || 1;
+      const step = this.speed * dt;
+      const r = world.resolve(g.position.x + (ddx / dl) * step, g.position.z + (ddz / dl) * step, this.radius);
       g.position.x = r.x; g.position.z = r.z;
       this._walk = (this._walk || 0) + dt * this.speed * 1.6;
       const swing = Math.sin(this._walk) * 0.4;
@@ -250,6 +324,7 @@ export class WaveManager {
   get isBossWave() { return this.wave > 0 && this.wave % 5 === 0; }
 
   startNextWave() {
+    this.purgeDead(); // clear any lingering corpses from the last wave
     this.wave += 1;
     const w = this.wave;
     this.spawnQueue = [];
@@ -265,10 +340,16 @@ export class WaveManager {
       const runners = Math.max(0, Math.floor((w - 1) * 1.5));
       const brutes = w >= 3 ? Math.floor(w / 3) : 0;
       const spitters = w >= 2 ? Math.floor(w / 2) : 0;
+      const exploders = w >= 3 ? Math.floor((w - 2) / 2) : 0;
+      const shielded = w >= 4 ? Math.floor((w - 3) / 2) : 0;
+      const summoners = w >= 6 ? Math.floor(w / 6) : 0;
       for (let i = 0; i < grunts; i++) this.spawnQueue.push('grunt');
       for (let i = 0; i < runners; i++) this.spawnQueue.push('runner');
       for (let i = 0; i < brutes; i++) this.spawnQueue.push('brute');
       for (let i = 0; i < spitters; i++) this.spawnQueue.push('spitter');
+      for (let i = 0; i < exploders; i++) this.spawnQueue.push('exploder');
+      for (let i = 0; i < shielded; i++) this.spawnQueue.push('shielded');
+      for (let i = 0; i < summoners; i++) this.spawnQueue.push('summoner');
     }
     // keep the boss first, shuffle the rest
     const boss = this.spawnQueue[0] === 'boss' ? this.spawnQueue.shift() : null;
@@ -284,25 +365,33 @@ export class WaveManager {
     return this.wave;
   }
 
+  _hpScale() {
+    const nf = this.world.nightFactor ? this.world.nightFactor() : 1;
+    return (1 + (this.wave - 1) * 0.08) * nf;
+  }
+
   _spawnOne() {
     const type = this.spawnQueue.shift();
-    const nf = this.world.nightFactor ? this.world.nightFactor() : 1;
-    const hpScale = (1 + (this.wave - 1) * 0.08) * nf;
-    // spread spawns around the player rather than clumping
     const ang = Math.random() * Math.PI * 2;
     const dist = 42 + Math.random() * 34;
     const pos = new THREE.Vector3(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
-    const e = new Enemy(this.scene, type, pos, hpScale);
+    const e = new Enemy(this.scene, type, pos, this._hpScale());
     if (e.isBoss) this.boss = e;
     this.enemies.push(e);
   }
 
-  get remaining() { return this.spawnQueue.length + this.enemies.length; }
+  spawnAt(type, x, z) {
+    const e = new Enemy(this.scene, type, new THREE.Vector3(x, 0, z), this._hpScale());
+    this.enemies.push(e);
+  }
+
+  get liveCount() { let n = 0; for (const e of this.enemies) if (!e.dead) n++; return n; }
+  get remaining() { return this.spawnQueue.length + this.liveCount; }
 
   update(dt, player, camera, callbacks) {
     if (this.state === 'spawning') {
       this.spawnTimer -= dt;
-      const aliveOk = this.enemies.length < this.maxAlive;
+      const aliveOk = this.liveCount < this.maxAlive;
       if (this.spawnTimer <= 0 && this.spawnQueue.length && aliveOk) {
         this._spawnOne();
         this.spawnTimer = Math.max(0.3, 1.1 - this.wave * 0.05);
@@ -315,9 +404,19 @@ export class WaveManager {
       const r = e.update(dt, player.position, camera, this.world);
       if (r.melee) callbacks.onPlayerHit(e.dmg);
       if (r.shots) for (const s of r.shots) callbacks.onEnemyShoot(s);
+      if (r.summon && e.wantsSummon) {
+        e.wantsSummon = false;
+        if (this.liveCount < this.maxAlive) {
+          const adds = 1 + (Math.random() < 0.5 ? 1 : 0);
+          for (let k = 0; k < adds; k++) {
+            this.spawnAt('grunt', e.group.position.x + (Math.random() - 0.5) * 4, e.group.position.z + (Math.random() - 0.5) * 4);
+          }
+          callbacks.onSummon && callbacks.onSummon(e);
+        }
+      }
     }
 
-    if (this.state === 'active' && this.enemies.length === 0) {
+    if (this.state === 'active' && this.liveCount === 0) {
       this.state = 'between';
       callbacks.onWaveCleared(this.wave);
     }
@@ -344,13 +443,26 @@ export class WaveManager {
 
   removeDead(onKill) {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
-      if (this.enemies[i].dead) {
-        const e = this.enemies[i];
+      const e = this.enemies[i];
+      if (!e.dead) continue;
+      // score once, the moment it dies (body lingers for the death animation)
+      if (!e.scored) { e.scored = true; this.killedThisWave++; onKill && onKill(e); }
+      // remove after the topple/fade finishes
+      if (e.dyingT <= 0) {
         if (e === this.boss) this.boss = null;
         e.remove();
         this.enemies.splice(i, 1);
-        this.killedThisWave++;
-        onKill && onKill(e);
+      }
+    }
+  }
+
+  // drop any still-animating corpses (called between waves)
+  purgeDead() {
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      if (this.enemies[i].dead) {
+        if (this.enemies[i] === this.boss) this.boss = null;
+        this.enemies[i].remove();
+        this.enemies.splice(i, 1);
       }
     }
   }
