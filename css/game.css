@@ -110,6 +110,14 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .shop-card.shake{animation:cardshake .3s}
 @keyframes cardshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 
+/* Boss health bar */
+.boss-bar-wrap{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(560px,70vw);text-align:center}
+.boss-name{font-family:'Orbitron';font-weight:900;letter-spacing:.22em;font-size:.9rem;color:#ff5a48;
+  text-shadow:0 0 14px rgba(224,40,30,.6);margin-bottom:5px}
+.boss-bar{height:16px;background:rgba(8,16,4,.7);border:2px solid rgba(224,58,47,.6);border-radius:9px;overflow:hidden}
+.boss-fill{height:100%;width:100%;border-radius:6px;
+  background:linear-gradient(90deg,#7a0d08,#e03a2f,#ff7a3a);transition:width .15s}
+
 /* Bottom-left weapon slots */
 .hud-weapons{position:absolute;bottom:24px;left:24px;display:flex;flex-direction:column;gap:6px}
 .wslot{display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:8px;
