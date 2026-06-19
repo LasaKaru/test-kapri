@@ -48,6 +48,8 @@ export class HUD {
   }
   setReloading(on) { this.el.reload.classList.toggle('show', on); }
   setGrenades(n) { if (this.el.nade) this.el.nade.textContent = n; }
+  showBoss(on) { const w = document.getElementById('boss-bar-wrap'); if (w) w.classList.toggle('hidden', !on); }
+  setBoss(hp, max) { const f = document.getElementById('boss-fill'); if (f) f.style.width = Math.max(0, hp / max) * 100 + '%'; }
   setScope(on) {
     this.el.scope.classList.toggle('show', on);
     this.el.crosshair.style.opacity = on ? '0' : '1';

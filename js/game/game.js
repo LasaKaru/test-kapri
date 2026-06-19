@@ -58,6 +58,12 @@ class Game {
     this._nadeGeo = new THREE.SphereGeometry(0.16, 8, 6);
     this._nadeMat = new THREE.MeshStandardMaterial({ color: 0x2b3320, roughness: 0.6, metalness: 0.4 });
 
+    // enemy projectiles
+    this.enemyShots = [];
+    this._shotGeo = new THREE.SphereGeometry(0.22, 8, 6);
+    this._shotMat = new THREE.MeshBasicMaterial({ color: 0xd86bff });
+    this._shotMatBoss = new THREE.MeshBasicMaterial({ color: 0xff5030 });
+
     this.settings = new Settings(this);
     this.settings.applyAll();
     this.shop = new Shop(this);
@@ -188,6 +194,8 @@ class Game {
     this.weapons.reset();
     this.pickups.reset();
     this._clearGrenades();
+    this._clearEnemyShots();
+    this.hud.showBoss(false);
     this.nades = 3;
     this.hud.setGrenades(this.nades);
     this.score = 0; this.kills = 0; this.streak = 0; this.firing = false; this.shake = 0;
@@ -214,7 +222,7 @@ class Game {
 
   _applyWaveStart(n, sub = 'INCOMING') {
     this.hud.setWave(n);
-    this.hud.popWave(n, sub);
+    this.hud.popWave(n, this.waves.isBossWave ? '☠ BOSS WAVE ☠' : sub);
     this.audio.wave();
     this._syncWeaponHud();
   }
@@ -370,6 +378,38 @@ class Game {
     this.grenades = [];
   }
 
+  _spawnEnemyShot(shot) {
+    const mesh = new THREE.Mesh(this._shotGeo, shot.boss ? this._shotMatBoss : this._shotMat);
+    mesh.position.copy(shot.origin);
+    if (shot.boss) mesh.scale.setScalar(1.6);
+    this.scene.add(mesh);
+    this.enemyShots.push({ mesh, vel: shot.dir.clone().multiplyScalar(shot.speed), dmg: shot.dmg, life: 4 });
+  }
+
+  _updateEnemyShots(dt) {
+    for (let i = this.enemyShots.length - 1; i >= 0; i--) {
+      const s = this.enemyShots[i];
+      const p = s.mesh.position;
+      p.addScaledVector(s.vel, dt);
+      s.life -= dt;
+      const eye = this.camera.position;
+      const hitPlayer = Math.hypot(p.x - eye.x, p.y - eye.y, p.z - eye.z) < 1.2;
+      const hitGround = p.y <= 0.2;
+      const hitWorld = (() => { const r = this.world.resolve(p.x, p.z, 0.2); return r.x !== p.x || r.z !== p.z; })();
+      if (hitPlayer || hitGround || hitWorld || s.life <= 0) {
+        if (hitPlayer) { this._onPlayerHit(s.dmg); }
+        this.effects.impact(p.clone(), s.boss ? 0xff5030 : 0xd86bff, false);
+        this.scene.remove(s.mesh);
+        this.enemyShots.splice(i, 1);
+      }
+    }
+  }
+
+  _clearEnemyShots() {
+    for (const s of this.enemyShots) this.scene.remove(s.mesh);
+    this.enemyShots = [];
+  }
+
   _onPlayerHit(dmg) {
     this.player.takeDamage(dmg);
     this.hud.damageFlash();
@@ -467,9 +507,17 @@ class Game {
       this.waves.update(dt, this.player, this.camera, {
         onPlayerHit: (d) => this._onPlayerHit(d),
         onWaveCleared: (w) => this._openShop(w),
+        onEnemyShoot: (s) => this._spawnEnemyShot(s),
       });
       this.waves.removeDead((e) => this._onKill(e));
       this.hud.setEnemies(this.waves.remaining);
+
+      // boss health bar
+      const boss = this.waves.boss;
+      if (boss && !boss.dead) { this.hud.showBoss(true); this.hud.setBoss(boss.hp, boss.maxHp); }
+      else this.hud.showBoss(false);
+
+      this._updateEnemyShots(dt);
 
       // regen-driven HUD refresh
       this.hud.setHealth(this.player.hp, this.player.maxHp);
