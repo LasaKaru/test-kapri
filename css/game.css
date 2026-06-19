@@ -57,6 +57,29 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .ammo-reserve{font-size:1.5rem;font-weight:700;color:var(--muted)}
 .ammo-mag.empty{color:var(--crimson);animation:blink .5s steps(2) infinite}
 @keyframes blink{50%{opacity:.3}}
+.grenade-line{margin-top:4px;font-family:'Orbitron';font-weight:700;font-size:1rem;color:var(--gold);letter-spacing:.06em}
+.grenade-line .nade-icon{filter:drop-shadow(0 0 6px rgba(255,207,74,.6))}
+.grenade-line .nade-lbl{font-size:.6rem;color:var(--muted);letter-spacing:.12em}
+
+/* Radar / minimap */
+.minimap-wrap{position:absolute;top:96px;left:24px;width:170px;height:170px;border-radius:50%;
+  overflow:hidden;border:2px solid rgba(188,224,74,.45);box-shadow:0 0 18px rgba(0,0,0,.5);
+  background:rgba(8,16,4,.5)}
+#minimap{width:170px;height:170px;display:block}
+
+/* Settings */
+.settings-inner{min-width:min(440px,92vw)}
+.settings-grid{display:flex;flex-direction:column;gap:14px;width:100%;margin:8px 0 18px;text-align:left}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  background:rgba(10,18,6,.6);border:1px solid rgba(188,224,74,.16);border-radius:10px;padding:12px 16px}
+.set-row label{font-family:'Rajdhani';font-weight:600;letter-spacing:.04em;color:var(--text);font-size:1rem}
+.set-row .set-val{font-family:'Orbitron';font-size:.8rem;color:var(--lime-bright);min-width:48px;text-align:right}
+.set-row input[type=range]{flex:1;accent-color:var(--lime);max-width:200px}
+.set-toggle{cursor:pointer;font-family:'Orbitron';font-size:.78rem;letter-spacing:.06em;
+  border:2px solid var(--lime);color:var(--lime-bright);background:rgba(20,43,12,.4);
+  border-radius:8px;padding:6px 16px;min-width:64px}
+.set-toggle.off{border-color:var(--muted);color:var(--muted);background:rgba(20,20,20,.4)}
+.set-control{display:flex;align-items:center;gap:12px;flex:1;justify-content:flex-end}
 
 /* Bottom-left weapon slots */
 .hud-weapons{position:absolute;bottom:24px;left:24px;display:flex;flex-direction:column;gap:6px}

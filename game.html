@@ -45,10 +45,14 @@
           <span class="ammo-icon">❂</span>
           <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
         </div>
+        <div class="grenade-line"><span class="nade-icon">✸</span> <span id="nade-num">3</span> <span class="nade-lbl">FRAG · G</span></div>
       </div>
 
       <!-- Bottom-left: weapon slots -->
       <div class="hud-weapons" id="hud-weapons"></div>
+
+      <!-- Radar / minimap -->
+      <div class="minimap-wrap"><canvas id="minimap" width="170" height="170"></canvas></div>
 
       <!-- kill feed -->
       <div class="kill-feed" id="kill-feed"></div>
@@ -77,10 +81,12 @@
         <h1 class="title-word">VERDANT</h1>
         <p class="title-studio">Heleo2 Studio</p>
         <button class="btn btn-primary btn-lg" id="start-btn">▶ Start Survival</button>
+        <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
           <span><b>R-Click</b> Aim Down Sights</span><span><b>R</b> Reload</span>
-          <span><b>1-4 / Wheel</b> Weapons</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+          <span><b>1-4 / Wheel</b> Weapons</span><span><b>G</b> Grenade</span>
+          <span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
         </div>
         <a class="back-link" href="index.html">← Back to site</a>
       </div>
@@ -91,8 +97,18 @@
       <div class="overlay-inner">
         <h2 class="pause-word">PAUSED</h2>
         <button class="btn btn-primary btn-lg" id="resume-btn">Resume</button>
+        <button class="btn btn-ghost" id="settings-btn">Settings</button>
         <button class="btn btn-ghost" id="restart-btn-pause">Restart</button>
         <a class="back-link" href="index.html">← Quit to site</a>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="settings" class="overlay hidden">
+      <div class="overlay-inner settings-inner">
+        <h2 class="pause-word">SETTINGS</h2>
+        <div class="settings-grid" id="settings-grid"></div>
+        <button class="btn btn-primary btn-lg" id="settings-close">Done</button>
       </div>
     </div>
 

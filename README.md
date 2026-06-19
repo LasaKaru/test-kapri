@@ -33,6 +33,13 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
     fresh armor each wave.
   - **Survivability:** vitality bar, regenerating health, an **armor** layer,
     and **pickups** (medkits / armor / ammo) dropped by the fallen.
+  - **Frag grenades** (`G`) — physics-arced throw, bounce, fused detonation
+    with AoE damage and **chain-reacting** explosive barrels.
+  - **Minimap / radar** — rotating top-down view of nearby enemies, pickups
+    and lakes, with the player at centre.
+  - **Settings menu** (from the title or pause) — master volume, SFX toggle,
+    mouse sensitivity, field of view, bloom, shadows and detail toggles, all
+    saved to `localStorage`.
   - Raycast gunplay with muzzle flash, **bullet tracers**, impact sparks, blood
     hits, **kill streaks** with bonus scoring, a kill feed, hit markers, recoil,
     head-bob and **camera shake** on explosions.
@@ -53,6 +60,7 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
 | `Left Click` | Fire (hold for auto) |
 | `Right Click` | Aim down sights (zoom) |
 | `1 – 4` / `Wheel` | Switch weapons |
+| `G` | Throw frag grenade |
 | `R` | Reload |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |
@@ -89,6 +97,8 @@ js/game/
   postfx.js         Post-processing (bloom, color grade, vignette, grain)
   pickups.js        Health / armor / ammo drops
   hud.js            HUD updates, weapon panel, kill feed, scope, popups
+  minimap.js        Rotating top-down radar (enemies, pickups, lakes)
+  settings.js       Settings menu (volume, sensitivity, FOV, graphics)
   audio.js          Procedural per-weapon sound effects
 assets/favicon.svg
 ```

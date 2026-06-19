@@ -12,6 +12,7 @@ export class HUD {
       streakNum: document.getElementById('streak-num'),
       mag: document.getElementById('ammo-mag'),
       reserve: document.getElementById('ammo-reserve'),
+      nade: document.getElementById('nade-num'),
       weaponName: document.getElementById('weapon-name'),
       weapons: document.getElementById('hud-weapons'),
       killFeed: document.getElementById('kill-feed'),
@@ -45,6 +46,7 @@ export class HUD {
     this.el.mag.classList.toggle('empty', mag === 0);
   }
   setReloading(on) { this.el.reload.classList.toggle('show', on); }
+  setGrenades(n) { if (this.el.nade) this.el.nade.textContent = n; }
   setScope(on) {
     this.el.scope.classList.toggle('show', on);
     this.el.crosshair.style.opacity = on ? '0' : '1';
