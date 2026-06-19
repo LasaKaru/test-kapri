@@ -57,6 +57,7 @@ export class Audio {
   }
   pickup() { this._blip(660, 0.1, 'sine', 0.18, 990); setTimeout(() => this._blip(990, 0.1, 'sine', 0.15, 1320), 80); }
   swap() { this._blip(300, 0.05, 'square', 0.08); }
+  melee() { this._noise(0.12, 0.16, 2600); this._blip(220, 0.1, 'square', 0.08, 120); }
   empty() { this._blip(180, 0.06, 'square', 0.08); }
   kill() { this._blip(660, 0.12, 'triangle', 0.18, 1100); }
   hurt() { this._blip(150, 0.25, 'sawtooth', 0.2, 60); }

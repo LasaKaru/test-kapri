@@ -15,9 +15,14 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   feature cards, controls guide, enemy bestiary, and a local hall-of-fame.
 - **Full playable game** (`game.html`):
   - Pointer-lock FPS controls (WASD + mouse), sprint, **aim-down-sights** (zoom).
-  - **Arsenal of 4 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
-    LR-7 Marksman (scoped sniper) — each with its own ammo, fire mode, spread,
-    recoil and tracers. Switch with `1–4` or the scroll wheel.
+  - **Arsenal of 6 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
+    LR-7 Marksman (scoped sniper), SD-9 Sidearm (pistol) and HG-50 Gatling (LMG)
+    — each with its own ammo, fire mode, **learnable recoil pattern** and
+    tracers. Switch with `1–6` or the scroll wheel.
+  - **Melee strike** (`V`) for point-blank kills, with a swing animation.
+  - **Headshots** deal 2.5× damage with a HEADSHOT callout and score bonus.
+  - **Weapon leveling** — each gun earns XP from kills and levels up (to LV10)
+    for more damage; progression persists across runs in `localStorage`.
   - Procedural battlefield: gradient **sky dome** with drifting clouds, **layered
     mountain ranges** with snow caps, rolling terrain, pines, **boulder fields**
     with moss, grass, a dirt path, a low golden sun and fog.
@@ -27,10 +32,12 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
   - A **ruined town**: buildings with glowing windows, watchtowers, sandbag
     walls, crate stacks, fences, and **explosive red barrels** you can shoot to
     blow up clustered enemies.
-  - Five enemy archetypes — **Grunt**, **Runner**, **Brute**, ranged **Spitter**
-    (keeps its distance and fires projectiles) and a colossal **Boss** every 5th
-    wave with a dedicated top-screen health bar — all with billboard health
-    bars, walk/attack animation and per-wave HP scaling.
+  - Eight enemy archetypes — **Grunt**, **Runner**, **Brute**, ranged **Spitter**,
+    **Exploder** (rushes & detonates), **Shielded** (frontal plate blocks most
+    fire — flank, headshot or blast it), **Summoner** (spawns adds), and a
+    colossal **Boss** every 5th wave with a top-screen health bar.
+  - **Ragdoll-style deaths** (topple, sink &amp; fade) and **basic pathfinding**
+    so enemies steer around buildings instead of grinding into them.
   - A **spawn director** paces spawns and caps how many enemies are alive at once.
   - Endless, escalating waves with a between-wave breather, ammo top-ups and
     fresh armor each wave.

@@ -64,7 +64,9 @@ export class HUD {
     }
   }
 
-  setWeaponName(name) { this.el.weaponName.textContent = name; }
+  setWeaponName(name, level) {
+    this.el.weaponName.textContent = level && level > 1 ? `${name} · LV${level}` : name;
+  }
 
   buildWeaponSlots(order, defs, current) {
     this.el.weapons.innerHTML = '';
@@ -109,6 +111,14 @@ export class HUD {
     const p = this.el.pop;
     p.className = 'center-pop kill';
     p.textContent = 'KILL';
+    void p.offsetWidth;
+    p.classList.add('kill');
+  }
+
+  popHeadshot() {
+    const p = this.el.pop;
+    p.className = 'center-pop kill headshot';
+    p.textContent = 'HEADSHOT';
     void p.offsetWidth;
     p.classList.add('kill');
   }

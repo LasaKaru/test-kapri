@@ -691,6 +691,27 @@ export class World {
     return res;
   }
 
+  // Lightweight steering: returns a perpendicular nudge away from obstacles
+  // that lie ahead, so enemies arc around buildings instead of grinding them.
+  steerAround(x, z, dx, dz, radius) {
+    let sx = 0, sz = 0;
+    for (const c of this.colliders) {
+      const ox = c.x - x, oz = c.z - z;
+      const d = Math.hypot(ox, oz);
+      const reach = c.r + radius + 3;
+      if (d > 0.001 && d < reach) {
+        const ahead = (ox * dx + oz * dz) / d; // how directly in front (cos)
+        if (ahead > 0.25) {
+          const px = -dz, pz = dx;               // perpendicular to travel
+          const side = (ox * px + oz * pz) > 0 ? -1 : 1; // turn away from it
+          const w = ((reach - d) / reach) * ahead;
+          sx += px * side * w; sz += pz * side * w;
+        }
+      }
+    }
+    return { x: sx, z: sz };
+  }
+
   resolve(x, z, radius) {
     for (const c of this.colliders) {
       const dx = x - c.x, dz = z - c.z;
