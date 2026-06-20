@@ -17,6 +17,7 @@ export class Player {
     this.sprintMul = 1.6;
     this.keys = {};
     this.sprinting = false;
+    this.touchVec = new THREE.Vector2(0, 0); // analog move from a touch joystick (x=strafe, y=forward)
 
     // survivability (COD-style)
     this.maxHp = 100; this.hp = 100;
@@ -81,6 +82,11 @@ export class Player {
     if (this.keys['KeyS']) move.sub(forward);
     if (this.keys['KeyD']) move.add(right);
     if (this.keys['KeyA']) move.sub(right);
+    // analog touch joystick
+    if (this.touchVec.x || this.touchVec.y) {
+      move.add(forward.clone().multiplyScalar(this.touchVec.y));
+      move.add(right.clone().multiplyScalar(this.touchVec.x));
+    }
 
     let spd = this.speed;
     this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'];

@@ -21,15 +21,16 @@ const TYPES = {
 };
 
 export class Enemy {
-  constructor(scene, type, pos, hpScale = 1) {
+  constructor(scene, type, pos, hpScale = 1, mods = null) {
     this.scene = scene;
     this.type = type;
     const def = TYPES[type];
     this.def = def;
+    const md = mods || { speed: 1, dmg: 1 };
     this.hp = Math.ceil(def.hp * hpScale);
     this.maxHp = this.hp;
-    this.speed = def.speed;
-    this.dmg = def.dmg;
+    this.speed = def.speed * md.speed;
+    this.dmg = def.dmg * md.dmg;
     this.score = def.score;
     this.ranged = !!def.ranged;
     this.isBoss = !!def.boss;
@@ -319,6 +320,7 @@ export class WaveManager {
     this.spawnTimer = 0;
     this.state = 'idle'; // idle | spawning | active | between
     this.boss = null;
+    this.difficulty = { hp: 1, speed: 1, dmg: 1, spawn: 1, reward: 1 };
   }
 
   get isBossWave() { return this.wave > 0 && this.wave % 5 === 0; }
@@ -351,13 +353,21 @@ export class WaveManager {
       for (let i = 0; i < shielded; i++) this.spawnQueue.push('shielded');
       for (let i = 0; i < summoners; i++) this.spawnQueue.push('summoner');
     }
-    // keep the boss first, shuffle the rest
-    const boss = this.spawnQueue[0] === 'boss' ? this.spawnQueue.shift() : null;
-    this.spawnQueue.sort(() => Math.random() - 0.5);
-    if (boss) this.spawnQueue.unshift(boss);
+    // difficulty scales the head-count; the boss (if any) is always kept first
+    const sp = this.difficulty.spawn;
+    const hasBoss = this.spawnQueue[0] === 'boss';
+    let pool = hasBoss ? this.spawnQueue.slice(1) : this.spawnQueue.slice();
+    if (sp > 1) {
+      const extra = Math.round(pool.length * (sp - 1));
+      for (let i = 0; i < extra; i++) pool.push(pool[i % pool.length]);
+    } else if (sp < 1) {
+      pool = pool.slice(0, Math.max(1, Math.round(pool.length * sp)));
+    }
+    pool.sort(() => Math.random() - 0.5);
+    this.spawnQueue = hasBoss ? ['boss', ...pool] : pool;
 
     // spawn director: cap how many can be alive at once
-    this.maxAlive = Math.min(24, 8 + w * 2);
+    this.maxAlive = Math.min(28, 8 + w * 2 + Math.round((sp - 1) * 6));
     this.totalThisWave = this.spawnQueue.length;
     this.killedThisWave = 0;
     this.spawnTimer = 0;
@@ -367,21 +377,22 @@ export class WaveManager {
 
   _hpScale() {
     const nf = this.world.nightFactor ? this.world.nightFactor() : 1;
-    return (1 + (this.wave - 1) * 0.08) * nf;
+    return (1 + (this.wave - 1) * 0.08) * nf * this.difficulty.hp;
   }
+  _mods() { return { speed: this.difficulty.speed, dmg: this.difficulty.dmg }; }
 
   _spawnOne() {
     const type = this.spawnQueue.shift();
     const ang = Math.random() * Math.PI * 2;
     const dist = 42 + Math.random() * 34;
     const pos = new THREE.Vector3(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
-    const e = new Enemy(this.scene, type, pos, this._hpScale());
+    const e = new Enemy(this.scene, type, pos, this._hpScale(), this._mods());
     if (e.isBoss) this.boss = e;
     this.enemies.push(e);
   }
 
   spawnAt(type, x, z) {
-    const e = new Enemy(this.scene, type, new THREE.Vector3(x, 0, z), this._hpScale());
+    const e = new Enemy(this.scene, type, new THREE.Vector3(x, 0, z), this._hpScale(), this._mods());
     this.enemies.push(e);
   }
 

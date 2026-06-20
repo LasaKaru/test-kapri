@@ -9,6 +9,22 @@ set in a stylised low-poly forest at golden hour, with a HUD showing the
 current **WAVE**, **SCORE**, **ammo** and **vitality**, billboard health bars
 over enemies, and a punchy **KILL** popup on every confirmed takedown.
 
+## 🗺️ Maps & difficulty
+
+Pick your battlefield from the **Select Location** screen — four maps with
+distinct **Earth-like topography**, plus three difficulty tiers (saved to
+`localStorage`):
+
+| Map | Topography |
+| --- | ---------- |
+| **Verdant Plains** | Gentle golden grassland, open sightlines |
+| **Ashen Highlands** | Raised rugged hills & plateaus, more rock |
+| **Mire Lowlands** | Sunken wetlands & broad water, heavy fog |
+| **Titan Peaks** | Steep mountain ridges around a fighting valley, snow |
+
+Difficulty (**Recruit / Veteran / Nightmare**) scales enemy health, speed,
+damage, head-count and rewards.
+
 ## ✨ Features
 
 - **Marketing landing page** (`index.html`) — animated forest backdrop, hero,
@@ -66,7 +82,15 @@ over enemies, and a punchy **KILL** popup on every confirmed takedown.
     **Realism slider** (0% = flat natural low-poly look, 100% = full cinematic).
   - **Particle FX**: drifting ambient embers, explosion fireballs &amp; smoke,
     blood bursts and fading ground decals (blood / scorch).
-  - Procedural WebAudio sound effects, per-weapon (no asset downloads).
+  - Procedural WebAudio sound effects, per-weapon (no asset downloads), plus
+    **procedural music** (an ambient pad + beat that escalates with the wave) and
+    a wind soundscape — with a separate Music volume slider.
+  - **Floating damage numbers** (crit-coloured on headshots) and a **compass**
+    HUD strip showing your heading and threat bearings.
+  - **Mobile / touch controls** — a left analog joystick, right-side look-drag,
+    and on-screen Fire / ADS / Reload / Grenade / Melee / Swap buttons (shown
+    automatically on touch devices).
+  - Object pooling for FX and projectiles to keep the frame rate steady.
   - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.
 

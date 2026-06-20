@@ -48,6 +48,66 @@ export class HUD {
   }
   setReloading(on) { this.el.reload.classList.toggle('show', on); }
   setGrenades(n) { if (this.el.nade) this.el.nade.textContent = n; }
+
+  // ---- floating damage numbers (pooled DOM) ----
+  damageNumber(sx, sy, amount, crit) {
+    const host = document.getElementById('dmg-numbers');
+    if (!host) return;
+    if (!this._dnPool) { this._dnPool = []; this._dnIdx = 0; }
+    let el;
+    if (this._dnPool.length < 28) { el = document.createElement('span'); host.appendChild(el); this._dnPool.push(el); }
+    else { el = this._dnPool[this._dnIdx = (this._dnIdx + 1) % this._dnPool.length]; }
+    el.className = 'dn' + (crit ? ' crit' : '');
+    el.textContent = (crit ? '✖' : '') + Math.round(amount);
+    el.style.left = sx + 'px';
+    el.style.top = sy + 'px';
+    // restart animation
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  }
+
+  // ---- compass (canvas) ----
+  drawCompass(bearing, items) {
+    const cv = document.getElementById('compass');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height, cx = W / 2;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(8,16,4,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    const halfFov = Math.PI / 3; // show ±60°
+    const pxPer = (W / 2) / halfFov;
+    const wrap = (a) => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+    // cardinal + tick marks every 30°
+    ctx.font = '11px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    const cards = { '0.0000': 'N', '1.5708': 'E', '3.1416': 'S', '4.7124': 'W' };
+    for (let deg = 0; deg < 360; deg += 15) {
+      const a = deg * Math.PI / 180;
+      const d = wrap(a - bearing);
+      if (Math.abs(d) > halfFov) continue;
+      const x = cx + d * pxPer;
+      const label = cards[a.toFixed(4)];
+      if (label) {
+        ctx.fillStyle = label === 'N' ? '#ff6a5a' : '#bce04a';
+        ctx.fillText(label, x, 14);
+        ctx.fillRect(x - 0.5, 18, 1, 8);
+      } else {
+        ctx.fillStyle = 'rgba(188,224,74,0.4)';
+        ctx.fillRect(x - 0.5, 22, 1, 5);
+      }
+    }
+    // centre marker
+    ctx.fillStyle = '#d8ff5e';
+    ctx.beginPath(); ctx.moveTo(cx, 30); ctx.lineTo(cx - 5, 34); ctx.lineTo(cx + 5, 34); ctx.fill();
+    // threat pips
+    if (items) for (const it of items) {
+      const d = wrap(it.bearing - bearing);
+      const clamped = Math.max(-halfFov, Math.min(halfFov, d));
+      const x = cx + clamped * pxPer;
+      ctx.fillStyle = it.boss ? '#ffd54a' : '#ff3b2f';
+      ctx.beginPath(); ctx.arc(x, 6, Math.abs(d) > halfFov ? 2 : 3.5, 0, 7); ctx.fill();
+    }
+  }
   showBoss(on) { const w = document.getElementById('boss-bar-wrap'); if (w) w.classList.toggle('hidden', !on); }
   setBoss(hp, max) { const f = document.getElementById('boss-fill'); if (f) f.style.width = Math.max(0, hp / max) * 100 + '%'; }
   setScope(on) {

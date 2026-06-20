@@ -1,6 +1,6 @@
 // Player-facing settings: persisted to localStorage and applied to the game.
 const KEY = 'verdant_settings';
-const DEFAULTS = { volume: 70, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true };
+const DEFAULTS = { volume: 70, music: 50, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true };
 
 export class Settings {
   constructor(game) {
@@ -15,6 +15,7 @@ export class Settings {
   applyAll() {
     const g = this.game;
     g.audio.master = this.v.volume / 100;
+    g.audio.setMusicVolume(this.v.music / 100);
     g.audio.enabled = this.v.sfx;
     g.player.sensitivity = this.v.sensitivity / 100;
     g.setBaseFov(this.v.fov);
@@ -51,6 +52,7 @@ export class Settings {
 
     const g = this.game;
     slider('Master Volume', 'volume', 0, 100, '%', () => { g.audio.master = this.v.volume / 100; });
+    slider('Music', 'music', 0, 100, '%', () => { g.audio.setMusicVolume(this.v.music / 100); });
     toggle('Sound Effects', 'sfx', () => { g.audio.enabled = this.v.sfx; });
     slider('Mouse Sensitivity', 'sensitivity', 30, 250, '%', () => { g.player.sensitivity = this.v.sensitivity / 100; });
     slider('Field of View', 'fov', 65, 100, '°', () => { g.setBaseFov(this.v.fov); });

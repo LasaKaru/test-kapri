@@ -1,22 +1,80 @@
 import * as THREE from 'three';
 
-// Builds the low-poly forest battlefield: sky, mountains, terrain, a ruined
-// town (buildings, crates, barrels, watchtower, sandbags), trees and props.
+// Selectable battlefields, each with distinct Earth-like topography.
+export const MAPS = {
+  plains: {
+    name: 'Verdant Plains', topo: 'Plains',
+    desc: 'Gentle golden grassland. Open sightlines and light cover — a fair fight.',
+    ground: 0x4f7d1e, amp: 1.8, freq: 0.05, ridge: 0, lift: 0,
+    treeDensity: 150, rockDensity: 44, grass: 700, fogFar: 240,
+    lakes: [{ x: -58, z: 38, r: 18 }, { x: 60, z: -10, r: 16 }],
+    preview: ['#1b2c08', '#7d7a1c', '#4f7d1e'],
+  },
+  highlands: {
+    name: 'Ashen Highlands', topo: 'Highlands',
+    desc: 'Raised rugged hills and broken plateaus. More rock, less cover, rolling elevation.',
+    ground: 0x6a6a3a, amp: 6.5, freq: 0.055, ridge: 0.35, lift: 2.5,
+    treeDensity: 90, rockDensity: 95, grass: 420, fogFar: 215,
+    lakes: [{ x: 64, z: 30, r: 14 }],
+    preview: ['#3a4426', '#8a7a3a', '#6a6a3a'],
+  },
+  lowlands: {
+    name: 'Mire Lowlands', topo: 'Lowlands',
+    desc: 'Sunken wetlands and broad water. Heavy fog, close quarters, plenty of wading.',
+    ground: 0x3c5a26, amp: 1.3, freq: 0.05, ridge: 0, lift: -1.1,
+    treeDensity: 125, rockDensity: 30, grass: 820, fogFar: 150,
+    lakes: [{ x: -40, z: 30, r: 26 }, { x: 45, z: 20, r: 24 }, { x: 8, z: 70, r: 22 }, { x: -55, z: -32, r: 20 }],
+    preview: ['#1a2614', '#2f5a4a', '#3c5a26'],
+  },
+  mountains: {
+    name: 'Titan Peaks', topo: 'Mountains',
+    desc: 'Steep ridges ringing a fighting valley. Verticality, chokepoints and snow.',
+    ground: 0x5a5e52, amp: 12, freq: 0.07, ridge: 0.7, lift: 1.5,
+    treeDensity: 70, rockDensity: 125, grass: 300, fogFar: 205,
+    lakes: [{ x: 58, z: -40, r: 14 }],
+    preview: ['#2a3550', '#8a90a0', '#5a5e52'],
+  },
+};
+export const MAP_ORDER = ['plains', 'highlands', 'lowlands', 'mountains'];
+
+// Builds the low-poly battlefield: sky, mountains, terrain, a ruined town,
+// trees, water and props — all under a single root group so maps can be swapped.
 export class World {
-  constructor(scene) {
+  constructor(scene, mapId) {
     this.scene = scene;
+    this.mapId = MAPS[mapId] ? mapId : 'plains';
+    this.map = MAPS[this.mapId];
     this.colliders = []; // {x,z,r}
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
     this.bounds = 130;
     this._clouds = [];
     this._time = 0;
     this._waterMats = [];
-    // lake basins (kept off the path & town); carved into the terrain
-    this.lakes = [
-      { x: -58, z: 38, r: 20 },
-      { x: 62, z: 8, r: 24 },
-      { x: 34, z: 64, r: 17 },
-    ];
+    this._fogFar = this.map.fogFar;
+    // lake basins (from the map); carved into the terrain
+    this.lakes = this.map.lakes.map((l) => ({ ...l }));
+    this.root = new THREE.Group();
+    this.scene.add(this.root);
+    this._build();
+  }
+
+  dispose() {
+    this.scene.remove(this.root);
+    this.root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x) => x && x.dispose && x.dispose()); }
+    });
+  }
+
+  rebuild(mapId) {
+    this.dispose();
+    this.mapId = MAPS[mapId] ? mapId : 'plains';
+    this.map = MAPS[this.mapId];
+    this._fogFar = this.map.fogFar;
+    this.lakes = this.map.lakes.map((l) => ({ ...l }));
+    this.colliders = []; this.barrels = []; this._clouds = []; this._waterMats = []; this._time = 0;
+    this.root = new THREE.Group();
+    this.scene.add(this.root);
     this._build();
   }
 
@@ -53,7 +111,7 @@ export class World {
         }`,
     });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 16), skyMat);
-    scene.add(sky);
+    this.root.add(sky);
     this._skyU = uniforms;
 
     scene.fog = new THREE.Fog(0xc09a3a, 55, 230);
@@ -64,13 +122,13 @@ export class World {
       new THREE.CircleGeometry(28, 32),
       new THREE.MeshBasicMaterial({ color: 0xfff3c0, fog: false })
     );
-    scene.add(sunDisc);
+    this.root.add(sunDisc);
     this._sunDisc = sunDisc;
     const glow = new THREE.Mesh(
       new THREE.CircleGeometry(70, 32),
       new THREE.MeshBasicMaterial({ color: 0xffd866, transparent: true, opacity: 0.4, fog: false })
     );
-    scene.add(glow);
+    this.root.add(glow);
     this._sunGlow = glow;
 
     // moon (shown at night)
@@ -78,7 +136,7 @@ export class World {
       new THREE.CircleGeometry(20, 32),
       new THREE.MeshBasicMaterial({ color: 0xdfe6ff, fog: false, transparent: true, opacity: 0 })
     );
-    scene.add(moon);
+    this.root.add(moon);
     this._moon = moon;
 
     // clouds (soft sprites)
@@ -91,7 +149,7 @@ export class World {
       s.position.set(Math.cos(ang) * r, 60 + Math.random() * 60, Math.sin(ang) * r);
       const sc = 60 + Math.random() * 80;
       s.scale.set(sc, sc * 0.55, 1);
-      scene.add(s);
+      this.root.add(s);
       this._clouds.push({ s, speed: 0.6 + Math.random() * 1.2 });
     }
   }
@@ -112,7 +170,7 @@ export class World {
   _buildLights() {
     const scene = this.scene;
     const hemi = new THREE.HemisphereLight(0xfff0b0, 0x1f3a10, 0.8);
-    scene.add(hemi);
+    this.root.add(hemi);
     this._hemi = hemi;
     const sun = new THREE.DirectionalLight(0xffe39a, 2.2);
     sun.position.set(-40, 34, -90);
@@ -123,11 +181,11 @@ export class World {
     sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 260;
     sun.shadow.bias = -0.0004;
-    scene.add(sun);
+    this.root.add(sun);
     this._sunLight = sun;
     const fill = new THREE.DirectionalLight(0xbce04a, 0.4);
     fill.position.set(40, 20, 40);
-    scene.add(fill);
+    this.root.add(fill);
 
     // day/night + weather state
     this.dayNightEnabled = true;
@@ -158,7 +216,7 @@ export class World {
     this._rain = new THREE.Points(geo, mat);
     this._rain.frustumCulled = false;
     this._rain.visible = false;
-    this.scene.add(this._rain);
+    this.root.add(this._rain);
   }
 
   _sunElevation(phase) { return Math.sin(phase * Math.PI * 2); }
@@ -186,11 +244,11 @@ export class World {
     const rain = this._rainAmt;
     if (rain > 0) {
       this._fog.color.lerp(C(0x6c7682), rain * 0.6);
-      this._fog.far = lerp(230, 120, rain);
+      this._fog.far = lerp(this._fogFar, this._fogFar * 0.5, rain);
       this._skyU.top.value.lerp(C(0x5a6470), rain * 0.5);
       this._skyU.mid.value.lerp(C(0x6c7682), rain * 0.5);
     } else {
-      this._fog.far = 230;
+      this._fog.far = this._fogFar;
     }
 
     this._sunLight.color.copy(k.light);
@@ -282,15 +340,24 @@ export class World {
 
   // ---------- Terrain ----------
   _buildTerrain() {
-    const size = 360, seg = 70;
+    const size = 360, seg = 90;
+    const m = this.map, f = m.freq, amp = m.amp;
     const geo = new THREE.PlaneGeometry(size, size, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i);
       const dist = Math.sqrt(x * x + z * z);
-      let h = Math.sin(x * 0.05) * Math.cos(z * 0.045) * 2.4 + Math.sin(x * 0.13 + z * 0.1) * 0.9;
-      h *= Math.min(1, dist / 40);
+      // base rolling terrain
+      let h = Math.sin(x * f) * Math.cos(z * f * 0.9) * amp + Math.sin(x * f * 1.7 + z * f * 1.3) * amp * 0.4;
+      if (m.ridge > 0) {
+        // sharpen into ridges/peaks for highlands & mountains
+        const ridged = amp * (1 - Math.abs(Math.sin(x * f * 0.8) * Math.cos(z * f * 0.8))) * 1.7;
+        h = h * (1 - m.ridge) + ridged * m.ridge;
+      }
+      h += m.lift;
+      // keep a flat, playable arena in the middle regardless of topography
+      h *= Math.min(1, dist / 42);
       // carve lake basins (smooth bowl down to ~ -2.6)
       for (const lk of this.lakes) {
         const d = Math.hypot(x - lk.x, z - lk.z);
@@ -303,9 +370,9 @@ export class World {
       pos.setY(i, h);
     }
     geo.computeVertexNormals();
-    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4f7d1e, roughness: 1, flatShading: true }));
+    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: this.map.ground, roughness: 1, flatShading: true }));
     ground.receiveShadow = true;
-    this.scene.add(ground);
+    this.root.add(ground);
 
     const path = new THREE.Mesh(
       new THREE.PlaneGeometry(8, 320),
@@ -313,7 +380,7 @@ export class World {
     );
     path.rotation.x = -Math.PI / 2; path.position.y = 0.05;
     path.receiveShadow = true;
-    this.scene.add(path);
+    this.root.add(path);
   }
 
   // ---------- Distant mountains (layered ranges + snow caps) ----------
@@ -346,7 +413,7 @@ export class World {
         }
       }
     }
-    this.scene.add(ring);
+    this.root.add(ring);
   }
 
   // ---------- Water (procedural animated lakes) ----------
@@ -397,7 +464,7 @@ export class World {
       geo.rotateX(-Math.PI / 2);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(lk.x, -0.15, lk.z);
-      this.scene.add(mesh);
+      this.root.add(mesh);
       this._waterMats.push(mat);
 
       // reedy ring around the lake
@@ -407,7 +474,7 @@ export class World {
         const rr = lk.r * (1.05 + Math.random() * 0.12);
         const reed = new THREE.Mesh(new THREE.ConeGeometry(0.12, 1.6 + Math.random(), 4), reedMat);
         reed.position.set(lk.x + Math.cos(a) * rr, 0.4, lk.z + Math.sin(a) * rr);
-        this.scene.add(reed);
+        this.root.add(reed);
       }
     }
   }
@@ -442,7 +509,7 @@ export class World {
   }
 
   _plantForest() {
-    for (let i = 0; i < 170; i++) {
+    for (let i = 0; i < this.map.treeDensity; i++) {
       const ang = Math.random() * Math.PI * 2;
       const dist = 12 + Math.random() * 130;
       const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
@@ -453,7 +520,7 @@ export class World {
       tree.scale.setScalar(s);
       tree.position.set(x, 0, z);
       tree.rotation.y = Math.random() * Math.PI;
-      this.scene.add(tree);
+      this.root.add(tree);
       if (dist < this.bounds + 10) this.colliders.push({ x, z, r: 0.6 * s });
     }
   }
@@ -519,7 +586,7 @@ export class World {
       }
     }
     g.position.set(x, 0, z); g.rotation.y = rot;
-    this.scene.add(g);
+    this.root.add(g);
     // collider (approximate radius)
     this.colliders.push({ x, z, r: Math.max(w, d) * 0.55 });
   }
@@ -540,7 +607,7 @@ export class World {
     const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 2, 4), new THREE.MeshStandardMaterial({ color: 0x3a352c, roughness: 1, flatShading: true }));
     roof.position.y = legH + 2.2; roof.rotation.y = Math.PI / 4; roof.castShadow = true; g.add(roof);
     g.position.set(x, 0, z);
-    this.scene.add(g);
+    this.root.add(g);
     this.colliders.push({ x, z, r: 2.2 });
   }
 
@@ -556,7 +623,7 @@ export class World {
       }
     }
     g.position.set(x, 0, z); g.rotation.y = rot;
-    this.scene.add(g);
+    this.root.add(g);
     this.colliders.push({ x, z, r: 2.0 });
   }
 
@@ -572,7 +639,7 @@ export class World {
       crate.castShadow = true; crate.receiveShadow = true; g.add(crate);
     });
     g.position.set(x, 0, z);
-    this.scene.add(g);
+    this.root.add(g);
     this.colliders.push({ x, z, r: 1.4 });
   }
 
@@ -587,7 +654,7 @@ export class World {
       band.position.y = 0.7; g.add(band);
     }
     g.position.set(x, 0, z);
-    this.scene.add(g);
+    this.root.add(g);
     this.colliders.push({ x, z, r: 0.6 });
     if (explosive) this.barrels.push({ group: g, x, z, hp: 3, dead: false });
   }
@@ -595,7 +662,7 @@ export class World {
   _fencePost(x, z) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.6, 0.18), new THREE.MeshStandardMaterial({ color: 0x4a3a22, roughness: 1, flatShading: true }));
     post.position.set(x, 0.8, z); post.castShadow = true;
-    this.scene.add(post);
+    this.root.add(post);
   }
 
   _rock(x, z, r, mat, mossMat) {
@@ -606,14 +673,14 @@ export class World {
     rock.position.set(x, r * 0.35, z);
     rock.rotation.set(Math.random(), Math.random(), Math.random());
     rock.castShadow = true; rock.receiveShadow = true;
-    this.scene.add(rock);
+    this.root.add(rock);
     // mossy cap on bigger boulders
     if (r > 0.9 && mossMat) {
       const moss = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.92, 0), mossMat);
       moss.scale.set(1, 0.35, 1);
       moss.position.set(x, r * 0.6, z);
       moss.rotation.copy(rock.rotation);
-      this.scene.add(moss);
+      this.root.add(moss);
     }
     if (Math.hypot(x, z) < this.bounds) this.colliders.push({ x, z, r: r * 0.7 });
   }
@@ -624,7 +691,7 @@ export class World {
     const mossMat = new THREE.MeshStandardMaterial({ color: 0x4f7d1e, roughness: 1, flatShading: true });
 
     // scattered singles
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < this.map.rockDensity; i++) {
       const ang = Math.random() * Math.PI * 2, dist = 8 + Math.random() * 118;
       this._rock(Math.cos(ang) * dist, Math.sin(ang) * dist, 0.4 + Math.random() * 1.0,
         Math.random() < 0.5 ? rockMat : darkRock, mossMat);
@@ -644,9 +711,9 @@ export class World {
   _scatterGrass() {
     const bladeMat = new THREE.MeshStandardMaterial({ color: 0x86b32a, roughness: 1, flatShading: true, side: THREE.DoubleSide });
     const blade = new THREE.ConeGeometry(0.18, 0.9, 3);
-    const mesh = new THREE.InstancedMesh(blade, bladeMat, 700);
+    const mesh = new THREE.InstancedMesh(blade, bladeMat, this.map.grass);
     const dummy = new THREE.Object3D();
-    for (let i = 0; i < 700; i++) {
+    for (let i = 0; i < this.map.grass; i++) {
       const ang = Math.random() * Math.PI * 2, dist = 4 + Math.random() * 90;
       const gx = Math.cos(ang) * dist, gz = Math.sin(ang) * dist;
       dummy.position.set(gx, 0.4, gz);
@@ -654,7 +721,7 @@ export class World {
       dummy.scale.setScalar(this.waterAt(gx, gz) ? 0 : 0.6 + Math.random());
       dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     }
-    this.scene.add(mesh);
+    this.root.add(mesh);
   }
 
   // explosive barrel hit -> returns {x,z} blast center if it explodes
@@ -666,7 +733,7 @@ export class World {
         b.hp -= 1;
         if (b.hp <= 0) {
           b.dead = true;
-          this.scene.remove(b.group);
+          this.root.remove(b.group);
           // remove its collider
           this.colliders = this.colliders.filter((c) => !(Math.abs(c.x - b.x) < 0.01 && Math.abs(c.z - b.z) < 0.01));
           return { x: b.x, z: b.z, radius: 7 };
@@ -683,7 +750,7 @@ export class World {
       if (b.dead) continue;
       if (Math.hypot(b.x - x, b.z - z) < radius) {
         b.dead = true;
-        this.scene.remove(b.group);
+        this.root.remove(b.group);
         this.colliders = this.colliders.filter((c) => !(Math.abs(c.x - b.x) < 0.01 && Math.abs(c.z - b.z) < 0.01));
         res.push({ x: b.x, z: b.z, radius: 7 });
       }

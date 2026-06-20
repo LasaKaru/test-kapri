@@ -61,6 +61,12 @@
         <div class="boss-bar"><div class="boss-fill" id="boss-fill"></div></div>
       </div>
 
+      <!-- Compass -->
+      <canvas id="compass" width="360" height="34"></canvas>
+
+      <!-- floating damage numbers -->
+      <div class="dmg-numbers" id="dmg-numbers"></div>
+
       <!-- kill feed -->
       <div class="kill-feed" id="kill-feed"></div>
 
@@ -79,6 +85,18 @@
       <div class="scope" id="scope">
         <div class="scope-ring"><span class="scope-v"></span><span class="scope-h"></span></div>
       </div>
+
+      <!-- Mobile / touch controls (shown only on touch devices) -->
+      <div class="touch hidden" id="touch">
+        <div class="touch-joy" id="touch-joy"><div class="touch-knob" id="touch-knob"></div></div>
+        <div class="touch-look" id="touch-look"></div>
+        <button class="touch-btn touch-fire" id="touch-fire">FIRE</button>
+        <button class="touch-btn touch-ads" id="touch-ads">ADS</button>
+        <button class="touch-btn touch-reload" id="touch-reload">RLD</button>
+        <button class="touch-btn touch-nade" id="touch-nade">✸</button>
+        <button class="touch-btn touch-melee" id="touch-melee">🗡</button>
+        <button class="touch-btn touch-swap" id="touch-swap">⇄</button>
+      </div>
     </div>
 
     <!-- Title / start screen -->
@@ -87,7 +105,11 @@
         <div class="emblem"><svg viewBox="0 0 48 48" width="64" height="64"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg></div>
         <h1 class="title-word">VERDANT</h1>
         <p class="title-studio">Heleo2 Studio</p>
+        <div class="title-loadout">
+          <span id="title-map">Verdant Plains</span> · <span id="title-diff">Veteran</span>
+        </div>
         <button class="btn btn-primary btn-lg" id="start-btn">▶ Start Survival</button>
+        <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
@@ -107,6 +129,18 @@
         <button class="btn btn-ghost" id="settings-btn">Settings</button>
         <button class="btn btn-ghost" id="restart-btn-pause">Restart</button>
         <a class="back-link" href="index.html">← Quit to site</a>
+      </div>
+    </div>
+
+    <!-- Map / location select -->
+    <div id="mapselect" class="overlay hidden">
+      <div class="overlay-inner mapselect-inner">
+        <h2 class="pause-word">SELECT LOCATION</h2>
+        <p class="shop-sub">Earth-like battlefields — plains, highlands, lowlands &amp; mountains.</p>
+        <div class="map-grid" id="map-grid"></div>
+        <div class="diff-label">DIFFICULTY</div>
+        <div class="diff-row" id="diff-row"></div>
+        <button class="btn btn-primary btn-lg" id="mapselect-close">Confirm</button>
       </div>
     </div>
 
