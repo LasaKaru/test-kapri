@@ -148,6 +148,18 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .diff-btn .db-name{font-family:'Orbitron';font-weight:700;color:var(--lime-bright);font-size:.9rem}
 .diff-btn .db-desc{font-size:.78rem;color:var(--muted)}
 
+/* Loadout */
+.loadout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;width:100%;margin:8px 0 18px}
+.lo-weapon{background:rgba(10,18,6,.6);border:1px solid rgba(188,224,74,.16);border-radius:10px;padding:10px 12px;text-align:left}
+.lo-wname{font-family:'Orbitron';font-weight:700;font-size:.82rem;color:var(--lime-bright);letter-spacing:.04em;margin-bottom:8px}
+.lo-chips{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lo-chip{cursor:pointer;text-align:left;background:rgba(8,16,4,.6);border:1px solid rgba(188,224,74,.18);
+  border-radius:7px;padding:6px 8px;color:var(--muted);transition:all .12s}
+.lo-chip:hover{border-color:var(--lime)}
+.lo-chip.active{border-color:var(--lime-bright);background:rgba(47,107,30,.4);color:var(--text)}
+.lo-chip b{display:block;font-family:'Orbitron';font-size:.62rem;letter-spacing:.04em;color:var(--lime-bright)}
+.lo-chip span{font-size:.72rem}
+
 /* Shop */
 .shop-inner{min-width:min(720px,94vw);max-height:92vh;overflow-y:auto}
 .shop-word{font-family:'Orbitron';font-weight:900;letter-spacing:.16em;font-size:clamp(2rem,7vw,3.4rem);

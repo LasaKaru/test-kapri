@@ -3,6 +3,7 @@ import { World, MAPS } from './world.js';
 import { MapSelect, DIFFICULTIES } from './mapselect.js';
 import { TacMap } from './tacmap.js';
 import { Achievements } from './achievements.js';
+import { CLASSES, Loadout } from './loadout.js';
 import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
@@ -34,6 +35,12 @@ class Game {
     try { savedMap = localStorage.getItem('verdant_map') || 'plains'; savedDiff = localStorage.getItem('verdant_diff') || 'veteran'; } catch (_) {}
     this.difficultyId = DIFFICULTIES[savedDiff] ? savedDiff : 'veteran';
     this.difficulty = DIFFICULTIES[this.difficultyId];
+    let savedClass = 'assault', savedAtt = {};
+    try { savedClass = localStorage.getItem('verdant_class') || 'assault'; savedAtt = JSON.parse(localStorage.getItem('verdant_attachments') || '{}'); } catch (_) {}
+    this.classId = CLASSES[savedClass] ? savedClass : 'assault';
+    this.attachments = (savedAtt && typeof savedAtt === 'object') ? savedAtt : {};
+    this.headMul = 2.5;
+    this.medicHealMul = 1;
     this.world = new World(this.scene, savedMap);
     this.player = new Player(this.camera, this.scene, this.world);
     this.weapons = new WeaponManager(this.camera, BASE_FOV);
@@ -78,6 +85,7 @@ class Game {
     this.mapSelect = new MapSelect(this);
     this.tacmap = new TacMap(this);
     this.ach = new Achievements();
+    this.loadout = new Loadout(this);
     this.touch = new TouchControls(this);
     this._updateLoadoutLabel();
 
@@ -118,6 +126,7 @@ class Game {
     document.getElementById('restart-btn-pause').addEventListener('click', () => this.start());
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
     document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
+    document.getElementById('loadout-btn').addEventListener('click', () => this.loadout.open());
     document.getElementById('open-map').addEventListener('click', () => this._toggleMap());
     // tactical map toggle works from title and in a match
     document.addEventListener('keydown', (e) => {
@@ -243,9 +252,23 @@ class Game {
   }
 
   _updateLoadoutLabel() {
-    const m = document.getElementById('title-map'), d = document.getElementById('title-diff');
+    const m = document.getElementById('title-map'), d = document.getElementById('title-diff'), c = document.getElementById('title-class');
     if (m) m.textContent = MAPS[this.world.mapId].name;
     if (d) d.textContent = DIFFICULTIES[this.difficultyId].name;
+    if (c) c.textContent = CLASSES[this.classId].name;
+  }
+  _setClass(id) {
+    if (!CLASSES[id]) return;
+    this.classId = id;
+    try { localStorage.setItem('verdant_class', id); } catch (_) {}
+    this._updateLoadoutLabel();
+  }
+  _toggleAttachment(wk, aid) {
+    const list = this.attachments[wk] || (this.attachments[wk] = []);
+    const i = list.indexOf(aid);
+    if (i >= 0) list.splice(i, 1);
+    else { if (list.length >= 2) list.shift(); list.push(aid); } // cap 2
+    try { localStorage.setItem('verdant_attachments', JSON.stringify(this.attachments)); } catch (_) {}
   }
   _setMap(id) {
     if (!MAPS[id] || id === this.world.mapId) return;
@@ -261,7 +284,7 @@ class Game {
     try { localStorage.setItem('verdant_diff', id); } catch (_) {}
     this._updateLoadoutLabel();
   }
-  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'loadout'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
   _syncWeaponHud() {
     const live = this.weapons.live;
@@ -274,6 +297,9 @@ class Game {
     this.waves.reset();
     this.waves.difficulty = this.difficulty;
     this.player.reset();
+    // apply class + attachments to the per-run weapon stats, then reset ammo
+    this.classMods = CLASSES[this.classId];
+    this.weapons.configure(this.attachments, this.classMods);
     this.weapons.reset();
     this.pickups.reset();
     this._clearGrenades();
@@ -283,7 +309,10 @@ class Game {
     this.hud.setGrenades(this.nades);
     this.score = 0; this.kills = 0; this.streak = 0; this.firing = false; this.shake = 0;
     this._meleeCd = 0;
+    this.headMul = 2.5; this.medicHealMul = 1;
     this.credits = 0; this.creditMul = 1; this.lifesteal = 0;
+    // class-level bonuses (player/game)
+    if (this.classMods && this.classMods.apply) this.classMods.apply(this);
     this.shop.reset();
     this.hud.setCredits(0);
 
@@ -372,7 +401,7 @@ class Game {
         endPoint = enemyHit.point; anyHit = true;
         const head = enemyHit.zone === 'head';
         if (head) anyHead = true;
-        const base = shot.dmg * (head ? 2.5 : 1);
+        const base = shot.dmg * (head ? this.headMul : 1);
         enemyHit.enemy.hit(base, enemyHit.zone);
         const shown = base * (enemyHit.zone === 'shield' ? 0.15 : 1);
         const rec = dmgMap.get(enemyHit.enemy) || { dmg: 0, head: false, point: endPoint };
@@ -601,7 +630,7 @@ class Game {
 
   _collect(kind) {
     this.audio.pickup();
-    if (kind === 'health') { this.player.heal(35); this.hud.killFeed('+ MEDKIT'); }
+    if (kind === 'health') { this.player.heal(35 * this.medicHealMul); this.hud.killFeed('+ MEDKIT'); }
     else if (kind === 'armor') { this.player.addArmor(50); this.hud.killFeed('+ ARMOR'); }
     else if (kind === 'ammo') { this.weapons.addAmmo(0.4); this.hud.killFeed('+ AMMO'); }
     this.hud.setHealth(this.player.hp, this.player.maxHp);

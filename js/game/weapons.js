@@ -45,6 +45,17 @@ export const WEAPON_ORDER = ['rifle', 'smg', 'shotgun', 'sniper', 'pistol', 'lmg
 const LEVEL_KEY = 'verdant_weapon_levels';
 const MAX_LEVEL = 10;
 
+// Weapon attachments — modify per-run effective stats. Up to 2 per weapon.
+export const ATTACHMENTS = {
+  extmag: { name: 'Extended Mag', desc: '+40% magazine', apply: (w) => { w.mag = Math.round(w.mag * 1.4); } },
+  grip:   { name: 'Foregrip', desc: '−30% recoil', apply: (w) => { w.recoil *= 0.7; w.recoilYaw *= 0.55; } },
+  comp:   { name: 'Compensator', desc: '−30% spread', apply: (w) => { w.spread *= 0.7; w.adsSpread *= 0.7; } },
+  scope:  { name: 'Scope', desc: 'More zoom, tighter ADS', apply: (w) => { w.zoom *= 1.45; w.adsSpread *= 0.6; } },
+  laser:  { name: 'Laser Sight', desc: '−25% hip spread', apply: (w) => { w.spread *= 0.75; } },
+  light:  { name: 'Lightweight Kit', desc: '−15% reload', apply: (w) => { w.reload *= 0.85; } },
+};
+export const ATTACHMENT_ORDER = ['extmag', 'grip', 'comp', 'scope', 'laser', 'light'];
+
 // Builds a distinct low-poly view model for each weapon.
 function buildModel(kind) {
   const g = new THREE.Group();
@@ -115,11 +126,14 @@ export class WeaponManager {
     this.camera = camera;
     this.baseFov = baseFov;
 
+    this.attachments = {};   // { weaponKey: [attachmentId,...] }
+    this.classMods = null;
+    this.configure(null, null); // builds this.defs
+
     this.state = {};
     this.owned = {};
     for (const k of WEAPON_ORDER) {
-      const w = WEAPONS[k];
-      this.state[k] = { ammo: w.mag, reserve: w.reserve };
+      this.state[k] = { ammo: this.defs[k].mag, reserve: this.defs[k].reserve };
       this.owned[k] = true;
     }
 
@@ -175,8 +189,21 @@ export class WeaponManager {
     return leveled;
   }
 
-  get def() { return WEAPONS[this.current]; }
+  get def() { return this.defs[this.current]; }
   get live() { return this.state[this.current]; }
+
+  // build per-run effective stats from base + class + attachments
+  configure(attachments, classMods) {
+    this.attachments = attachments || {};
+    this.classMods = classMods || null;
+    this.defs = {};
+    for (const k of WEAPON_ORDER) {
+      const w = { ...WEAPONS[k] };
+      if (this.classMods && this.classMods.weapon) this.classMods.weapon(w, k);
+      for (const id of (this.attachments[k] || [])) { const a = ATTACHMENTS[id]; if (a) a.apply(w); }
+      this.defs[k] = w;
+    }
+  }
 
   switchTo(key) {
     if (!this.owned[key] || key === this.current || this.reloading) return false;
@@ -255,12 +282,12 @@ export class WeaponManager {
 
   reset() {
     for (const k of WEAPON_ORDER) {
-      this.state[k] = { ammo: WEAPONS[k].mag, reserve: WEAPONS[k].reserve };
+      this.state[k] = { ammo: this.defs[k].mag, reserve: this.defs[k].reserve };
     }
     this.current = 'rifle';
     for (const k of WEAPON_ORDER) this.models[k].visible = k === 'rifle';
     this.reloading = false; this.fireCd = 0; this.ads = false; this.adsT = 0;
-    this.reloadMul = 1; this._shotIndex = 0; this._sinceShot = 99;
+    this.reloadMul = 1; this._shotIndex = 0; this._sinceShot = 99; this.adsLerp = 12;
     this.camera.fov = this.baseFov; this.camera.updateProjectionMatrix();
   }
 
@@ -297,7 +324,7 @@ export class WeaponManager {
     }
 
     const target = this.ads ? 1 : 0;
-    this.adsT += (target - this.adsT) * Math.min(1, dt * 12);
+    this.adsT += (target - this.adsT) * Math.min(1, dt * (this.adsLerp || 12));
     const w = this.def;
     const fov = this.baseFov / (1 + (w.zoom - 1) * this.adsT);
     if (Math.abs(this.camera.fov - fov) > 0.01) {

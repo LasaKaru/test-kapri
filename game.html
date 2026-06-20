@@ -110,10 +110,11 @@
         <h1 class="title-word">VERDANT</h1>
         <p class="title-studio">Heleo2 Studio</p>
         <div class="title-loadout">
-          <span id="title-map">Verdant Plains</span> · <span id="title-diff">Veteran</span>
+          <span id="title-map">Verdant Plains</span> · <span id="title-diff">Veteran</span> · <span id="title-class">Assault</span>
         </div>
         <button class="btn btn-primary btn-lg" id="start-btn">▶ Start Survival</button>
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
+        <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
@@ -151,6 +152,18 @@
         </div>
       </div>
       <button class="btn btn-ghost tacmap-closebtn" id="tacmap-close">Close</button>
+    </div>
+
+    <!-- Loadout: class + weapon attachments -->
+    <div id="loadout" class="overlay hidden">
+      <div class="overlay-inner mapselect-inner">
+        <h2 class="pause-word">LOADOUT</h2>
+        <div class="diff-label">CLASS</div>
+        <div class="diff-row" id="loadout-class"></div>
+        <div class="diff-label">WEAPON ATTACHMENTS · max 2 each</div>
+        <div class="loadout-grid" id="loadout-grid"></div>
+        <button class="btn btn-primary btn-lg" id="loadout-close">Confirm</button>
+      </div>
     </div>
 
     <!-- Map / location select -->
