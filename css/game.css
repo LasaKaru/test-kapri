@@ -83,6 +83,46 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .set-toggle.off{border-color:var(--muted);color:var(--muted);background:rgba(20,20,20,.4)}
 .set-control{display:flex;align-items:center;gap:12px;flex:1;justify-content:flex-end}
 
+/* Achievement toasts */
+.ach-toast{position:absolute;top:96px;right:26px;display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:16}
+.ach{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(20,43,12,.95),rgba(8,16,4,.95));
+  border:1px solid var(--gold);border-radius:8px;padding:10px 14px;max-width:280px;
+  box-shadow:0 6px 20px rgba(0,0,0,.5);animation:achin .4s ease-out}
+.ach-ic{font-size:1.5rem}
+.ach-tx{font-family:'Rajdhani';font-size:.85rem;color:var(--text);line-height:1.25}
+.ach-tx b{font-family:'Orbitron';font-size:.72rem;letter-spacing:.08em;color:var(--gold)}
+@keyframes achin{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+
+/* Tactical map (Ghost-Recon style) */
+#tacmap{position:absolute;inset:0;z-index:28;background:#0a0e08;overflow:hidden}
+#tacmap-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+#tacmap-canvas:active{cursor:grabbing}
+.tacmap-top{position:absolute;top:18px;left:0;right:0;display:flex;justify-content:space-between;
+  align-items:flex-start;padding:0 26px;pointer-events:none}
+.tacmap-title{font-family:'Orbitron';font-weight:900;letter-spacing:.25em;color:#e9f3d6;font-size:1.1rem;
+  text-shadow:0 2px 6px rgba(0,0,0,.8)}
+.tacmap-region{text-align:right;font-family:'Orbitron'}
+.tacmap-region #tacmap-region{display:block;font-weight:900;letter-spacing:.18em;color:#fff;font-size:1.3rem;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.tacmap-topo{display:inline-block;margin-top:6px;background:#bce04a;color:#10210a;font-size:.62rem;
+  font-weight:700;letter-spacing:.16em;padding:3px 10px;border-radius:3px;text-transform:uppercase}
+.tacmap-hint{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-family:'Rajdhani';
+  color:var(--muted);font-size:.85rem;letter-spacing:.05em;pointer-events:none}
+.tacmap-hint b{color:var(--lime-bright)}
+.tacmap-panel{position:absolute;right:24px;bottom:24px;width:240px;background:rgba(8,12,6,.85);
+  border:1px solid rgba(188,224,74,.25);border-radius:6px;overflow:hidden;display:flex;flex-direction:column}
+.tp-cam{height:90px;background:linear-gradient(135deg,#3a4d2a,#1a2414);display:grid;place-items:center}
+.tp-drone{font-size:2rem;color:#cfe0b0;opacity:.8}
+.tp-body{padding:8px 12px}
+.tp-name{font-family:'Orbitron';font-weight:700;letter-spacing:.12em;color:#fff;font-size:.95rem}
+.tp-row{display:flex;justify-content:space-between;margin-top:6px}
+.tp-pri{background:#e0322a;color:#fff;font-family:'Orbitron';font-size:.55rem;font-weight:700;letter-spacing:.1em;padding:3px 6px;border-radius:2px}
+.tp-view{color:var(--lime-bright);font-family:'Orbitron';font-size:.6rem;letter-spacing:.1em;border:1px solid var(--lime);padding:3px 8px;border-radius:2px}
+.tacmap-closebtn{position:absolute;left:24px;bottom:24px}
+.map-open-btn{position:absolute;top:280px;left:24px;pointer-events:auto;cursor:pointer;
+  font-family:'Orbitron';font-size:.7rem;letter-spacing:.1em;color:var(--lime-bright);
+  background:rgba(8,16,4,.55);border:1px solid rgba(188,224,74,.3);border-radius:7px;padding:6px 12px}
+.map-open-btn b{color:var(--lime);margin-left:4px}
+
 /* Title loadout line */
 .title-loadout{font-family:'Orbitron';letter-spacing:.1em;color:var(--gold);font-size:.85rem;margin:2px 0 6px;text-transform:uppercase}
 

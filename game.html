@@ -54,6 +54,7 @@
 
       <!-- Radar / minimap -->
       <div class="minimap-wrap"><canvas id="minimap" width="170" height="170"></canvas></div>
+      <button class="map-open-btn" id="open-map">🗺 MAP <b>M</b></button>
 
       <!-- Boss health bar (top-centre) -->
       <div class="boss-bar-wrap hidden" id="boss-bar-wrap">
@@ -66,6 +67,9 @@
 
       <!-- floating damage numbers -->
       <div class="dmg-numbers" id="dmg-numbers"></div>
+
+      <!-- achievement toasts -->
+      <div class="ach-toast" id="ach-toast"></div>
 
       <!-- kill feed -->
       <div class="kill-feed" id="kill-feed"></div>
@@ -130,6 +134,23 @@
         <button class="btn btn-ghost" id="restart-btn-pause">Restart</button>
         <a class="back-link" href="index.html">← Quit to site</a>
       </div>
+    </div>
+
+    <!-- Tactical map (Ghost-Recon style) -->
+    <div id="tacmap" class="hidden">
+      <canvas id="tacmap-canvas"></canvas>
+      <div class="tacmap-top">
+        <div class="tacmap-title">TACTICAL MAP</div>
+        <div class="tacmap-region"><span id="tacmap-region">Verdant Plains</span><span id="tacmap-topo" class="tacmap-topo">Plains</span></div>
+      </div>
+      <div class="tacmap-hint">Drag to pan · Scroll to zoom · <b>M</b> to close</div>
+      <div class="tacmap-panel">
+        <div class="tp-cam"><span class="tp-drone">✣</span></div>
+        <div class="tp-body"><div class="tp-name">DRONE_ALERT</div>
+          <div class="tp-row"><span class="tp-pri">HIGH PRIORITY</span><span class="tp-view">VIEW CAMERA</span></div>
+        </div>
+      </div>
+      <button class="btn btn-ghost tacmap-closebtn" id="tacmap-close">Close</button>
     </div>
 
     <!-- Map / location select -->

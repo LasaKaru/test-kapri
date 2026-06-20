@@ -1,5 +1,25 @@
 import * as THREE from 'three';
 
+// --- seeded value noise / fbm for organic, Earth-like terrain ---
+function hash2(ix, iz, seed) {
+  let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iz | 0, 668265263) ^ Math.imul(seed | 0, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+function vnoise(x, z, seed) {
+  const ix = Math.floor(x), iz = Math.floor(z);
+  const fx = x - ix, fz = z - iz;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash2(ix, iz, seed), b = hash2(ix + 1, iz, seed), c = hash2(ix, iz + 1, seed), d = hash2(ix + 1, iz + 1, seed);
+  return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
+}
+function fbm(x, z, seed) {
+  let s = 0, amp = 0.5, fr = 1, norm = 0;
+  for (let o = 0; o < 4; o++) { s += vnoise(x * fr, z * fr, seed + o * 101) * amp; norm += amp; fr *= 2; amp *= 0.5; }
+  return s / norm; // 0..1
+}
+const MAP_SEEDS = { plains: 11, highlands: 23, lowlands: 37, mountains: 53 };
+
 // Selectable battlefields, each with distinct Earth-like topography.
 export const MAPS = {
   plains: {
@@ -44,6 +64,7 @@ export class World {
     this.scene = scene;
     this.mapId = MAPS[mapId] ? mapId : 'plains';
     this.map = MAPS[this.mapId];
+    this._seed = MAP_SEEDS[this.mapId] || 11;
     this.colliders = []; // {x,z,r}
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
     this.bounds = 130;
@@ -70,6 +91,7 @@ export class World {
     this.dispose();
     this.mapId = MAPS[mapId] ? mapId : 'plains';
     this.map = MAPS[this.mapId];
+    this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
     this.colliders = []; this.barrels = []; this._clouds = []; this._waterMats = []; this._time = 0;
@@ -339,35 +361,37 @@ export class World {
   }
 
   // ---------- Terrain ----------
+  // shared height field so the tactical map matches the real terrain
+  heightAt(x, z) {
+    const m = this.map, f = m.freq, amp = m.amp, seed = this._seed;
+    const dist = Math.sqrt(x * x + z * z);
+    // organic fractal terrain (-amp..amp)
+    let h = (fbm(x * f, z * f, seed) - 0.5) * 2 * amp;
+    if (m.ridge > 0) {
+      // ridged noise for highlands & mountains -> sharp ridgelines and valleys
+      const rn = 1 - Math.abs((fbm(x * f * 1.3 + 19, z * f * 1.3 - 7, seed + 7) - 0.5) * 2);
+      h = h * (1 - m.ridge) + rn * rn * amp * 1.9 * m.ridge;
+    }
+    h += m.lift;
+    h *= Math.min(1, dist / 42);
+    for (const lk of this.lakes) {
+      const d = Math.hypot(x - lk.x, z - lk.z);
+      if (d < lk.r * 1.25) {
+        const t = 1 - Math.min(1, d / (lk.r * 1.25));
+        const bowl = t * t * (3 - 2 * t);
+        h = h * (1 - bowl) + (-2.6) * bowl;
+      }
+    }
+    return h;
+  }
+
   _buildTerrain() {
     const size = 360, seg = 90;
-    const m = this.map, f = m.freq, amp = m.amp;
     const geo = new THREE.PlaneGeometry(size, size, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = pos.getZ(i);
-      const dist = Math.sqrt(x * x + z * z);
-      // base rolling terrain
-      let h = Math.sin(x * f) * Math.cos(z * f * 0.9) * amp + Math.sin(x * f * 1.7 + z * f * 1.3) * amp * 0.4;
-      if (m.ridge > 0) {
-        // sharpen into ridges/peaks for highlands & mountains
-        const ridged = amp * (1 - Math.abs(Math.sin(x * f * 0.8) * Math.cos(z * f * 0.8))) * 1.7;
-        h = h * (1 - m.ridge) + ridged * m.ridge;
-      }
-      h += m.lift;
-      // keep a flat, playable arena in the middle regardless of topography
-      h *= Math.min(1, dist / 42);
-      // carve lake basins (smooth bowl down to ~ -2.6)
-      for (const lk of this.lakes) {
-        const d = Math.hypot(x - lk.x, z - lk.z);
-        if (d < lk.r * 1.25) {
-          const t = 1 - Math.min(1, d / (lk.r * 1.25)); // 0 at rim -> 1 at center
-          const bowl = t * t * (3 - 2 * t); // smoothstep
-          h = h * (1 - bowl) + (-2.6) * bowl;
-        }
-      }
-      pos.setY(i, h);
+      pos.setY(i, this.heightAt(pos.getX(i), pos.getZ(i)));
     }
     geo.computeVertexNormals();
     const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: this.map.ground, roughness: 1, flatShading: true }));
@@ -537,6 +561,16 @@ export class World {
 
     this._watchtower(-8, -88);
     this._watchtower(14, -52);
+
+    // tactical-map points of interest (Ghost-Recon style markers)
+    this.pois = [
+      { x: 0, z: 18, kind: 'mission', label: 'MISSION START' },
+      { x: -33, z: -27, kind: 'objective', label: 'COMPOUND' },
+      { x: 28, z: -55, kind: 'objective', label: 'OUTPOST' },
+      { x: -8, z: -88, kind: 'alert', label: 'WATCHTOWER' },
+      { x: 14, z: -52, kind: 'alert', label: 'WATCHTOWER' },
+    ];
+    if (this.lakes[0]) this.pois.push({ x: this.lakes[0].x, z: this.lakes[0].z, kind: 'poi', label: 'WATER' });
 
     // sandbag walls flanking the path (cover)
     this._sandbagWall(-7, -24, 0);
