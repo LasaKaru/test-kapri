@@ -123,6 +123,10 @@ exactly as before and shows an **OFFLINE** status — nothing is blocked or brok
 - **Live chat** (press **Y**) — global room with presence count; connects lazily
   and greys out with "reconnecting…" when offline. Available from the title and
   in-match (typing releases the cursor so movement isn't triggered).
+- **Co-op** — host or join a room by code (up to 4); squadmates appear in your
+  world as named avatars, position-synced in real time over WebSocket. Lobby
+  shows "servers unavailable" with no server; single-player is unaffected.
+  *(Foundation: synced players & lobby. Shared waves are the next slice.)*
 
 - A connection-status **pill** (●) shows `online / connecting / offline`.
 - Online code lives in one isolated module (`js/game/net.js`) — every call is

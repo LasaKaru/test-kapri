@@ -126,12 +126,51 @@ function handleChat(conn) {
   };
 }
 
+// ---- co-op rooms (state relay; up to 4 players) ----
+const coopRooms = new Map(); // code -> { clients:Map(id->conn), seq }
+function coopRoom(code) {
+  code = (clean(code, 8).toUpperCase()) || 'LOBBY';
+  if (!coopRooms.has(code)) coopRooms.set(code, { code, clients: new Map(), seq: 1 });
+  return coopRooms.get(code);
+}
+function coopBroadcast(r, obj, exceptId) { const s = JSON.stringify(obj); for (const c of r.clients.values()) if (c.data.id !== exceptId) c.send(s); }
+
+function handleCoop(conn) {
+  conn.onmessage = (raw) => {
+    let m; try { m = JSON.parse(raw); } catch (_) { return; }
+    if (m.type === 'join') {
+      const r = coopRoom(m.room);
+      if (r.clients.size >= 4) { conn.sendJSON({ type: 'full' }); conn.close(); return; }
+      const id = r.seq++;
+      conn.data.id = id; conn.data.room = r; conn.data.name = clean(m.name, 12) || 'GHOST';
+      const peers = [...r.clients.values()].map((c) => ({ id: c.data.id, name: c.data.name }));
+      r.clients.set(id, conn);
+      conn.sendJSON({ type: 'welcome', id, room: r.code, peers });
+      coopBroadcast(r, { type: 'peer-join', id, name: conn.data.name }, id);
+    } else if (m.type === 'state' && conn.data.room) {
+      m.id = conn.data.id;
+      coopBroadcast(conn.data.room, m, conn.data.id);
+    } else if (m.type === 'event' && conn.data.room) {
+      m.id = conn.data.id;
+      coopBroadcast(conn.data.room, m, conn.data.id);
+    }
+  };
+  conn.onclose = () => {
+    const r = conn.data.room;
+    if (r) {
+      r.clients.delete(conn.data.id);
+      coopBroadcast(r, { type: 'peer-leave', id: conn.data.id });
+      if (r.clients.size === 0) coopRooms.delete(r.code);
+    }
+  };
+}
+
 const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
   if (parsed.pathname.startsWith('/api')) return handleApi(req, res, parsed);
   return serveStatic(req, res, parsed);
 });
-ws.attach(server, (pathname) => (pathname === '/api/chat' ? handleChat : null));
+ws.attach(server, (pathname) => (pathname === '/api/chat' ? handleChat : pathname === '/api/coop' ? handleCoop : null));
 server.listen(PORT, () => {
   console.log(`VERDANT server on http://localhost:${PORT}  (API /api, chat ws /api/chat, scores -> server/data/scores.json)`);
 });

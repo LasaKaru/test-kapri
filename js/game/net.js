@@ -124,6 +124,28 @@ export class Net {
     return false;
   }
 
+  // ---- co-op (relay; failure-safe, optional) ----
+  _coopUrl() { return this.base ? this.base.replace(/^http/, 'ws') + '/coop' : null; }
+  onCoop(fn) { (this._coopCb || (this._coopCb = [])).push(fn); }
+  onCoopState(fn) { (this._coopStateCb || (this._coopStateCb = [])).push(fn); try { fn(this.coopState || 'offline'); } catch (_) {} }
+  _emitCoopState() { this._emit(this._coopStateCb, this.coopState || 'offline'); }
+
+  connectCoop(room) {
+    if (!this.enabled || typeof WebSocket === 'undefined') { this.coopState = 'offline'; this._emitCoopState(); return false; }
+    this.coopRoom = (room || 'LOBBY').toUpperCase();
+    this.coopState = 'connecting'; this._emitCoopState();
+    let ws; try { ws = new WebSocket(this._coopUrl()); } catch (_) { this.coopState = 'offline'; this._emitCoopState(); return false; }
+    this._coopWs = ws;
+    ws.onopen = () => { this.coopState = 'online'; this._emitCoopState(); ws.send(JSON.stringify({ type: 'join', room: this.coopRoom, name: this.name })); };
+    ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (_) { return; } this._emit(this._coopCb, m); };
+    ws.onclose = () => { this.coopState = 'offline'; this._emitCoopState(); };
+    ws.onerror = () => { try { ws.close(); } catch (_) {} };
+    return true;
+  }
+  sendCoopState(obj) { if (this._coopWs && this._coopWs.readyState === 1) { try { this._coopWs.send(JSON.stringify({ type: 'state', ...obj })); } catch (_) {} } }
+  sendCoopEvent(obj) { if (this._coopWs && this._coopWs.readyState === 1) { try { this._coopWs.send(JSON.stringify({ type: 'event', ...obj })); } catch (_) {} } }
+  leaveCoop() { if (this._coopWs) { try { this._coopWs.close(); } catch (_) {} this._coopWs = null; } this.coopState = 'offline'; this._emitCoopState(); }
+
   _loadRaw(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
   _load(k, d) { try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)); } catch (_) { return d; } }
   _save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }

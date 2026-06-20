@@ -7,6 +7,8 @@ import { CLASSES, Loadout } from './loadout.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
+import { Coop } from './coop.js';
+import { CoopLobby } from './lobby.js';
 import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
@@ -94,6 +96,8 @@ class Game {
     this.net.onState((s) => this._updateNetPill(s));
     this.board = new OnlineBoard(this);
     this.chat = new Chat(this);
+    this.coop = new Coop(this);
+    this.coopLobby = new CoopLobby(this);
     this.touch = new TouchControls(this);
     this._updateLoadoutLabel();
 
@@ -136,6 +140,7 @@ class Game {
     document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
     document.getElementById('loadout-btn').addEventListener('click', () => this.loadout.open());
     document.getElementById('leaderboard-btn').addEventListener('click', () => this.board.open());
+    document.getElementById('coop-btn').addEventListener('click', () => this.coopLobby.open());
     document.getElementById('open-map').addEventListener('click', () => this._toggleMap());
     document.getElementById('chat-toggle').addEventListener('click', () => this.chat.toggle());
     // tactical map / chat toggles work from title and in a match
@@ -303,7 +308,7 @@ class Game {
     try { localStorage.setItem('verdant_diff', id); } catch (_) {}
     this._updateLoadoutLabel();
   }
-  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'loadout', 'online-lb'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'loadout', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
   _syncWeaponHud() {
     const live = this.weapons.live;
@@ -739,6 +744,7 @@ class Game {
         }
       }
       this._updateGrenades(dt);
+      this.coop.update(dt);
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
       this.minimap.update(this.player, this.waves.enemies, this.pickups.items, this.world.lakes);

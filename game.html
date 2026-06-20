@@ -135,6 +135,7 @@
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
         <button class="btn btn-ghost" id="leaderboard-btn">🏅 Leaderboard</button>
+        <button class="btn btn-ghost" id="coop-btn">👥 Co-op</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
@@ -172,6 +173,27 @@
         </div>
       </div>
       <button class="btn btn-ghost tacmap-closebtn" id="tacmap-close">Close</button>
+    </div>
+
+    <!-- Co-op lobby -->
+    <div id="coop" class="overlay hidden">
+      <div class="overlay-inner">
+        <h2 class="pause-word">CO-OP</h2>
+        <p class="shop-sub">Squad up over the network — host a room or join with a code.</p>
+        <label class="olb-namewrap">CALLSIGN <input id="coop-name" maxlength="12" value="GHOST" /></label>
+        <div class="coop-controls">
+          <button class="btn btn-primary" id="coop-host">Host Room</button>
+          <input id="coop-code" class="coop-code" maxlength="8" placeholder="ROOM CODE" />
+          <button class="btn btn-ghost" id="coop-join">Join</button>
+        </div>
+        <div class="coop-status offline" id="coop-status">● Not connected</div>
+        <ol class="coop-roster" id="coop-roster"></ol>
+        <div class="coop-actions">
+          <button class="btn btn-primary btn-lg" id="coop-deploy" disabled>Deploy Together</button>
+          <button class="btn btn-ghost" id="coop-leave">Leave</button>
+        </div>
+        <a class="back-link" id="coop-close">← Back</a>
+      </div>
     </div>
 
     <!-- Online leaderboard (degrades to local when offline) -->
