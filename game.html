@@ -20,6 +20,25 @@
   <div id="app">
     <canvas id="scene"></canvas>
 
+    <!-- connection status (online layer is fully optional) -->
+    <div class="netpill offline" id="netpill"><span class="dot"></span><span id="netpill-text">OFFLINE</span></div>
+
+    <!-- Live chat (optional online) -->
+    <div id="chat" class="hidden">
+      <div class="chat-head">
+        <span class="chat-title">GLOBAL CHAT</span>
+        <span class="chat-status offline" id="chat-status">● offline</span>
+        <span class="chat-presence" id="chat-presence">0 online</span>
+        <button class="chat-x" id="chat-close">✕</button>
+      </div>
+      <div class="chat-list" id="chat-list"></div>
+      <div class="chat-bar">
+        <input id="chat-input" maxlength="240" placeholder="Say something…" />
+        <button id="chat-send">Send</button>
+      </div>
+    </div>
+    <button class="chat-toggle" id="chat-toggle">💬 CHAT <b>Y</b></button>
+
     <!-- HUD -->
     <div id="hud" class="hidden">
       <!-- Top-left: health + armor -->
@@ -115,6 +134,8 @@
         <button class="btn btn-primary btn-lg" id="start-btn">▶ Start Survival</button>
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
+        <button class="btn btn-ghost" id="leaderboard-btn">🏅 Leaderboard</button>
+        <button class="btn btn-ghost" id="coop-btn">👥 Co-op</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
@@ -152,6 +173,45 @@
         </div>
       </div>
       <button class="btn btn-ghost tacmap-closebtn" id="tacmap-close">Close</button>
+    </div>
+
+    <!-- Co-op lobby -->
+    <div id="coop" class="overlay hidden">
+      <div class="overlay-inner">
+        <h2 class="pause-word">CO-OP</h2>
+        <p class="shop-sub">Squad up over the network — host a room or join with a code.</p>
+        <label class="olb-namewrap">CALLSIGN <input id="coop-name" maxlength="12" value="GHOST" /></label>
+        <div class="coop-controls">
+          <button class="btn btn-primary" id="coop-host">Host Room</button>
+          <input id="coop-code" class="coop-code" maxlength="8" placeholder="ROOM CODE" />
+          <button class="btn btn-ghost" id="coop-join">Join</button>
+        </div>
+        <div class="coop-status offline" id="coop-status">● Not connected</div>
+        <ol class="coop-roster" id="coop-roster"></ol>
+        <div class="coop-actions">
+          <button class="btn btn-primary btn-lg" id="coop-deploy" disabled>Deploy Together</button>
+          <button class="btn btn-ghost" id="coop-leave">Leave</button>
+        </div>
+        <a class="back-link" id="coop-close">← Back</a>
+      </div>
+    </div>
+
+    <!-- Online leaderboard (degrades to local when offline) -->
+    <div id="online-lb" class="overlay hidden">
+      <div class="overlay-inner mapselect-inner">
+        <h2 class="pause-word">LEADERBOARD</h2>
+        <div class="olb-bar">
+          <label class="olb-namewrap">CALLSIGN <input id="olb-name" maxlength="12" value="GHOST" /></label>
+          <div class="olb-filters">
+            <button class="olb-filter active" id="olb-f-map">This Location</button>
+            <button class="olb-filter" id="olb-f-all">Global</button>
+            <button class="olb-filter" id="olb-refresh">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="olb-banner hidden" id="olb-banner"></div>
+        <ol class="olb-list" id="olb-list"></ol>
+        <button class="btn btn-primary btn-lg" id="olb-close">Done</button>
+      </div>
     </div>
 
     <!-- Loadout: class + weapon attachments -->

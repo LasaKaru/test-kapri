@@ -1,0 +1,10 @@
+{
+  "name": "verdant-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Optional online server for VERDANT (leaderboard + static host). Pure Node, zero dependencies.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

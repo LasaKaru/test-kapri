@@ -4,6 +4,11 @@ import { MapSelect, DIFFICULTIES } from './mapselect.js';
 import { TacMap } from './tacmap.js';
 import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
+import { Net } from './net.js';
+import { OnlineBoard } from './onlineboard.js';
+import { Chat } from './chat.js';
+import { Coop } from './coop.js';
+import { CoopLobby } from './lobby.js';
 import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
@@ -86,6 +91,13 @@ class Game {
     this.tacmap = new TacMap(this);
     this.ach = new Achievements();
     this.loadout = new Loadout(this);
+    // optional online layer — single-player never depends on it
+    this.net = new Net();
+    this.net.onState((s) => this._updateNetPill(s));
+    this.board = new OnlineBoard(this);
+    this.chat = new Chat(this);
+    this.coop = new Coop(this);
+    this.coopLobby = new CoopLobby(this);
     this.touch = new TouchControls(this);
     this._updateLoadoutLabel();
 
@@ -127,10 +139,15 @@ class Game {
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
     document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
     document.getElementById('loadout-btn').addEventListener('click', () => this.loadout.open());
+    document.getElementById('leaderboard-btn').addEventListener('click', () => this.board.open());
+    document.getElementById('coop-btn').addEventListener('click', () => this.coopLobby.open());
     document.getElementById('open-map').addEventListener('click', () => this._toggleMap());
-    // tactical map toggle works from title and in a match
+    document.getElementById('chat-toggle').addEventListener('click', () => this.chat.toggle());
+    // tactical map / chat toggles work from title and in a match
     document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.code === 'KeyM' && (this.state === 'playing' || this.state === 'map' || this.state === 'title')) this._toggleMap();
+      if (e.code === 'KeyY') this.chat.toggle();
     });
 
     // settings panel (reachable from pause & title)
@@ -151,6 +168,7 @@ class Game {
 
   _bindInput() {
     document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
@@ -208,6 +226,12 @@ class Game {
   }
 
   _requestLock() { this.canvas.requestPointerLock(); }
+
+  _updateNetPill(s) {
+    const el = document.getElementById('netpill'); if (!el) return;
+    el.className = 'netpill ' + s;
+    document.getElementById('netpill-text').textContent = s.toUpperCase();
+  }
 
   _pollGamepad() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : null;
@@ -284,7 +308,7 @@ class Game {
     try { localStorage.setItem('verdant_diff', id); } catch (_) {}
     this._updateLoadoutLabel();
   }
-  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'loadout'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'loadout', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
   _syncWeaponHud() {
     const live = this.weapons.live;
@@ -652,10 +676,13 @@ class Game {
     let scores = [];
     try { scores = JSON.parse(localStorage.getItem('verdant_scores') || '[]'); } catch (_) {}
     const best = scores.reduce((m, r) => Math.max(m, r.score), 0);
-    scores.push({ score: this.score, wave: this.waves.wave, kills: this.kills, date: Date.now() });
+    const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, date: Date.now() };
+    scores.push(run);
     scores.sort((a, b) => b.score - a.score);
-    scores = scores.slice(0, 10);
+    scores = scores.slice(0, 25);
     try { localStorage.setItem('verdant_scores', JSON.stringify(scores)); } catch (_) {}
+    // best-effort online submit (queued + non-blocking; never affects play)
+    try { this.net.submitScore(run); } catch (_) {}
 
     document.getElementById('over-best').textContent = this.score > best
       ? '★ NEW PERSONAL BEST ★' : `Personal best: ${String(best).padStart(4, '0')}`;
@@ -717,6 +744,7 @@ class Game {
         }
       }
       this._updateGrenades(dt);
+      this.coop.update(dt);
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
       this.minimap.update(this.player, this.waves.enemies, this.pickups.items, this.world.lakes);
