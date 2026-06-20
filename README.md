@@ -105,6 +105,11 @@ pickup blips, your heading, and pan/zoom.
     bumper buttons for reload / melee / grenade / weapon swap.
   - **Local achievements** — 9 unlockable feats with toast pop-ups, saved to
     `localStorage`.
+  - **Player classes** — Assault (ammo/grenades), Medic (HP & regen) and
+    Marksman (headshots/ADS), chosen on the Loadout screen.
+  - **Weapon attachments** — up to two per gun (Extended Mag, Foregrip,
+    Compensator, Scope, Laser, Lightweight Kit) that modify the per-run stats;
+    saved to `localStorage`.
   - Object pooling for FX and projectiles to keep the frame rate steady.
   - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.
