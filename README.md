@@ -22,8 +22,19 @@ distinct **Earth-like topography**, plus three difficulty tiers (saved to
 | **Mire Lowlands** | Sunken wetlands & broad water, heavy fog |
 | **Titan Peaks** | Steep mountain ridges around a fighting valley, snow |
 
+Terrain is generated from **fractal value noise**, giving organic Earth-like
+topography (ridgelines, valleys, lowland basins) that differs per map.
+
 Difficulty (**Recruit / Veteran / Nightmare**) scales enemy health, speed,
 damage, head-count and rewards.
+
+### 🛰️ Tactical map
+
+Press **M** (or the on-screen MAP button) — anytime on the title or mid-match —
+to open a **Ghost-Recon-style tactical map**: a relief-shaded top-down render of
+the *actual* battlefield (sampled from the same height field), with water,
+the road, objective / alert / mission markers, region label, live enemy &
+pickup blips, your heading, and pan/zoom. 
 
 ## ✨ Features
 
@@ -90,6 +101,10 @@ damage, head-count and rewards.
   - **Mobile / touch controls** — a left analog joystick, right-side look-drag,
     and on-screen Fire / ADS / Reload / Grenade / Melee / Swap buttons (shown
     automatically on touch devices).
+  - **Gamepad support** — sticks to move/look, triggers to fire/aim, face &
+    bumper buttons for reload / melee / grenade / weapon swap.
+  - **Local achievements** — 9 unlockable feats with toast pop-ups, saved to
+    `localStorage`.
   - Object pooling for FX and projectiles to keep the frame rate steady.
   - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.

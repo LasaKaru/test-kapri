@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { World, MAPS } from './world.js';
 import { MapSelect, DIFFICULTIES } from './mapselect.js';
+import { TacMap } from './tacmap.js';
+import { Achievements } from './achievements.js';
 import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
@@ -74,6 +76,8 @@ class Game {
     this.settings.applyAll();
     this.shop = new Shop(this);
     this.mapSelect = new MapSelect(this);
+    this.tacmap = new TacMap(this);
+    this.ach = new Achievements();
     this.touch = new TouchControls(this);
     this._updateLoadoutLabel();
 
@@ -114,6 +118,11 @@ class Game {
     document.getElementById('restart-btn-pause').addEventListener('click', () => this.start());
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
     document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
+    document.getElementById('open-map').addEventListener('click', () => this._toggleMap());
+    // tactical map toggle works from title and in a match
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyM' && (this.state === 'playing' || this.state === 'map' || this.state === 'title')) this._toggleMap();
+    });
 
     // settings panel (reachable from pause & title)
     const openSettings = (from) => {
@@ -191,6 +200,48 @@ class Game {
 
   _requestLock() { this.canvas.requestPointerLock(); }
 
+  _pollGamepad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : null;
+    const gp = pads && pads[0];
+    if (!gp) return;
+    const dz = (v) => (Math.abs(v) < 0.18 ? 0 : v);
+    const lxm = dz(gp.axes[0] || 0), lym = dz(gp.axes[1] || 0);
+    const rx = dz(gp.axes[2] || 0), ry = dz(gp.axes[3] || 0);
+    const b = gp.buttons;
+    const any = lxm || lym || rx || ry || b.some((x) => x && x.pressed);
+    if (!any && !this._gpActive) return;
+    this._gpActive = any;
+    // move + look
+    this.player.touchVec.set(lxm, -lym);
+    if (rx || ry) this.player.addLook(rx * 9, ry * 9);
+    // fire / ads
+    this.firing = !!(b[7] && b[7].pressed);
+    this.weapons.setAds(!!(b[6] && b[6].pressed));
+    // edge-triggered actions
+    const prev = this._gpPrev || (this._gpPrev = {});
+    const hit = (i) => b[i] && b[i].pressed && !prev[i];
+    if (hit(2)) { if (this.weapons.reload()) this.audio.reload(); }      // X reload
+    if (hit(0)) this._melee();                                          // A melee
+    if (hit(3)) this._throwGrenade();                                   // Y grenade
+    if (hit(5)) { this.weapons.cycle(1); this.audio.swap(); this._syncWeaponHud(); }  // RB
+    if (hit(4)) { this.weapons.cycle(-1); this.audio.swap(); this._syncWeaponHud(); } // LB
+    for (let i = 0; i < b.length; i++) prev[i] = b[i] && b[i].pressed;
+  }
+
+  _toggleMap() {
+    const open = !document.getElementById('tacmap').classList.contains('hidden');
+    if (open) {
+      this.tacmap.close();
+      if (this._mapReturn === 'playing') { this.state = 'playing'; this._requestLock(); }
+      else document.getElementById('title').classList.remove('hidden');
+    } else {
+      this._mapReturn = this.state === 'playing' ? 'playing' : 'title';
+      if (this.state === 'playing') { this.state = 'map'; this.firing = false; this.weapons.setAds(false); document.exitPointerLock(); }
+      else document.getElementById('title').classList.add('hidden');
+      this.tacmap.open();
+    }
+  }
+
   _updateLoadoutLabel() {
     const m = document.getElementById('title-map'), d = document.getElementById('title-diff');
     if (m) m.textContent = MAPS[this.world.mapId].name;
@@ -249,6 +300,7 @@ class Game {
     this._requestLock();
     this.audio._ensure();
     this.audio.startMusic();
+    this.ach.playedMap(this.world.mapId);
 
     const n = this.waves.startNextWave();
     this._applyWaveStart(n, 'SURVIVE');
@@ -259,6 +311,8 @@ class Game {
     this.hud.popWave(n, this.waves.isBossWave ? '☠ BOSS WAVE ☠' : sub);
     this.audio.wave();
     this.audio.setIntensity(Math.min(1, 0.2 + n * 0.06 + (this.waves.isBossWave ? 0.35 : 0)));
+    if (n >= 5) this.ach.unlock('wave5');
+    if (n >= 10) this.ach.unlock('wave10');
     this._syncWeaponHud();
   }
 
@@ -267,6 +321,7 @@ class Game {
     this.state = 'shop';
     this.firing = false;
     this.weapons.setAds(false);
+    if (this.difficultyId === 'nightmare') this.ach.unlock('nightmare');
     const bonus = 100 + clearedWave * 50;
     this.credits += bonus;
     this.hud.setCredits(this.credits);
@@ -348,7 +403,7 @@ class Game {
       this.effects.smoke(muzzle, { color: 0x9a9a9a, size: 0.5, life: 0.5, rise: 0.8, opacity: 0.4 });
     }
     if (anyHit) this.hud.hitMarker();
-    if (anyHead) { this.hud.popHeadshot(); this._pendingHeadshot = true; }
+    if (anyHead) { this.hud.popHeadshot(); this._pendingHeadshot = true; this.ach.unlock('headhunter'); }
   }
 
   _toScreen(v) {
@@ -373,7 +428,7 @@ class Game {
   }
 
   // barrel hit from a bullet
-  _explode(blast) { this._detonate(blast.x, blast.z, blast.radius || 7, 5, 20); }
+  _explode(blast) { this.ach.unlock('demolition'); this._detonate(blast.x, blast.z, blast.radius || 7, 5, 20); }
 
   // general explosion: FX + AoE damage + barrel chain reaction
   _detonate(x, z, radius, enemyDmg = 6, playerMax = 24, _chained = false) {
@@ -527,10 +582,13 @@ class Game {
       this.player.heal(this.lifesteal);
       this.hud.setHealth(this.player.hp, this.player.maxHp);
     }
+    this.ach.unlock('firstblood');
+    if (enemy.isBoss) this.ach.unlock('slayer');
     // weapon XP / leveling
     const newLvl = this.weapons.addXp(enemy.isBoss ? 200 : 20);
     if (newLvl) {
       this.hud.killFeed(`${this.weapons.def.name} → LV${newLvl}`);
+      if (newLvl >= 5) this.ach.unlock('gunsmith');
       this._syncWeaponHud();
     }
     // exploders detonate on death
@@ -580,6 +638,7 @@ class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
 
     if (this.state === 'playing') {
+      this._pollGamepad();
       if (this.firing && (this.weapons.def.auto || !this._firedThisClick)) {
         const before = this.weapons.fireCd;
         if (before <= 0) {
@@ -660,7 +719,9 @@ class Game {
       this.effects.update(dt, this.player.position);
     }
 
-    this._render(dt);
+    // tactical map renders in place of the 3D scene while open
+    if (!document.getElementById('tacmap').classList.contains('hidden')) this.tacmap.draw();
+    else this._render(dt);
   }
 
   _render(dt = 0.016) { this.postfx.render(dt); }
