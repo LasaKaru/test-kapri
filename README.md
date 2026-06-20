@@ -114,6 +114,34 @@ pickup blips, your heading, and pan/zoom.
   - Damage flash, low-health vignette, sniper **scope overlay**, and a **KILL** popup.
   - Local leaderboard persisted in `localStorage`, surfaced on the landing page.
 
+## 🌐 Online (optional) — zero single-player dependency
+
+The game is **single-player first**. An optional online layer adds a global
+**leaderboard**; if no server is reachable, the game runs exactly as before and
+shows an **OFFLINE** status — nothing is blocked or broken.
+
+- A connection-status **pill** (●) shows `online / connecting / offline`.
+- Online code lives in one isolated module (`js/game/net.js`) — every call is
+  **non-blocking and failure-safe**, with auto-reconnect (exponential backoff).
+- Scores are always saved **locally**; when online they also sync to the server
+  (queued and retried, never on the critical path).
+- The leaderboard view degrades to your **local scores** with a banner when offline.
+
+### Run the server (optional)
+
+A **dependency-free** Node server (`server/`) hosts the client *and* the API:
+
+```bash
+node server/server.js          # http://localhost:8080
+```
+
+Then open `http://localhost:8080/` — the pill turns **ONLINE** and scores sync.
+Leaderboard data persists to `server/data/scores.json`. No `npm install` needed.
+
+To point the static client at a remote server, set `window.VERDANT_SERVER` or
+`localStorage.verdant_server` to its base URL. With no server, everything still
+works offline.
+
 ## 🎮 Controls
 
 | Key | Action |
