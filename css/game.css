@@ -110,6 +110,38 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .shop-card.shake{animation:cardshake .3s}
 @keyframes cardshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 
+/* Compass */
+#compass{position:absolute;top:62px;left:50%;transform:translateX(-50%);opacity:.9;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+
+/* Floating damage numbers */
+.dmg-numbers{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.dmg-numbers .dn{position:absolute;font-family:'Orbitron';font-weight:700;font-size:1rem;
+  color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.8);transform:translate(-50%,-50%);
+  animation:dnrise .8s ease-out forwards}
+.dmg-numbers .dn.crit{color:#ffd54a;font-size:1.5rem}
+@keyframes dnrise{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}
+  20%{opacity:1;transform:translate(-50%,-90%) scale(1.1)}
+  100%{opacity:0;transform:translate(-50%,-170%) scale(1)}}
+
+/* Mobile / touch controls */
+.touch{position:absolute;inset:0;z-index:15;pointer-events:none}
+.touch-joy{position:absolute;left:5%;bottom:9%;width:130px;height:130px;border-radius:50%;
+  background:rgba(188,224,74,.08);border:2px solid rgba(188,224,74,.3);pointer-events:auto;touch-action:none}
+.touch-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;
+  transform:translate(-50%,-50%);background:rgba(188,224,74,.5);border:2px solid var(--lime)}
+.touch-look{position:absolute;right:0;top:0;width:55%;height:100%;pointer-events:auto;touch-action:none}
+.touch-btn{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;
+  font-family:'Orbitron';font-weight:700;font-size:.8rem;color:#10210a;border:none;
+  background:linear-gradient(135deg,var(--lime),var(--gold));box-shadow:0 4px 12px rgba(0,0,0,.4);
+  display:grid;place-items:center;user-select:none}
+.touch-fire{right:6%;bottom:11%;width:96px;height:96px;font-size:1rem}
+.touch-ads{right:24%;bottom:24%;width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-reload{right:6%;bottom:33%;width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-nade{right:24%;bottom:9%;width:60px;height:60px;font-size:1.3rem}
+.touch-melee{right:40%;bottom:9%;width:56px;height:56px;font-size:1.2rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-swap{left:5%;bottom:34%;width:56px;height:56px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime);pointer-events:auto}
+
 /* Boss health bar */
 .boss-bar-wrap{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(560px,70vw);text-align:center}
 .boss-name{font-family:'Orbitron';font-weight:900;letter-spacing:.22em;font-size:.9rem;color:#ff5a48;

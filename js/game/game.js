@@ -11,6 +11,7 @@ import { PostFX } from './postfx.js';
 import { Minimap } from './minimap.js';
 import { Settings } from './settings.js';
 import { Shop } from './shop.js';
+import { TouchControls } from './touch.js';
 
 const BASE_FOV = 75;
 
@@ -67,6 +68,7 @@ class Game {
     this.settings = new Settings(this);
     this.settings.applyAll();
     this.shop = new Shop(this);
+    this.touch = new TouchControls(this);
 
     this.clock = new THREE.Clock();
     this._resize();
@@ -217,6 +219,7 @@ class Game {
     this.state = 'playing';
     this._requestLock();
     this.audio._ensure();
+    this.audio.startMusic();
 
     const n = this.waves.startNextWave();
     this._applyWaveStart(n, 'SURVIVE');
@@ -226,6 +229,7 @@ class Game {
     this.hud.setWave(n);
     this.hud.popWave(n, this.waves.isBossWave ? '☠ BOSS WAVE ☠' : sub);
     this.audio.wave();
+    this.audio.setIntensity(Math.min(1, 0.2 + n * 0.06 + (this.waves.isBossWave ? 0.35 : 0)));
     this._syncWeaponHud();
   }
 
@@ -274,6 +278,7 @@ class Game {
     this.weapons.muzzleWorldPos(muzzle);
 
     let anyHit = false, anyHead = false;
+    const dmgMap = new Map(); // enemy -> {dmg, head, point} for one floating number per target
     for (const dir of shot.rays) {
       const enemyHit = this.waves.raycastRay(this.raycaster, origin, dir, shot.def.range);
 
@@ -283,8 +288,11 @@ class Game {
         endPoint = enemyHit.point; anyHit = true;
         const head = enemyHit.zone === 'head';
         if (head) anyHead = true;
-        const dmg = shot.dmg * (head ? 2.5 : 1);
-        enemyHit.enemy.hit(dmg, enemyHit.zone);
+        const base = shot.dmg * (head ? 2.5 : 1);
+        enemyHit.enemy.hit(base, enemyHit.zone);
+        const shown = base * (enemyHit.zone === 'shield' ? 0.15 : 1);
+        const rec = dmgMap.get(enemyHit.enemy) || { dmg: 0, head: false, point: endPoint };
+        rec.dmg += shown; rec.head = rec.head || head; dmgMap.set(enemyHit.enemy, rec);
         if (enemyHit.zone === 'shield') this.effects.impact(endPoint, 0xcfe6ff, false); // clang spark
         else this.effects.bloodBurst(endPoint);
       } else {
@@ -300,12 +308,23 @@ class Game {
       this.effects.tracer(muzzle, endPoint, shot.def.tracer);
     }
 
+    // floating damage numbers (one per enemy hit this shot)
+    for (const [, rec] of dmgMap) {
+      const s = this._toScreen(rec.point);
+      if (s.visible) this.hud.damageNumber(s.x, s.y, rec.dmg, rec.head);
+    }
+
     // muzzle smoke for the bigger guns
     if (shot.def.key === 'shotgun' || shot.def.key === 'sniper' || shot.def.key === 'lmg') {
       this.effects.smoke(muzzle, { color: 0x9a9a9a, size: 0.5, life: 0.5, rise: 0.8, opacity: 0.4 });
     }
     if (anyHit) this.hud.hitMarker();
     if (anyHead) { this.hud.popHeadshot(); this._pendingHeadshot = true; }
+  }
+
+  _toScreen(v) {
+    const p = v.clone().project(this.camera);
+    return { x: (p.x * 0.5 + 0.5) * window.innerWidth, y: (-p.y * 0.5 + 0.5) * window.innerHeight, visible: p.z < 1 };
   }
 
   _melee() {
@@ -400,12 +419,25 @@ class Game {
     this.grenades = [];
   }
 
-  _spawnEnemyShot(shot) {
-    const mesh = new THREE.Mesh(this._shotGeo, shot.boss ? this._shotMatBoss : this._shotMat);
-    mesh.position.copy(shot.origin);
-    if (shot.boss) mesh.scale.setScalar(1.6);
+  _acquireShotMesh(boss) {
+    if (!this._shotPool) this._shotPool = [];
+    const mesh = this._shotPool.pop() || new THREE.Mesh(this._shotGeo, this._shotMat);
+    mesh.material = boss ? this._shotMatBoss : this._shotMat;
+    mesh.scale.setScalar(boss ? 1.6 : 1);
+    mesh.visible = true;
     this.scene.add(mesh);
-    this.enemyShots.push({ mesh, vel: shot.dir.clone().multiplyScalar(shot.speed), dmg: shot.dmg, life: 4 });
+    return mesh;
+  }
+  _releaseShot(s, i) {
+    this.scene.remove(s.mesh);
+    if (this._shotPool.length < 40) this._shotPool.push(s.mesh);
+    this.enemyShots.splice(i, 1);
+  }
+
+  _spawnEnemyShot(shot) {
+    const mesh = this._acquireShotMesh(shot.boss);
+    mesh.position.copy(shot.origin);
+    this.enemyShots.push({ mesh, vel: shot.dir.clone().multiplyScalar(shot.speed), dmg: shot.dmg, life: 4, boss: shot.boss });
   }
 
   _updateEnemyShots(dt) {
@@ -421,14 +453,13 @@ class Game {
       if (hitPlayer || hitGround || hitWorld || s.life <= 0) {
         if (hitPlayer) { this._onPlayerHit(s.dmg); }
         this.effects.impact(p.clone(), s.boss ? 0xff5030 : 0xd86bff, false);
-        this.scene.remove(s.mesh);
-        this.enemyShots.splice(i, 1);
+        this._releaseShot(s, i);
       }
     }
   }
 
   _clearEnemyShots() {
-    for (const s of this.enemyShots) this.scene.remove(s.mesh);
+    for (const s of this.enemyShots) { this.scene.remove(s.mesh); if (this._shotPool && this._shotPool.length < 40) this._shotPool.push(s.mesh); }
     this.enemyShots = [];
   }
 
@@ -572,6 +603,15 @@ class Game {
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
       this.minimap.update(this.player, this.waves.enemies, this.pickups.items, this.world.lakes);
+
+      // compass (player heading + threat pips)
+      const items = [];
+      for (const e of this.waves.enemies) {
+        if (e.dead) continue;
+        const dx = e.group.position.x - this.player.position.x, dz = e.group.position.z - this.player.position.z;
+        items.push({ bearing: Math.atan2(dx, -dz), boss: e.isBoss });
+      }
+      this.hud.drawCompass(-this.player.yaw, items);
 
       // camera shake
       if (this.shake > 0) {

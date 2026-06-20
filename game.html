@@ -61,6 +61,12 @@
         <div class="boss-bar"><div class="boss-fill" id="boss-fill"></div></div>
       </div>
 
+      <!-- Compass -->
+      <canvas id="compass" width="360" height="34"></canvas>
+
+      <!-- floating damage numbers -->
+      <div class="dmg-numbers" id="dmg-numbers"></div>
+
       <!-- kill feed -->
       <div class="kill-feed" id="kill-feed"></div>
 
@@ -78,6 +84,18 @@
       <!-- sniper scope overlay -->
       <div class="scope" id="scope">
         <div class="scope-ring"><span class="scope-v"></span><span class="scope-h"></span></div>
+      </div>
+
+      <!-- Mobile / touch controls (shown only on touch devices) -->
+      <div class="touch hidden" id="touch">
+        <div class="touch-joy" id="touch-joy"><div class="touch-knob" id="touch-knob"></div></div>
+        <div class="touch-look" id="touch-look"></div>
+        <button class="touch-btn touch-fire" id="touch-fire">FIRE</button>
+        <button class="touch-btn touch-ads" id="touch-ads">ADS</button>
+        <button class="touch-btn touch-reload" id="touch-reload">RLD</button>
+        <button class="touch-btn touch-nade" id="touch-nade">✸</button>
+        <button class="touch-btn touch-melee" id="touch-melee">🗡</button>
+        <button class="touch-btn touch-swap" id="touch-swap">⇄</button>
       </div>
     </div>
 

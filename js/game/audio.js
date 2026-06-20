@@ -4,6 +4,10 @@ export class Audio {
     this.ctx = null;
     this.enabled = true;
     this.master = 0.7;
+    this.musicVol = 0.5;
+    this._musicOn = false;
+    this._intensity = 0;
+    this._beat = 0;
   }
   _ensure() {
     if (!this.ctx) {
@@ -67,4 +71,104 @@ export class Audio {
     setTimeout(() => this._blip(660, 0.25, 'triangle', 0.2, 880), 180);
   }
   over() { this._blip(330, 0.5, 'sawtooth', 0.22, 80); }
+
+  // ---- procedural music + ambience ----
+  setMusicVolume(v) { this.musicVol = v; if (this._musicGain) this._musicGain.gain.value = v; }
+  setIntensity(level) { this._intensity = Math.max(0, Math.min(1, level)); }
+
+  startMusic() {
+    const ctx = this._ensure();
+    if (!ctx || this._musicOn) return;
+    this._musicOn = true;
+    this._beat = 0;
+
+    this._musicGain = ctx.createGain();
+    this._musicGain.gain.value = this.musicVol;
+    this._musicGain.connect(ctx.destination);
+
+    // ambient pad: two detuned drones through a slowly sweeping low-pass
+    this._droneFilter = ctx.createBiquadFilter();
+    this._droneFilter.type = 'lowpass';
+    this._droneFilter.frequency.value = 500;
+    const padGain = ctx.createGain(); padGain.gain.value = 0.12;
+    this._droneFilter.connect(padGain); padGain.connect(this._musicGain);
+    this._drones = [];
+    [55, 82.5].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f * (i ? 1.005 : 1);
+      o.connect(this._droneFilter); o.start();
+      this._drones.push(o);
+    });
+    // wind ambience: filtered looping noise
+    const wbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const wd = wbuf.getChannelData(0);
+    for (let i = 0; i < wd.length; i++) wd[i] = Math.random() * 2 - 1;
+    this._wind = ctx.createBufferSource(); this._wind.buffer = wbuf; this._wind.loop = true;
+    const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 600; wf.Q.value = 0.5;
+    const wg = ctx.createGain(); wg.gain.value = 0.04;
+    this._wind.connect(wf); wf.connect(wg); wg.connect(this._musicGain); this._wind.start();
+
+    this._scheduleBeat();
+  }
+
+  stopMusic() {
+    this._musicOn = false;
+    if (this._musicTimer) clearTimeout(this._musicTimer);
+    try { this._drones && this._drones.forEach((o) => o.stop()); } catch (_) {}
+    try { this._wind && this._wind.stop(); } catch (_) {}
+    if (this._musicGain) { try { this._musicGain.disconnect(); } catch (_) {} }
+    this._drones = null; this._wind = null; this._musicGain = null;
+  }
+
+  _mnote(freq, dur, type, vol) {
+    const ctx = this.ctx; if (!ctx || !this._musicGain) return;
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    const t = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this._musicGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  _scheduleBeat() {
+    if (!this._musicOn || !this.ctx) return;
+    const i = this._intensity;
+    const root = 110; // A
+    const scale = [0, 3, 5, 7, 10]; // minor pentatonic
+    // filter opens up with intensity
+    if (this._droneFilter) this._droneFilter.frequency.value = 450 + i * 1400;
+
+    // bassline every beat
+    this._mnote(root / 2 * (this._beat % 4 === 2 ? 1.5 : 1), 0.22, 'triangle', 0.18 + i * 0.06);
+    // backbeat pulse
+    if (this._beat % 2 === 1) this._noiseTick(0.05 + i * 0.05);
+    // melodic arpeggio grows with intensity
+    if (i > 0.25 && this._beat % 2 === 0) {
+      const n = scale[(this._beat / 2) % scale.length | 0];
+      this._mnote(root * Math.pow(2, n / 12), 0.18, 'square', 0.05 + i * 0.05);
+    }
+    if (i > 0.6) {
+      const n = scale[(this._beat + 2) % scale.length];
+      this._mnote(root * 2 * Math.pow(2, n / 12), 0.12, 'sawtooth', 0.04 + i * 0.04);
+    }
+
+    this._beat++;
+    const interval = (0.5 - i * 0.18) * 1000;
+    this._musicTimer = setTimeout(() => this._scheduleBeat(), interval);
+  }
+
+  _noiseTick(vol) {
+    const ctx = this.ctx; if (!ctx || !this._musicGain) return;
+    const dur = 0.08;
+    const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let k = 0; k < d.length; k++) d[k] = (Math.random() * 2 - 1) * (1 - k / d.length);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const g = ctx.createGain(); g.gain.value = vol;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200;
+    src.connect(f); f.connect(g); g.connect(this._musicGain); src.start();
+  }
 }
