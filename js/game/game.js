@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { World } from './world.js';
+import { World, MAPS } from './world.js';
+import { MapSelect, DIFFICULTIES } from './mapselect.js';
 import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
@@ -27,7 +28,11 @@ class Game {
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 600);
     this.scene.add(this.camera);
 
-    this.world = new World(this.scene);
+    let savedMap = 'plains', savedDiff = 'veteran';
+    try { savedMap = localStorage.getItem('verdant_map') || 'plains'; savedDiff = localStorage.getItem('verdant_diff') || 'veteran'; } catch (_) {}
+    this.difficultyId = DIFFICULTIES[savedDiff] ? savedDiff : 'veteran';
+    this.difficulty = DIFFICULTIES[this.difficultyId];
+    this.world = new World(this.scene, savedMap);
     this.player = new Player(this.camera, this.scene, this.world);
     this.weapons = new WeaponManager(this.camera, BASE_FOV);
     this.waves = new WaveManager(this.scene, this.world);
@@ -68,7 +73,9 @@ class Game {
     this.settings = new Settings(this);
     this.settings.applyAll();
     this.shop = new Shop(this);
+    this.mapSelect = new MapSelect(this);
     this.touch = new TouchControls(this);
+    this._updateLoadoutLabel();
 
     this.clock = new THREE.Clock();
     this._resize();
@@ -106,6 +113,7 @@ class Game {
     document.getElementById('restart-btn').addEventListener('click', () => this.start());
     document.getElementById('restart-btn-pause').addEventListener('click', () => this.start());
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
+    document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
 
     // settings panel (reachable from pause & title)
     const openSettings = (from) => {
@@ -182,7 +190,27 @@ class Game {
   }
 
   _requestLock() { this.canvas.requestPointerLock(); }
-  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+
+  _updateLoadoutLabel() {
+    const m = document.getElementById('title-map'), d = document.getElementById('title-diff');
+    if (m) m.textContent = MAPS[this.world.mapId].name;
+    if (d) d.textContent = DIFFICULTIES[this.difficultyId].name;
+  }
+  _setMap(id) {
+    if (!MAPS[id] || id === this.world.mapId) return;
+    this.world.rebuild(id);
+    this.player.reset();
+    try { localStorage.setItem('verdant_map', id); } catch (_) {}
+    this._updateLoadoutLabel();
+  }
+  _setDifficulty(id) {
+    if (!DIFFICULTIES[id]) return;
+    this.difficultyId = id;
+    this.difficulty = DIFFICULTIES[id];
+    try { localStorage.setItem('verdant_diff', id); } catch (_) {}
+    this._updateLoadoutLabel();
+  }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
   _syncWeaponHud() {
     const live = this.weapons.live;
@@ -193,6 +221,7 @@ class Game {
 
   start() {
     this.waves.reset();
+    this.waves.difficulty = this.difficulty;
     this.player.reset();
     this.weapons.reset();
     this.pickups.reset();
@@ -492,7 +521,7 @@ class Game {
     this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}${head ? ' ☠' : ''}  +${pts}`);
     this.audio.kill();
     // credits + lifesteal
-    this.credits += Math.round(enemy.score * 0.12 * this.creditMul);
+    this.credits += Math.round(enemy.score * 0.12 * this.creditMul * this.difficulty.reward);
     this.hud.setCredits(this.credits);
     if (this.lifesteal > 0) {
       this.player.heal(this.lifesteal);

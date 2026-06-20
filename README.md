@@ -9,6 +9,22 @@ set in a stylised low-poly forest at golden hour, with a HUD showing the
 current **WAVE**, **SCORE**, **ammo** and **vitality**, billboard health bars
 over enemies, and a punchy **KILL** popup on every confirmed takedown.
 
+## 🗺️ Maps & difficulty
+
+Pick your battlefield from the **Select Location** screen — four maps with
+distinct **Earth-like topography**, plus three difficulty tiers (saved to
+`localStorage`):
+
+| Map | Topography |
+| --- | ---------- |
+| **Verdant Plains** | Gentle golden grassland, open sightlines |
+| **Ashen Highlands** | Raised rugged hills & plateaus, more rock |
+| **Mire Lowlands** | Sunken wetlands & broad water, heavy fog |
+| **Titan Peaks** | Steep mountain ridges around a fighting valley, snow |
+
+Difficulty (**Recruit / Veteran / Nightmare**) scales enemy health, speed,
+damage, head-count and rewards.
+
 ## ✨ Features
 
 - **Marketing landing page** (`index.html`) — animated forest backdrop, hero,
