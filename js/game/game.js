@@ -6,6 +6,7 @@ import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
+import { Chat } from './chat.js';
 import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
@@ -92,6 +93,7 @@ class Game {
     this.net = new Net();
     this.net.onState((s) => this._updateNetPill(s));
     this.board = new OnlineBoard(this);
+    this.chat = new Chat(this);
     this.touch = new TouchControls(this);
     this._updateLoadoutLabel();
 
@@ -135,9 +137,12 @@ class Game {
     document.getElementById('loadout-btn').addEventListener('click', () => this.loadout.open());
     document.getElementById('leaderboard-btn').addEventListener('click', () => this.board.open());
     document.getElementById('open-map').addEventListener('click', () => this._toggleMap());
-    // tactical map toggle works from title and in a match
+    document.getElementById('chat-toggle').addEventListener('click', () => this.chat.toggle());
+    // tactical map / chat toggles work from title and in a match
     document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (e.code === 'KeyM' && (this.state === 'playing' || this.state === 'map' || this.state === 'title')) this._toggleMap();
+      if (e.code === 'KeyY') this.chat.toggle();
     });
 
     // settings panel (reachable from pause & title)
@@ -158,6 +163,7 @@ class Game {
 
   _bindInput() {
     document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();

@@ -117,8 +117,12 @@ pickup blips, your heading, and pan/zoom.
 ## 🌐 Online (optional) — zero single-player dependency
 
 The game is **single-player first**. An optional online layer adds a global
-**leaderboard**; if no server is reachable, the game runs exactly as before and
-shows an **OFFLINE** status — nothing is blocked or broken.
+**leaderboard** and **live chat**; if no server is reachable, the game runs
+exactly as before and shows an **OFFLINE** status — nothing is blocked or broken.
+
+- **Live chat** (press **Y**) — global room with presence count; connects lazily
+  and greys out with "reconnecting…" when offline. Available from the title and
+  in-match (typing releases the cursor so movement isn't triggered).
 
 - A connection-status **pill** (●) shows `online / connecting / offline`.
 - Online code lives in one isolated module (`js/game/net.js`) — every call is
@@ -135,7 +139,8 @@ A **dependency-free** Node server (`server/`) hosts the client *and* the API:
 node server/server.js          # http://localhost:8080
 ```
 
-Then open `http://localhost:8080/` — the pill turns **ONLINE** and scores sync.
+Then open `http://localhost:8080/` — the pill turns **ONLINE**, scores sync and
+**chat** goes live (WebSocket at `/api/chat`, implemented in pure Node).
 Leaderboard data persists to `server/data/scores.json`. No `npm install` needed.
 
 To point the static client at a remote server, set `window.VERDANT_SERVER` or

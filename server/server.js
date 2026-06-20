@@ -10,6 +10,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const ws = require('./ws');
 
 const PORT = process.env.PORT || 8080;
 const ROOT = path.join(__dirname, '..');           // repo root (static client)
@@ -89,10 +90,48 @@ function serveStatic(req, res, parsed) {
   });
 }
 
-http.createServer((req, res) => {
+// ---- live chat over WebSocket (rooms + short history + presence) ----
+const rooms = new Map(); // room -> { clients:Set, history:[] }
+function room(name) {
+  name = clean(name, 24) || 'global';
+  if (!rooms.has(name)) rooms.set(name, { clients: new Set(), history: [] });
+  return rooms.get(name);
+}
+function broadcast(r, obj) { const s = JSON.stringify(obj); for (const c of r.clients) c.send(s); }
+function presence(r) { broadcast(r, { type: 'presence', count: r.clients.size }); }
+
+function handleChat(conn) {
+  conn.onmessage = (raw) => {
+    let m; try { m = JSON.parse(raw); } catch (_) { return; }
+    if (m.type === 'join') {
+      conn.data.name = clean(m.name, 12) || 'GHOST';
+      conn.data.room = clean(m.room, 24) || 'global';
+      const r = room(conn.data.room);
+      r.clients.add(conn);
+      conn.sendJSON({ type: 'history', messages: r.history.slice(-40) });
+      presence(r);
+    } else if (m.type === 'chat' && conn.data.room) {
+      const text = String(m.text == null ? '' : m.text).slice(0, 240).replace(/[\u0000-\u001f]/g, '');
+      if (!text.trim()) return;
+      const msg = { type: 'chat', name: conn.data.name || 'GHOST', text, ts: Date.now() };
+      const r = room(conn.data.room);
+      r.history.push(msg); if (r.history.length > 80) r.history.shift();
+      broadcast(r, msg);
+    }
+  };
+  conn.onclose = () => {
+    if (conn.data.room && rooms.has(conn.data.room)) {
+      const r = rooms.get(conn.data.room); r.clients.delete(conn); presence(r);
+    }
+  };
+}
+
+const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
   if (parsed.pathname.startsWith('/api')) return handleApi(req, res, parsed);
   return serveStatic(req, res, parsed);
-}).listen(PORT, () => {
-  console.log(`VERDANT server on http://localhost:${PORT}  (API at /api, leaderboard persisted to server/data/scores.json)`);
+});
+ws.attach(server, (pathname) => (pathname === '/api/chat' ? handleChat : null));
+server.listen(PORT, () => {
+  console.log(`VERDANT server on http://localhost:${PORT}  (API /api, chat ws /api/chat, scores -> server/data/scores.json)`);
 });

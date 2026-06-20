@@ -28,6 +28,7 @@ export class Net {
   setName(n) {
     this.name = (n || 'GHOST').toUpperCase().replace(/[^A-Z0-9_ -]/g, '').slice(0, 12) || 'GHOST';
     try { localStorage.setItem('verdant_name', this.name); } catch (_) {}
+    if (this._ws && this._ws.readyState === 1) { try { this._ws.send(JSON.stringify({ type: 'join', name: this.name, room: this.chatRoom })); } catch (_) {} }
   }
 
   async _fetch(path, opts = {}, timeout = 4000) {
@@ -83,6 +84,44 @@ export class Net {
         this._queue = this._queue.filter((x) => x !== it); this._save('verdant_score_queue', this._queue);
       } catch (_) { this._setState('offline'); this._scheduleReconnect(); break; }
     }
+  }
+
+  // ---- live chat (lazy, failure-safe; never affects single-player) ----
+  _chatUrl() { return this.base ? this.base.replace(/^http/, 'ws') + '/chat' : null; }
+  onChat(fn) { (this._chatMsg || (this._chatMsg = [])).push(fn); }
+  onPresence(fn) { (this._chatPres || (this._chatPres = [])).push(fn); }
+  onChatState(fn) { (this._chatStateCb || (this._chatStateCb = [])).push(fn); this._emitChatState(); }
+  _emit(list, ...a) { if (list) for (const f of list) { try { f(...a); } catch (_) {} } }
+  _emitChatState() { this._emit(this._chatStateCb, this.chatState || 'offline'); }
+
+  connectChat(room) {
+    if (!this.enabled || typeof WebSocket === 'undefined') { this.chatState = 'offline'; this._emitChatState(); return; }
+    this.chatRoom = room || this.chatRoom || 'global';
+    if (this._ws && (this._ws.readyState === 0 || this._ws.readyState === 1)) return; // already connecting/open
+    this.chatState = 'connecting'; this._emitChatState();
+    let ws;
+    try { ws = new WebSocket(this._chatUrl()); } catch (_) { this.chatState = 'offline'; this._emitChatState(); this._scheduleChatReconnect(); return; }
+    this._ws = ws;
+    ws.onopen = () => { this.chatState = 'online'; this._emitChatState(); this._chatBackoff = 2000; ws.send(JSON.stringify({ type: 'join', name: this.name, room: this.chatRoom })); };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+      if (m.type === 'history') { for (const msg of (m.messages || [])) this._emit(this._chatMsg, msg); }
+      else if (m.type === 'chat') this._emit(this._chatMsg, m);
+      else if (m.type === 'presence') this._emit(this._chatPres, m.count);
+    };
+    ws.onclose = () => { this.chatState = 'offline'; this._emitChatState(); this._scheduleChatReconnect(); };
+    ws.onerror = () => { try { ws.close(); } catch (_) {} };
+  }
+  _scheduleChatReconnect() {
+    if (!this._chatWanted) return;
+    clearTimeout(this._crc);
+    this._chatBackoff = Math.min(30000, (this._chatBackoff || 2000) * 1.7);
+    this._crc = setTimeout(() => this.connectChat(this.chatRoom), this._chatBackoff);
+  }
+  openChat(room) { this._chatWanted = true; this.connectChat(room); }
+  sendChat(text) {
+    if (this._ws && this._ws.readyState === 1) { try { this._ws.send(JSON.stringify({ type: 'chat', text })); return true; } catch (_) {} }
+    return false;
   }
 
   _loadRaw(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
