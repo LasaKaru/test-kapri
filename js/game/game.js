@@ -832,13 +832,16 @@ class Game {
       this.hud.setReloading(this.weapons.reloading);
 
       if (!clientCoop) {
+        // co-op host: enemies also target connected squadmates; damage to them
+        // is routed over the relay so single-player keeps a single target.
+        const extra = (this.coopMode && this.coopHost) ? this.coop.coopTargets() : null;
         this.waves.update(dt, this.player, this.camera, {
-          onPlayerHit: (d) => this._onPlayerHit(d),
+          onPlayerHit: (d, tid) => { if (tid) this.coop.sendDmg(tid, d); else this._onPlayerHit(d); },
           onWaveCleared: (w) => this._openShop(w),
           onEnemyShoot: (s) => this._spawnEnemyShot(s),
           onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
           onBark: (e) => this._enemyBark(e),
-        });
+        }, extra);
         this.waves.removeDead((e) => this._onKill(e));
         this.hud.setEnemies(this.waves.remaining);
 

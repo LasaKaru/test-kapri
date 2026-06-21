@@ -160,7 +160,9 @@ exactly as before and shows an **OFFLINE** status — nothing is blocked or brok
 - **Co-op — shared waves** — host or join a room by code (up to 4). Press
   **Deploy Together** and the whole squad drops into **one shared battle**: the
   host runs the wave simulation authoritatively and streams enemy snapshots, so
-  everyone sees and shoots the *same* enemies, with a **shared score**. Clients'
+  everyone sees and shoots the *same* enemies, with a **shared score**. Enemies
+  **engage the nearest squadmate**, so aggro spreads across the team and any
+  player can take melee damage (routed authoritatively from the host). Clients'
   hits are reported to the host (authoritative damage & kills); the between-wave
   shop is skipped in co-op (free resupply, auto-advance) to keep the squad in
   sync. Squadmates also appear as named avatars. Lobby shows "servers

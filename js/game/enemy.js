@@ -466,7 +466,10 @@ export class WaveManager {
   get liveCount() { let n = 0; for (const e of this.enemies) if (!e.dead) n++; return n; }
   get remaining() { return this.spawnQueue.length + this.liveCount; }
 
-  update(dt, player, camera, callbacks) {
+  // `extraTargets` (co-op only) is an array of { id, position } for the other
+  // players; each enemy then targets the NEAREST player. Single-player passes
+  // nothing, so the only target is the local player (id 0) — behaviour unchanged.
+  update(dt, player, camera, callbacks, extraTargets) {
     if (this.state === 'spawning') {
       this.spawnTimer -= dt;
       const aliveOk = this.liveCount < this.maxAlive;
@@ -477,11 +480,28 @@ export class WaveManager {
       if (!this.spawnQueue.length) this.state = 'active';
     }
 
+    // target list (reused arrays to avoid per-frame allocation)
+    const pos = this._tpos || (this._tpos = []);
+    const ids = this._tids || (this._tids = []);
+    pos.length = 0; ids.length = 0;
+    pos.push(player.position); ids.push(0);
+    if (extraTargets) for (const t of extraTargets) { if (t && t.position) { pos.push(t.position); ids.push(t.id); } }
+    const multi = pos.length > 1;
+
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      const r = e.update(dt, player.position, camera, this.world);
-      if (r.melee) callbacks.onPlayerHit(e.dmg);
-      if (r.shots) for (const s of r.shots) callbacks.onEnemyShoot(s);
+      let ti = 0;
+      if (multi && !e.dead) {
+        let bd = Infinity;
+        for (let k = 0; k < pos.length; k++) {
+          const dx = pos[k].x - e.group.position.x, dz = pos[k].z - e.group.position.z;
+          const d = dx * dx + dz * dz;
+          if (d < bd) { bd = d; ti = k; }
+        }
+      }
+      const r = e.update(dt, pos[ti], camera, this.world);
+      if (r.melee) callbacks.onPlayerHit(e.dmg, ids[ti]);
+      if (r.shots) for (const s of r.shots) callbacks.onEnemyShoot(s, ids[ti]);
       if (r.bark && callbacks.onBark) callbacks.onBark(e);
       if (r.summon && e.wantsSummon) {
         e.wantsSummon = false;
