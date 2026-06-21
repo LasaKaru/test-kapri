@@ -1,4 +1,4 @@
-# VERDANT — A Heleo2 Studio production
+# VERDANT — A HelaO2 Studio production
 
 > A complete, browser-based low-poly **forest survival shooter** built with
 > [Three.js](https://threejs.org/). Hold the line against endless waves of
@@ -55,8 +55,11 @@ pickup blips, your heading, and pan/zoom.
 
 ## ✨ Features
 
-- **Marketing landing page** (`index.html`) — animated forest backdrop, hero,
-  feature cards, controls guide, enemy bestiary, and a local hall-of-fame.
+- **Marketing landing page** (`index.html`) — animated forest backdrop, hero, a
+  **gameplay gallery** with a lightbox, feature/arsenal cards, an **achievements
+  gallery** (live from your `localStorage` progress), an **online leaderboard
+  widget** (global, with a local fallback when offline) and **community reviews**.
+  See **[DEPLOY.md](DEPLOY.md)** for hosting (static or full server, Docker, nginx/TLS).
 - **Full playable game** (`game.html`):
   - Pointer-lock FPS controls (WASD + mouse), sprint, **aim-down-sights** (zoom).
   - **Arsenal of 6 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
