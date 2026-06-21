@@ -29,9 +29,10 @@ Difficulty (**Recruit / Veteran / Nightmare**) scales enemy health, speed,
 damage, head-count and rewards.
 
 The world is **alive**: real-time **wind-animated grass** (vertex shader),
-flocks of **birds** wheeling overhead, **animals** that roam and flee the player,
-and **enterable buildings** — hollow structures with a doorway you can walk
-through and fight inside.
+a **mixed forest** of layered conifers and clustered-canopy broadleaf trees
+with **low scrub undergrowth**, flocks of **birds** wheeling overhead, **animals**
+that roam and flee the player, and **enterable buildings** — hollow structures
+with a doorway you can walk through and fight inside.
 
 ### ⚡ Server scaling
 
@@ -89,7 +90,10 @@ pickup blips, your heading, and pan/zoom.
   - A **ruined town**: buildings with glowing windows, watchtowers, sandbag
     walls, crate stacks, fences, and **explosive red barrels** you can shoot to
     blow up clustered enemies.
-  - Eight enemy archetypes — **Grunt**, **Runner**, **Brute**, ranged **Spitter**,
+  - **Humanlike, articulated foes** — anatomically-proportioned low-poly bodies
+    (head, shoulders, chest vest, segmented arms & legs, boots, glowing eyes)
+    with a hip/shoulder-pivoted walk cycle. Eight archetypes —
+    **Grunt**, **Runner**, **Brute**, ranged **Spitter**,
     **Exploder** (rushes & detonates), **Shielded** (frontal plate blocks most
     fire — flank, headshot or blast it), **Summoner** (spawns adds), and a
     colossal **Boss** every 5th wave with a top-screen health bar.
@@ -153,10 +157,14 @@ exactly as before and shows an **OFFLINE** status — nothing is blocked or brok
 - **Live chat** (press **Y**) — global room with presence count; connects lazily
   and greys out with "reconnecting…" when offline. Available from the title and
   in-match (typing releases the cursor so movement isn't triggered).
-- **Co-op** — host or join a room by code (up to 4); squadmates appear in your
-  world as named avatars, position-synced in real time over WebSocket. Lobby
-  shows "servers unavailable" with no server; single-player is unaffected.
-  *(Foundation: synced players & lobby. Shared waves are the next slice.)*
+- **Co-op — shared waves** — host or join a room by code (up to 4). Press
+  **Deploy Together** and the whole squad drops into **one shared battle**: the
+  host runs the wave simulation authoritatively and streams enemy snapshots, so
+  everyone sees and shoots the *same* enemies, with a **shared score**. Clients'
+  hits are reported to the host (authoritative damage & kills); the between-wave
+  shop is skipped in co-op (free resupply, auto-advance) to keep the squad in
+  sync. Squadmates also appear as named avatars. Lobby shows "servers
+  unavailable" with no server; **single-player never depends on any of it**.
 
 - A connection-status **pill** (●) shows `online / connecting / offline`.
 - Online code lives in one isolated module (`js/game/net.js`) — every call is

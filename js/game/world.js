@@ -514,40 +514,107 @@ export class World {
   }
 
   // ---------- Trees ----------
+  // Conifer: root flare + tapered bark trunk + irregular needle tiers that
+  // lighten toward the crown — reads far more like a real pine than a stack.
   _makeTree() {
     const g = new THREE.Group();
-    const trunkH = 1.6 + Math.random() * 1.4;
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.28, trunkH, 5),
-      new THREE.MeshStandardMaterial({ color: 0x4a3318, roughness: 1, flatShading: true })
-    );
+    const trunkH = 1.8 + Math.random() * 1.6;
+    const barkMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.07 + Math.random() * 0.03, 0.45, 0.17 + Math.random() * 0.06),
+      roughness: 1, flatShading: true,
+    });
+    const flare = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.5, 0.5, 6), barkMat);
+    flare.position.y = 0.24; flare.castShadow = true; g.add(flare);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.26, trunkH, 6), barkMat);
     trunk.position.y = trunkH / 2; trunk.castShadow = true; g.add(trunk);
-    const tiers = 2 + Math.floor(Math.random() * 2);
-    const green = new THREE.Color().setHSL(0.26 + Math.random() * 0.06, 0.6, 0.22 + Math.random() * 0.1);
-    let y = trunkH, r = 1.4 + Math.random() * 0.6;
+
+    const tiers = 3 + Math.floor(Math.random() * 2);
+    const hue = 0.27 + Math.random() * 0.05;
+    let y = trunkH * 0.6, r = 1.5 + Math.random() * 0.7;
     for (let t = 0; t < tiers; t++) {
-      const ch = 1.5;
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, ch, 6), new THREE.MeshStandardMaterial({ color: green, roughness: 1, flatShading: true }));
-      cone.position.y = y + ch / 2 - 0.3; cone.castShadow = true; g.add(cone);
-      y += ch * 0.62; r *= 0.72;
+      const ch = 1.45 - t * 0.12;
+      const light = 0.15 + t * 0.035 + Math.random() * 0.04; // crown catches more sun
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, ch, 7),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue, 0.55, light), roughness: 1, flatShading: true }));
+      cone.position.set((Math.random() - 0.5) * 0.18, y + ch / 2 - 0.3, (Math.random() - 0.5) * 0.18);
+      cone.rotation.y = Math.random() * Math.PI;
+      cone.castShadow = true; g.add(cone);
+      y += ch * 0.6; r *= 0.74;
+    }
+    return g;
+  }
+
+  // Broadleaf: forked trunk under a cluster of overlapping leaf blobs.
+  _makeBroadleaf() {
+    const g = new THREE.Group();
+    const trunkH = 2.2 + Math.random() * 1.4;
+    const barkMat = new THREE.MeshStandardMaterial({ color: 0x5b4126, roughness: 1, flatShading: true });
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, trunkH, 6), barkMat);
+    trunk.position.y = trunkH / 2; trunk.castShadow = true; g.add(trunk);
+    for (let i = 0; i < 2; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, 1.0, 5), barkMat);
+      br.position.set(Math.cos(a) * 0.3, trunkH * 0.8, Math.sin(a) * 0.3);
+      br.rotation.z = (0.3 + Math.random() * 0.5) * (Math.cos(a) >= 0 ? 1 : -1);
+      g.add(br);
+    }
+    const hue = 0.25 + Math.random() * 0.07;
+    const blobs = 4 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < blobs; i++) {
+      const rr = 0.9 + Math.random() * 0.7;
+      const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(rr, 0),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue, 0.5, 0.23 + Math.random() * 0.08), roughness: 1, flatShading: true }));
+      leaf.position.set((Math.random() - 0.5) * 1.6, trunkH + 0.3 + (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 1.6);
+      leaf.castShadow = true; g.add(leaf);
+    }
+    return g;
+  }
+
+  // Low scrub bush — a couple of small leaf blobs for ground cover.
+  _makeBush() {
+    const g = new THREE.Group();
+    const hue = 0.24 + Math.random() * 0.08;
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const rr = 0.4 + Math.random() * 0.4;
+      const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(rr, 0),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(hue, 0.5, 0.2 + Math.random() * 0.08), roughness: 1, flatShading: true }));
+      blob.position.set((Math.random() - 0.5) * 0.7, rr * 0.7, (Math.random() - 0.5) * 0.7);
+      blob.castShadow = true; g.add(blob);
     }
     return g;
   }
 
   _plantForest() {
+    // mix of conifers and broadleaf trees, weighted by biome
+    const broadleafChance = { plains: 0.4, lowlands: 0.5, highlands: 0.15, mountains: 0.08 }[this.mapId] ?? 0.3;
     for (let i = 0; i < this.map.treeDensity; i++) {
       const ang = Math.random() * Math.PI * 2;
       const dist = 12 + Math.random() * 130;
       const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
       if (Math.abs(x) < 5 && Math.abs(z) < 100) continue;
       if (this.waterAt(x, z)) continue;
-      const tree = this._makeTree();
-      const s = 0.8 + Math.random() * 0.9;
+      const broad = Math.random() < broadleafChance;
+      const tree = broad ? this._makeBroadleaf() : this._makeTree();
+      const s = (broad ? 0.7 : 0.8) + Math.random() * 0.9;
       tree.scale.setScalar(s);
       tree.position.set(x, 0, z);
       tree.rotation.y = Math.random() * Math.PI;
       this.root.add(tree);
       if (dist < this.bounds + 10) this.colliders.push({ x, z, r: 0.6 * s });
+    }
+    // scatter low bushes for ground cover (no collision — you can push through)
+    const bushes = Math.round(this.map.treeDensity * 0.6);
+    for (let i = 0; i < bushes; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 10 + Math.random() * 135;
+      const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
+      if (Math.abs(x) < 4 && Math.abs(z) < 100) continue;
+      if (this.waterAt(x, z)) continue;
+      const bush = this._makeBush();
+      bush.scale.setScalar(0.7 + Math.random() * 0.8);
+      bush.position.set(x, 0, z);
+      this.root.add(bush);
     }
   }
 

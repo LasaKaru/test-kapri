@@ -61,44 +61,61 @@ export class Enemy {
   _buildBody(def) {
     const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.8, flatShading: true, emissive: 0x300000, emissiveIntensity: 0.4 });
     const darkMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x2a0608 : 0x5a0d08, roughness: 0.9, flatShading: true });
+    const gearMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x140305 : 0x3a3026, roughness: 0.85, flatShading: true, metalness: 0.2 });
     const s = def.scale;
+    const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w * s, h * s, d * s), m);
 
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9 * s, 1.1 * s, 0.55 * s), mat);
-    torso.position.y = 1.15 * s; torso.castShadow = true;
-    this.group.add(torso);
+    // ---- torso: pelvis + chest + a strapped vest, with a slight forward hunch
+    const upper = new THREE.Group();
+    upper.position.y = 0.98 * s;
+    upper.rotation.x = 0.06; // subtle aggressive lean
+    this.group.add(upper);
+    this._upper = upper;
+    this._upperBaseY = 0.98 * s;
 
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.55 * s, 0.55 * s, 0.55 * s), mat);
-    head.position.y = 1.95 * s; head.castShadow = true;
-    head.userData.zone = 'head';
-    this.group.add(head);
+    const pelvis = box(0.6, 0.42, 0.42, darkMat); pelvis.position.y = 0.02 * s; pelvis.castShadow = true; upper.add(pelvis);
+    const torso = box(0.8, 0.86, 0.48, mat); torso.position.y = 0.5 * s; torso.castShadow = true; upper.add(torso);
+    const vest = box(0.7, 0.5, 0.16, gearMat); vest.position.set(0, 0.52 * s, 0.27 * s); upper.add(vest); // chest plate
+    const shoulders = box(1.0, 0.26, 0.42, mat); shoulders.position.y = 0.86 * s; shoulders.castShadow = true; upper.add(shoulders);
+    const neck = box(0.2, 0.18, 0.2, darkMat); neck.position.y = 1.0 * s; upper.add(neck);
 
-    // glowing eyes (boss/spitter glow a different hue)
+    // ---- head (carries the headshot zone) + brow + glowing eyes
+    const head = box(0.5, 0.5, 0.5, mat);
+    head.position.y = 1.28 * s; head.castShadow = true; head.userData.zone = 'head';
+    upper.add(head);
+    const brow = box(0.54, 0.12, 0.12, gearMat); brow.position.set(0, 1.4 * s, 0.22 * s); upper.add(brow);
     const eyeHex = this.ranged ? (this.isBoss ? 0xff5050 : 0xff66ff) : 0xffdd33;
     const eyeMat = new THREE.MeshBasicMaterial({ color: eyeHex });
-    [-0.13, 0.13].forEach((ex) => {
-      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.1 * s, 0.1 * s, 0.05), eyeMat);
-      eye.position.set(ex * s, 1.97 * s, 0.28 * s);
-      this.group.add(eye);
+    [-0.12, 0.12].forEach((ex) => {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.11 * s, 0.09 * s, 0.05), eyeMat);
+      eye.position.set(ex * s, 1.26 * s, 0.26 * s);
+      upper.add(eye);
     });
 
-    // arms
-    this.arms = [];
+    // ---- articulated arms: shoulder group -> upper arm -> elbow group (forearm + hand)
+    this.arms = []; this.elbows = [];
     [-1, 1].forEach((side) => {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.24 * s, 0.95 * s, 0.24 * s), darkMat);
-      arm.position.set(side * 0.62 * s, 1.2 * s, 0.1 * s);
-      arm.castShadow = true;
-      this.group.add(arm);
-      this.arms.push(arm);
+      const arm = new THREE.Group();
+      arm.position.set(side * 0.55 * s, 0.84 * s, 0);
+      const up = box(0.2, 0.5, 0.22, darkMat); up.position.y = -0.25 * s; up.castShadow = true; arm.add(up);
+      const elbow = new THREE.Group(); elbow.position.y = -0.5 * s; arm.add(elbow);
+      const fore = box(0.17, 0.46, 0.19, mat); fore.position.set(0, -0.23 * s, 0.04 * s); fore.castShadow = true; elbow.add(fore);
+      const hand = box(0.18, 0.18, 0.18, gearMat); hand.position.set(0, -0.48 * s, 0.06 * s); elbow.add(hand);
+      upper.add(arm);
+      this.arms.push(arm); this.elbows.push(elbow);
     });
 
-    // legs
-    this.legs = [];
+    // ---- articulated legs: hip group -> thigh -> knee group (shin + boot)
+    this.legs = []; this.knees = [];
     [-1, 1].forEach((side) => {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3 * s, 0.9 * s, 0.3 * s), darkMat);
-      leg.position.set(side * 0.24 * s, 0.45 * s, 0);
-      leg.castShadow = true;
-      this.group.add(leg);
-      this.legs.push(leg);
+      const leg = new THREE.Group();
+      leg.position.set(side * 0.2 * s, 0, 0); // hip ~= upper origin (y 0.98s)
+      const thigh = box(0.28, 0.5, 0.3, darkMat); thigh.position.y = -0.27 * s; thigh.castShadow = true; leg.add(thigh);
+      const knee = new THREE.Group(); knee.position.y = -0.52 * s; leg.add(knee);
+      const shin = box(0.22, 0.48, 0.24, darkMat); shin.position.y = -0.22 * s; shin.castShadow = true; knee.add(shin);
+      const boot = box(0.26, 0.16, 0.44, gearMat); boot.position.set(0, -0.48 * s, 0.1 * s); knee.add(boot);
+      upper.add(leg);
+      this.legs.push(leg); this.knees.push(knee);
     });
 
     // ranged enemies (and summoner) carry a glowing orb (the muzzle/cast origin)
@@ -120,7 +137,7 @@ export class Enemy {
         new THREE.SphereGeometry(0.3 * s, 10, 8),
         new THREE.MeshBasicMaterial({ color: 0xffff66 })
       );
-      core.position.y = 1.15 * s;
+      core.position.y = 1.45 * s;
       this.group.add(core);
       this._core = core;
     }
@@ -144,7 +161,7 @@ export class Enemy {
       });
     }
 
-    this.bodyHeight = 2.3 * s;
+    this.bodyHeight = 2.5 * s;
     this._mat = mat;
   }
 
@@ -186,6 +203,7 @@ export class Enemy {
     this._mat.emissive.setHex(0xffffff);
     this._mat.emissiveIntensity = 1;
     this._flash = 0.1;
+    this._flinch = 0.18; // brief hit reaction (upper-body jerk)
     if (this.hp <= 0) { this._startDeath(); return true; }
     return false;
   }
@@ -197,6 +215,10 @@ export class Enemy {
     // topple direction
     this._fallAxis = Math.random() < 0.5 ? 'x' : 'z';
     this._fallDir = Math.random() < 0.5 ? 1 : -1;
+    // crumple the limbs so the body folds rather than toppling rigid
+    if (this.knees) { this.knees[0].rotation.x = 1.2; this.knees[1].rotation.x = 0.7; }
+    if (this.elbows) { this.elbows[0].rotation.x = 1.0; this.elbows[1].rotation.x = 1.3; }
+    if (this.arms) { this.arms[0].rotation.x = -0.6; this.arms[1].rotation.x = 0.9; }
   }
 
   // returns { melee, shots, summon, bark }
@@ -223,6 +245,11 @@ export class Enemy {
     if (this._flash > 0) {
       this._flash -= dt;
       if (this._flash <= 0) { this._mat.emissive.setHex(0x300000); this._mat.emissiveIntensity = 0.4; }
+    }
+    // hit flinch — brief upper-body jerk back, easing to the resting lean
+    if (this._upper) {
+      if (this._flinch > 0) { this._flinch -= dt; this._upper.rotation.x = 0.06 - 0.28 * (this._flinch / 0.18); }
+      else this._upper.rotation.x = 0.06;
     }
     if (this.attackCd > 0) this.attackCd -= dt;
     if (this.fireCd > 0) this.fireCd -= dt;
@@ -275,14 +302,48 @@ export class Enemy {
       const step = this.speed * dt;
       const r = world.resolve(g.position.x + (ddx / dl) * step, g.position.z + (ddz / dl) * step, this.radius);
       g.position.x = r.x; g.position.z = r.z;
-      this._walk = (this._walk || 0) + dt * this.speed * 1.6;
-      const swing = Math.sin(this._walk) * 0.4;
-      if (this.legs) { this.legs[0].rotation.x = swing; this.legs[1].rotation.x = -swing; }
-      if (this.arms && !this.ranged) { this.arms[0].rotation.x = -swing; this.arms[1].rotation.x = swing; }
+      this._animWalk(dt);
+    } else if (!this.dead) {
+      this._animIdle(dt);
     }
 
     if (this.hbGroup.visible) this.hbGroup.quaternion.copy(camera.quaternion);
     return result;
+  }
+
+  // jointed walk cycle — hips/shoulders swing, knees flex on the recovery,
+  // elbows stay bent, and the torso bobs with each stride
+  _animWalk(dt) {
+    this._walk = (this._walk || 0) + dt * this.speed * 1.6;
+    const w = this._walk, sc = this.def.scale;
+    const swing = Math.sin(w) * 0.5;
+    this.legs[0].rotation.x = swing; this.legs[1].rotation.x = -swing;
+    if (this.knees) {
+      this.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI * 0.5)) * 0.9;
+      this.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI * 0.5)) * 0.9;
+    }
+    if (!this.ranged) {
+      this.arms[0].rotation.x = -swing * 0.8; this.arms[1].rotation.x = swing * 0.8;
+      if (this.elbows) {
+        this.elbows[0].rotation.x = 0.4 + Math.max(0, swing) * 0.5;
+        this.elbows[1].rotation.x = 0.4 + Math.max(0, -swing) * 0.5;
+      }
+    }
+    if (this._upper) this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * 0.06 * sc;
+  }
+
+  // standing idle — gentle breathing bob and limbs easing back to rest
+  _animIdle(dt) {
+    this._idle = (this._idle || 0) + dt;
+    const sc = this.def.scale, k = Math.min(1, dt * 8);
+    if (this._upper) this._upper.position.y = this._upperBaseY + Math.sin(this._idle * 2) * 0.025 * sc;
+    const ease = (o, t) => { if (o) o.rotation.x += (t - o.rotation.x) * k; };
+    ease(this.legs[0], 0); ease(this.legs[1], 0);
+    if (this.knees) { ease(this.knees[0], 0.05); ease(this.knees[1], 0.05); }
+    if (!this.ranged) {
+      ease(this.arms[0], 0); ease(this.arms[1], 0);
+      if (this.elbows) { ease(this.elbows[0], 0.3); ease(this.elbows[1], 0.3); }
+    }
   }
 
   _buildShots(target) {
@@ -323,6 +384,7 @@ export class WaveManager {
     this.spawnTimer = 0;
     this.state = 'idle'; // idle | spawning | active | between
     this.boss = null;
+    this._eid = 0; // stable per-enemy id (used by co-op snapshots)
     this.difficulty = { hp: 1, speed: 1, dmg: 1, spawn: 1, reward: 1 };
   }
 
@@ -390,12 +452,14 @@ export class WaveManager {
     const dist = 42 + Math.random() * 34;
     const pos = new THREE.Vector3(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
     const e = new Enemy(this.scene, type, pos, this._hpScale(), this._mods());
+    e.id = ++this._eid;
     if (e.isBoss) this.boss = e;
     this.enemies.push(e);
   }
 
   spawnAt(type, x, z) {
     const e = new Enemy(this.scene, type, new THREE.Vector3(x, 0, z), this._hpScale(), this._mods());
+    e.id = ++this._eid;
     this.enemies.push(e);
   }
 

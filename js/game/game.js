@@ -61,6 +61,8 @@ class Game {
     this.baseFov = BASE_FOV;
 
     this.state = 'title';
+    this.coopMode = false;   // shared-waves co-op (single-player never sets these)
+    this.coopHost = false;
     this.score = 0;
     this.kills = 0;
     this.streak = 0;
@@ -340,9 +342,11 @@ class Game {
     this.hud.setAmmo(live.ammo, live.reserve);
   }
 
-  start(startWave = 1) {
+  start(startWave = 1, opts = {}) {
     startWave = Math.max(1, Math.floor(startWave) || 1);
     this.startWave = startWave;
+    this.coopMode = !!opts.coop;
+    this.coopHost = !!opts.host;
     this.waves.reset();
     this.waves.difficulty = this.difficulty;
     this.player.reset();
@@ -383,9 +387,41 @@ class Game {
     this.audio.startMusic();
     this.ach.playedMap(this.world.mapId);
 
-    this.waves.wave = startWave - 1; // startNextWave() bumps to startWave
-    const n = this.waves.startNextWave();
-    this._applyWaveStart(n, startWave > 1 ? 'CHECKPOINT' : 'SURVIVE');
+    if (this.coopMode && !this.coopHost) {
+      // co-op client: the host runs the wave sim; we mirror ghost enemies.
+      this.coop.clearGhosts();
+      this.hud.setWave(1); this.hud.popWave(1, 'CO-OP'); this.audio.wave();
+    } else {
+      if (this.coopMode) this.coop.clearGhosts();
+      this.waves.wave = startWave - 1; // startNextWave() bumps to startWave
+      const n = this.waves.startNextWave();
+      this._applyWaveStart(n, startWave > 1 ? 'CHECKPOINT' : (this.coopMode ? 'CO-OP' : 'SURVIVE'));
+    }
+  }
+
+  // ---- co-op deploy / lifecycle (gated; single-player never reaches here) ----
+  startCoop() {
+    if (!this.coop.active) { this.start(); return; } // not in a room → solo
+    if (this.coop.isHost()) {
+      // pull the whole squad into a match on our battlefield
+      this.net.sendCoopEvent({ ev: 'start', map: this.world.mapId, diff: this.difficultyId });
+      this.start(1, { coop: true, host: true });
+    } else {
+      // wait for the host's start event; show a holding state on the title
+      this._coopWaiting = true;
+      this.hud.killFeed && this.hud.killFeed('Waiting for host to deploy…');
+    }
+  }
+  _coopClientStart(m) {
+    this._coopWaiting = false;
+    if (m.map && m.map !== this.world.mapId) this._setMap(m.map);
+    if (m.diff && m.diff !== this.difficultyId) this._setDifficulty(m.diff);
+    this.start(1, { coop: true, host: false });
+  }
+  _coopRemoteOver() {
+    if (!this.coopMode || this.coopHost) return;
+    this.hud.killFeed('Host fell — match over');
+    this._gameOver();
   }
 
   _applyWaveStart(n, sub = 'INCOMING') {
@@ -401,6 +437,14 @@ class Game {
 
   // wave cleared -> open the between-wave shop
   _openShop(clearedWave) {
+    // co-op: no shop (it would desync the squad) — free resupply and roll on
+    if (this.coopMode) {
+      this.credits += 100 + clearedWave * 50;
+      this.hud.setCredits(this.credits);
+      this.hud.killFeed(`WAVE ${clearedWave} CLEARED — REGROUP`);
+      this._deployNextWave();
+      return;
+    }
     this.state = 'shop';
     this.firing = false;
     this.weapons.setAds(false);
@@ -444,10 +488,14 @@ class Game {
     const muzzle = new THREE.Vector3();
     this.weapons.muzzleWorldPos(muzzle);
 
+    // co-op client: enemies are host-owned "ghosts"; hits are reported, not applied
+    const clientCoop = this.coopMode && !this.coopHost;
     let anyHit = false, anyHead = false;
     const dmgMap = new Map(); // enemy -> {dmg, head, point} for one floating number per target
     for (const dir of shot.rays) {
-      const enemyHit = this.waves.raycastRay(this.raycaster, origin, dir, shot.def.range);
+      const enemyHit = clientCoop
+        ? this.coop.raycastGhosts(this.raycaster, origin, dir, shot.def.range)
+        : this.waves.raycastRay(this.raycaster, origin, dir, shot.def.range);
 
       // ground / world endpoint for tracer + impact
       let endPoint, impactColor = 0xd8c79a;
@@ -455,13 +503,20 @@ class Game {
         endPoint = enemyHit.point; anyHit = true;
         const head = enemyHit.zone === 'head';
         if (head) anyHead = true;
-        const base = shot.dmg * (head ? this.headMul : 1);
-        enemyHit.enemy.hit(base, enemyHit.zone);
-        const shown = base * (enemyHit.zone === 'shield' ? 0.15 : 1);
-        const rec = dmgMap.get(enemyHit.enemy) || { dmg: 0, head: false, point: endPoint };
-        rec.dmg += shown; rec.head = rec.head || head; dmgMap.set(enemyHit.enemy, rec);
-        if (enemyHit.zone === 'shield') this.effects.impact(endPoint, 0xcfe6ff, false); // clang spark
-        else this.effects.bloodBurst(endPoint);
+        if (clientCoop) {
+          // report the hit to the host (authoritative damage + score)
+          this.coop.sendHit(enemyHit.enemy.id, shot.dmg, head);
+          if (enemyHit.zone === 'shield') this.effects.impact(endPoint, 0xcfe6ff, false);
+          else this.effects.bloodBurst(endPoint);
+        } else {
+          const base = shot.dmg * (head ? this.headMul : 1);
+          enemyHit.enemy.hit(base, enemyHit.zone);
+          const shown = base * (enemyHit.zone === 'shield' ? 0.15 : 1);
+          const rec = dmgMap.get(enemyHit.enemy) || { dmg: 0, head: false, point: endPoint };
+          rec.dmg += shown; rec.head = rec.head || head; dmgMap.set(enemyHit.enemy, rec);
+          if (enemyHit.zone === 'shield') this.effects.impact(endPoint, 0xcfe6ff, false); // clang spark
+          else this.effects.bloodBurst(endPoint);
+        }
       } else {
         // intersect ground plane y=0
         let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
@@ -719,27 +774,35 @@ class Game {
     document.exitPointerLock();
     this.audio.over();
 
+    // co-op: host tells the squad the run is over; tidy up the shared state
+    const coopClient = this.coopMode && !this.coopHost;
+    if (this.coopMode && this.coopHost) { try { this.net.sendCoopEvent({ ev: 'over' }); } catch (_) {} }
+
+    const wave = coopClient ? (this.coop._lastWave || 1) : this.waves.wave;
     document.getElementById('final-score').textContent = String(this.score).padStart(4, '0');
-    document.getElementById('final-wave').textContent = this.waves.wave;
+    document.getElementById('final-wave').textContent = wave;
     document.getElementById('final-kills').textContent = this.kills;
 
     let scores = [];
     try { scores = JSON.parse(localStorage.getItem('verdant_scores') || '[]'); } catch (_) {}
     const best = scores.reduce((m, r) => Math.max(m, r.score), 0);
-    const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, date: Date.now() };
-    scores.push(run);
-    scores.sort((a, b) => b.score - a.score);
-    scores = scores.slice(0, 25);
-    try { localStorage.setItem('verdant_scores', JSON.stringify(scores)); } catch (_) {}
-    // best-effort online submit (queued + non-blocking; never affects play)
-    try { this.net.submitScore(run); } catch (_) {}
+    // co-op clients don't own the run, so they don't write/submit a score
+    if (!coopClient) {
+      const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, date: Date.now() };
+      scores.push(run);
+      scores.sort((a, b) => b.score - a.score);
+      scores = scores.slice(0, 25);
+      try { localStorage.setItem('verdant_scores', JSON.stringify(scores)); } catch (_) {}
+      try { this.net.submitScore(run); } catch (_) {}
+      this.missions.reached(this.waves.wave);
+    }
 
     document.getElementById('over-best').textContent = this.score > best
       ? '★ NEW PERSONAL BEST ★' : `Personal best: ${String(best).padStart(4, '0')}`;
-    // bank the checkpoint so the player can Continue from the wave they fell on
-    this.missions.reached(this.waves.wave);
     this._updateContinueUI();
     document.getElementById('gameover').classList.remove('hidden');
+
+    if (this.coopMode) { this.coopMode = false; this.coopHost = false; this.coop.clearGhosts(); }
   }
 
   loop() {
@@ -756,6 +819,7 @@ class Game {
         }
       }
       if (!this.firing) this._firedThisClick = false;
+      const clientCoop = this.coopMode && !this.coopHost;
 
       if (this._meleeCd > 0) this._meleeCd -= dt;
       this.player.update(dt);
@@ -767,22 +831,35 @@ class Game {
       this.hud.setAmmo(live.ammo, live.reserve);
       this.hud.setReloading(this.weapons.reloading);
 
-      this.waves.update(dt, this.player, this.camera, {
-        onPlayerHit: (d) => this._onPlayerHit(d),
-        onWaveCleared: (w) => this._openShop(w),
-        onEnemyShoot: (s) => this._spawnEnemyShot(s),
-        onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
-        onBark: (e) => this._enemyBark(e),
-      });
-      this.waves.removeDead((e) => this._onKill(e));
-      this.hud.setEnemies(this.waves.remaining);
+      if (!clientCoop) {
+        this.waves.update(dt, this.player, this.camera, {
+          onPlayerHit: (d) => this._onPlayerHit(d),
+          onWaveCleared: (w) => this._openShop(w),
+          onEnemyShoot: (s) => this._spawnEnemyShot(s),
+          onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
+          onBark: (e) => this._enemyBark(e),
+        });
+        this.waves.removeDead((e) => this._onKill(e));
+        this.hud.setEnemies(this.waves.remaining);
 
-      // boss health bar
-      const boss = this.waves.boss;
-      if (boss && !boss.dead) { this.hud.showBoss(true); this.hud.setBoss(boss.hp, boss.maxHp); }
-      else this.hud.showBoss(false);
+        // boss health bar
+        const boss = this.waves.boss;
+        if (boss && !boss.dead) { this.hud.showBoss(true); this.hud.setBoss(boss.hp, boss.maxHp); }
+        else this.hud.showBoss(false);
 
-      this._updateEnemyShots(dt);
+        this._updateEnemyShots(dt);
+
+        // host: relay the shared wave state to clients (~10/s)
+        if (this.coopMode && this.coopHost) {
+          this._snapT = (this._snapT || 0) - dt;
+          if (this._snapT <= 0) { this._snapT = 0.1; this.coop.broadcastSnapshot(this.waves, this.score); }
+        }
+      } else {
+        // co-op client: mirror the host's enemies, no local sim
+        this.coop.updateGhosts(dt, this.camera);
+        this.hud.setEnemies(this.coop.ghosts.size);
+        this.hud.showBoss(false);
+      }
 
       // regen-driven HUD refresh
       this.hud.setHealth(this.player.hp, this.player.maxHp);
@@ -801,11 +878,12 @@ class Game {
       this.coop.update(dt);
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
-      this.minimap.update(this.player, this.waves.enemies, this.pickups.items, this.world.lakes);
+      const enemySrc = clientCoop ? [...this.coop.ghosts.values()] : this.waves.enemies;
+      this.minimap.update(this.player, enemySrc, this.pickups.items, this.world.lakes);
 
       // compass (player heading + threat pips)
       const items = [];
-      for (const e of this.waves.enemies) {
+      for (const e of enemySrc) {
         if (e.dead) continue;
         const dx = e.group.position.x - this.player.position.x, dz = e.group.position.z - this.player.position.z;
         items.push({ bearing: Math.atan2(dx, -dz), boss: e.isBoss });
