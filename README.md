@@ -202,8 +202,32 @@ works offline.
 | `1 – 9` / `Wheel` | Switch weapons |
 | `G` | Throw frag grenade |
 | `R` | Reload |
+| `E` | Ride / exit a nearby vehicle |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |
+
+## 🔓 Secret codes & vehicles
+
+Type these **secret codes** on the keyboard mid-game (just type the letters —
+not into a text box) for a flash of mayhem:
+
+| Code | Effect |
+| --- | ------ |
+| `TANK` | Deploy a rideable **tank** (heavy, slow, explosive cannon, crushes enemies) |
+| `BIKE` | Deploy a fast **bike** (agile, ramming, forward machine gun) |
+| `JET` | Deploy a **jet** — actually flies (climb by looking up, `Space`/`Ctrl` to lift/drop) and rains rockets |
+| `ARSENAL` | Unlock the secret **RPG-7 rocket launcher** (slot `0`), max all weapons & infinite ammo |
+| `ROCKET` | Unlock just the rocket launcher |
+| `GODMODE` | Toggle invulnerability |
+
+Walk up to a deployed vehicle and press **E** to ride it (third-person chase
+cam, vehicle HUD with speed/altitude); press **E** again to dismount. Each
+vehicle has its own weapon on the mouse button.
+
+Far to the north sits a fortified **enemy base** with a glowing reactor core —
+drive a tank up to it or **fly the jet over and bomb it**. Destroying the core
+is worth **+5000** and the *Base Buster* achievement. (Vehicles & codes are a
+single-player sandbox; they don't affect co-op or the leaderboard runs.)
 
 ## 🚀 Run it
 

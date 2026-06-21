@@ -105,6 +105,14 @@ export class Player {
     this._updateCamera();
   }
 
+  // regen + recoil recovery only (used while riding a vehicle — no movement,
+  // the vehicle owns the camera)
+  regenOnly(dt) {
+    if (this.hurtCd > 0) this.hurtCd -= dt;
+    else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.regenRate * dt);
+    this.recoilPitch *= Math.max(0, 1 - dt * 7);
+  }
+
   _updateCamera() {
     const bob = Math.sin(this._bob) * 0.05;
     this.camera.position.set(this.position.x, this.position.y + this.eyeHeight + bob, this.position.z);
