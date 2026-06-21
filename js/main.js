@@ -45,22 +45,79 @@
   }, { threshold: 0.12 });
   document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
 
-  // Leaderboard from localStorage
+  // ---- Achievements gallery ----
+  const ACH = [
+    ['firstblood', 'First Blood', 'Get your first kill'],
+    ['headhunter', 'Headhunter', 'Land a headshot'],
+    ['demolition', 'Demolition', 'Detonate an explosive barrel'],
+    ['wave5', 'Survivor', 'Reach Wave 5'],
+    ['wave10', 'Hardened', 'Reach Wave 10'],
+    ['slayer', 'Boss Slayer', 'Defeat a Boss'],
+    ['gunsmith', 'Gunsmith', 'Level a weapon to LV5'],
+    ['globetrotter', 'Globetrotter', 'Fight on every map'],
+    ['nightmare', 'Nightmare', 'Clear a wave on Nightmare'],
+  ];
+  const achHost = document.getElementById('ach-gallery');
+  if (achHost) {
+    let unlocked = new Set();
+    try { unlocked = new Set(JSON.parse(localStorage.getItem('verdant_ach') || '[]')); } catch (_) {}
+    achHost.innerHTML = '';
+    ACH.forEach(([id, name, desc]) => {
+      const on = unlocked.has(id);
+      const el = document.createElement('div');
+      el.className = 'ach-item ' + (on ? 'unlocked' : 'locked');
+      el.innerHTML = `<span class="ach-medal">${on ? '🏆' : '🔒'}</span><div class="ach-info"><h4>${name}</h4><p>${desc}</p></div>`;
+      achHost.appendChild(el);
+    });
+    const prog = document.getElementById('ach-progress');
+    if (prog) prog.textContent = `${[...unlocked].filter((u) => ACH.some((a) => a[0] === u)).length} / ${ACH.length} unlocked`;
+  }
+
+  // ---- Online leaderboard widget (offline -> local fallback) ----
   const list = document.getElementById('leaderboard-list');
   if (list) {
-    let scores = [];
-    try { scores = JSON.parse(localStorage.getItem('verdant_scores') || '[]'); } catch (_) {}
-    if (Array.isArray(scores) && scores.length) {
-      scores.sort((a, b) => b.score - a.score);
+    const MAP_NAMES = { plains: 'Verdant Plains', highlands: 'Ashen Highlands', lowlands: 'Mire Lowlands', mountains: 'Titan Peaks' };
+    const netEl = document.getElementById('lb-net'), netTx = document.getElementById('lb-net-text');
+    const base = (/^https?:$/.test(location.protocol)) ? location.origin + '/api' : null;
+    let tab = 'global';
+
+    const render = (scores, online) => {
+      if (!scores || !scores.length) { list.innerHTML = '<li class="lb-empty">No runs yet — be the first to survive.</li>'; return; }
       list.innerHTML = '';
-      scores.slice(0, 5).forEach((r, i) => {
+      scores.slice(0, 8).forEach((r, i) => {
         const li = document.createElement('li');
         li.innerHTML =
           `<span class="lb-rank">#${i + 1}</span>` +
+          `<span class="lb-name">${(r.name || (online ? 'GHOST' : 'YOU')).replace(/[<>]/g, '')}</span>` +
           `<span class="lb-score">${String(r.score).padStart(5, '0')}</span>` +
-          `<span class="lb-wave">Wave ${r.wave}</span>`;
+          `<span class="lb-map">W${r.wave} · ${MAP_NAMES[r.map] || ''}</span>`;
         list.appendChild(li);
       });
-    }
+    };
+    const local = () => { let s = []; try { s = JSON.parse(localStorage.getItem('verdant_scores') || '[]'); } catch (_) {} return s.sort((a, b) => b.score - a.score); };
+    const setNet = (on) => { netEl.className = 'lb-net ' + (on ? 'online' : 'offline'); netTx.textContent = on ? 'online' : 'offline'; };
+
+    const refresh = async () => {
+      if (tab === 'local') { setNet(false); render(local(), false); return; }
+      list.innerHTML = '<li class="lb-empty">Loading…</li>';
+      if (base) {
+        try {
+          const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 3500);
+          const r = await fetch(base + '/leaderboard', { signal: ctrl.signal }); clearTimeout(t);
+          if (r.ok) { const d = await r.json(); setNet(true); render(d.scores || [], true); return; }
+        } catch (_) {}
+      }
+      setNet(false); render(local(), false); // graceful offline fallback
+    };
+    document.getElementById('lb-tab-global').addEventListener('click', (e) => { tab = 'global'; e.target.classList.add('active'); document.getElementById('lb-tab-local').classList.remove('active'); refresh(); });
+    document.getElementById('lb-tab-local').addEventListener('click', (e) => { tab = 'local'; e.target.classList.add('active'); document.getElementById('lb-tab-global').classList.remove('active'); refresh(); });
+    refresh();
   }
+
+  // ---- Gallery lightbox ----
+  const lb = document.getElementById('lightbox'), lbImg = document.getElementById('lightbox-img');
+  document.querySelectorAll('.shot').forEach((fig) => {
+    fig.addEventListener('click', () => { lbImg.src = fig.dataset.full; lb.classList.add('open'); });
+  });
+  if (lb) lb.addEventListener('click', () => lb.classList.remove('open'));
 })();

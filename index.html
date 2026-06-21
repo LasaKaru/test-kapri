@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VERDANT — Heleo2 Studio</title>
+  <title>VERDANT — HelaO2 Studio</title>
   <meta name="description" content="VERDANT — a low-poly forest survival shooter. Hold the line against endless waves in a golden wilderness." />
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -32,11 +32,12 @@
       <span class="brand-text">VERDANT</span>
     </a>
     <nav class="nav-links">
+      <a href="#gallery">Gallery</a>
       <a href="#features">Features</a>
-      <a href="#how">How to Play</a>
       <a href="#arsenal">Arsenal</a>
-      <a href="#enemies">Threats</a>
-      <a href="#leaderboard">Scores</a>
+      <a href="#achievements">Achievements</a>
+      <a href="#leaderboard">Leaderboard</a>
+      <a href="#community">Community</a>
     </nav>
     <a class="btn btn-primary nav-cta" href="game.html">Play Now</a>
   </header>
@@ -48,7 +49,7 @@
         <svg viewBox="0 0 48 48" width="72" height="72"><path d="M4 6 L24 42 L44 6 L34 6 L24 24 L14 6 Z" fill="currentColor"/></svg>
       </div>
       <h1 class="hero-title">VERDANT</h1>
-      <p class="hero-studio">Heleo2 Studio</p>
+      <p class="hero-studio">HelaO2 Studio</p>
       <p class="hero-tagline">
         The sun is dying and the forest has turned. Survive the endless waves
         in a golden low-poly wilderness — one rifle, one last stand.
@@ -63,6 +64,20 @@
         <div class="stat"><span class="stat-num" data-count="60">0</span><span class="stat-label">FPS Low-Poly</span></div>
       </div>
       <div class="scroll-hint" aria-hidden="true">scroll ▾</div>
+    </section>
+
+    <!-- Gallery -->
+    <section id="gallery" class="section">
+      <h2 class="section-title">From the <span class="accent">Field</span></h2>
+      <p class="how-note">Real captures — golden-hour firefights, snow peaks, the tactical map and more.</p>
+      <div class="gallery-grid">
+        <figure class="shot" data-full="assets/gallery/02-combat.jpg"><img src="assets/gallery/02-combat.jpg" alt="Golden-hour firefight" loading="lazy"><figcaption>Golden-hour firefight · Verdant Plains</figcaption></figure>
+        <figure class="shot" data-full="assets/gallery/03-mountains.jpg"><img src="assets/gallery/03-mountains.jpg" alt="Titan Peaks" loading="lazy"><figcaption>Rugged ridgelines · Titan Peaks</figcaption></figure>
+        <figure class="shot" data-full="assets/gallery/04-tacmap.jpg"><img src="assets/gallery/04-tacmap.jpg" alt="Tactical map" loading="lazy"><figcaption>Relief tactical map</figcaption></figure>
+        <figure class="shot" data-full="assets/gallery/05-night.jpg"><img src="assets/gallery/05-night.jpg" alt="Night and rain" loading="lazy"><figcaption>Night &amp; rain · Mire Lowlands</figcaption></figure>
+        <figure class="shot" data-full="assets/gallery/06-loadout.jpg"><img src="assets/gallery/06-loadout.jpg" alt="Loadout" loading="lazy"><figcaption>Classes &amp; weapon attachments</figcaption></figure>
+        <figure class="shot" data-full="assets/gallery/01-title.jpg"><img src="assets/gallery/01-title.jpg" alt="Title screen" loading="lazy"><figcaption>VERDANT</figcaption></figure>
+      </div>
     </section>
 
     <!-- Features -->
@@ -160,16 +175,58 @@
       <p class="how-note">Six weapons in all — also a <b>SD-9 Sidearm</b> and a belt-fed <b>HG-50 Gatling</b>. Swap freely with <b>1–6</b> or the scroll wheel; each keeps its own ammo and <b>levels up</b> as you rack up kills. Land <b>headshots</b> for bonus damage, melee with <b>V</b>, and learn each gun's <b>recoil pattern</b>. Lob <b>frag grenades</b> with <b>G</b>, find <b>medkits</b>, <b>armor</b> and <b>ammo</b> dropped by the fallen, and shoot the red <b>explosive barrels</b> to clear a crowd. Between waves, spend <b>credits</b> at the <b>shop</b> on resupply and permanent <b>perks</b> — Vitality, Fast Hands, Lifesteal and more.</p>
     </section>
 
-    <!-- Leaderboard -->
+    <!-- Achievements -->
+    <section id="achievements" class="section">
+      <h2 class="section-title">Earn your <span class="accent">Stripes</span></h2>
+      <p class="how-note">Nine feats to unlock. Your progress is saved in your browser — <span id="ach-progress">0 / 9 unlocked</span>.</p>
+      <div class="ach-gallery" id="ach-gallery"></div>
+    </section>
+
+    <!-- Online leaderboard widget -->
     <section id="leaderboard" class="section section-alt">
-      <h2 class="section-title">Local <span class="accent">Hall of Fame</span></h2>
-      <p class="how-note">Your best runs, saved right here in your browser.</p>
+      <h2 class="section-title">Global <span class="accent">Leaderboard</span></h2>
+      <div class="lb-tabs">
+        <button class="lb-tab active" id="lb-tab-global">🌐 Global</button>
+        <button class="lb-tab" id="lb-tab-local">💾 Your Runs</button>
+        <span class="lb-net offline" id="lb-net"><span class="dot"></span><span id="lb-net-text">offline</span></span>
+      </div>
       <ol class="leaderboard" id="leaderboard-list">
-        <li class="lb-empty">No runs yet — be the first to survive.</li>
+        <li class="lb-empty">Loading…</li>
       </ol>
       <a class="btn btn-primary btn-lg" href="game.html">Set a Record</a>
     </section>
+
+    <!-- Community / testimonials -->
+    <section id="community" class="section">
+      <h2 class="section-title">From the <span class="accent">Community</span></h2>
+      <div class="cards reviews">
+        <article class="card review">
+          <div class="stars">★★★★★</div>
+          <p>"Runs at a buttery 60 on a Chromebook and still looks gorgeous at golden hour. The recoil patterns are weirdly addictive."</p>
+          <div class="review-by"><span class="rv-av" style="--c:#bce04a">N</span> NovaRunner · <span class="rv-meta">Wave 31</span></div>
+        </article>
+        <article class="card review">
+          <div class="stars">★★★★★</div>
+          <p>"Cleared Titan Peaks on Nightmare with a buddy in co-op. Watching a teammate's name tag bob through the rain is the vibe."</p>
+          <div class="review-by"><span class="rv-av" style="--c:#4aa3ff">V</span> ViperLY · <span class="rv-meta">Marksman main</span></div>
+        </article>
+        <article class="card review">
+          <div class="stars">★★★★☆</div>
+          <p>"No download, no launcher — sent the link in Discord and we were squadded up in seconds. The tactical map is a lovely touch."</p>
+          <div class="review-by"><span class="rv-av" style="--c:#ffcf4a">K</span> Kapro_Ace · <span class="rv-meta">Shotgun enjoyer</span></div>
+        </article>
+        <article class="card review">
+          <div class="stars">★★★★★</div>
+          <p>"The Ember Brute kicked my teeth in until I learned to shoot the barrels. Chef's kiss. Headshots feel incredible."</p>
+          <div class="review-by"><span class="rv-av" style="--c:#ff6ad5">S</span> SilentDoe · <span class="rv-meta">Wave 24</span></div>
+        </article>
+      </div>
+      <a class="btn btn-ghost btn-lg" href="game.html">Join the Fight</a>
+    </section>
   </main>
+
+  <!-- lightbox -->
+  <div class="lightbox" id="lightbox" aria-hidden="true"><img id="lightbox-img" alt="" /></div>
 
   <footer class="footer">
     <div class="brand">
@@ -178,7 +235,7 @@
       </span>
       <span class="brand-text">VERDANT</span>
     </div>
-    <p>A Heleo2 Studio production · Built with Three.js · © 2026</p>
+    <p>A HelaO2 Studio production · Built with Three.js · © 2026</p>
   </footer>
 
   <script src="js/main.js"></script>
