@@ -69,8 +69,19 @@ export class Coop {
     if (m.ev === 'start' && !host) this.game._coopClientStart(m);
     else if (m.ev === 'snap' && !host) this._applySnap(m);
     else if (m.ev === 'hit' && host) this._applyClientHit(m);
+    else if (m.ev === 'dmg' && !host && m.to === this.myId) this.game._onPlayerHit(m.a);
     else if (m.ev === 'over' && !host) this.game._coopRemoteOver();
   }
+
+  // HOST: live positions of the OTHER players so enemies can target the nearest
+  coopTargets() {
+    const out = [];
+    for (const [id, a] of this.peers) if (a.group.visible) out.push({ id, position: a.target });
+    return out;
+  }
+
+  // HOST: tell a specific client it took damage (authoritative)
+  sendDmg(id, amount) { this.game.net.sendCoopEvent({ ev: 'dmg', to: id, a: Math.round(amount) }); }
 
   // HOST: pack the live enemies + shared score/wave and relay to clients (~10/s)
   broadcastSnapshot(waves, score) {

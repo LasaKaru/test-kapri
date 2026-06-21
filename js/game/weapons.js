@@ -57,6 +57,13 @@ export const WEAPONS = {
     spread: 0.0, adsSpread: 0.0, recoil: 0.1, recoilYaw: 0.0, kick: 0.12,
     pellets: 1, reload: 2.8, zoom: 2.0, range: 320, tracer: 0x66e0ff,
   },
+  // secret — unlocked via the ARSENAL code; fires an explosive rocket
+  rocket: {
+    key: 'rocket', name: 'RPG-7 ROCKET', slot: 0, auto: false, secret: true,
+    dmg: 4, fireRate: 0.9, mag: 1, reserveMax: 30, reserve: 12,
+    spread: 0.0, adsSpread: 0.0, recoil: 0.08, recoilYaw: 0.0, kick: 0.12,
+    pellets: 1, reload: 1.6, zoom: 1.3, range: 300, tracer: 0xffa040,
+  },
 };
 
 export const WEAPON_ORDER = ['rifle', 'smg', 'shotgun', 'sniper', 'pistol', 'lmg', 'dmr', 'autoshotgun', 'railgun'];
@@ -130,6 +137,12 @@ function buildModel(kind) {
     add(new THREE.BoxGeometry(0.03, 0.03, 1.0), steel, 0.05, 0.06, -0.5);
     add(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 12), glow, 0, 0.02, 0.12, Math.PI / 2); // energy coil
     add(new THREE.BoxGeometry(0.08, 0.22, 0.12), dark, 0, -0.16, 0.08);
+  } else if (kind === 'rocket') {
+    const warhead = new THREE.MeshStandardMaterial({ color: 0x8a3320, roughness: 0.6, metalness: 0.3 });
+    add(new THREE.BoxGeometry(0.12, 0.14, 0.8), black, 0, 0, 0);
+    add(new THREE.CylinderGeometry(0.09, 0.09, 0.55, 8), dark, 0, 0.02, -0.5, Math.PI / 2); // tube
+    add(new THREE.ConeGeometry(0.13, 0.34, 8), warhead, 0, 0.02, -0.92, -Math.PI / 2);      // warhead
+    add(new THREE.BoxGeometry(0.07, 0.2, 0.12), dark, 0, -0.15, 0.12);                       // grip
   } else { // lmg
     add(new THREE.BoxGeometry(0.16, 0.2, 0.7), black, 0, 0, 0);
     // rotary barrels
@@ -144,7 +157,7 @@ function buildModel(kind) {
   const flashMat = new THREE.SpriteMaterial({ color: 0xffe08a, transparent: true, opacity: 0, fog: false, depthTest: false });
   const flash = new THREE.Sprite(flashMat);
   flash.scale.set(0.5, 0.5, 0.5);
-  const muzzleZ = kind === 'sniper' ? -1.1 : kind === 'railgun' ? -1.05 : kind === 'dmr' ? -1.0
+  const muzzleZ = kind === 'sniper' ? -1.1 : kind === 'railgun' ? -1.05 : kind === 'rocket' ? -0.95 : kind === 'dmr' ? -1.0
     : (kind === 'shotgun' || kind === 'lmg' || kind === 'autoshotgun') ? -0.9 : kind === 'pistol' ? -0.35 : -0.8;
   flash.position.set(0, 0.02, muzzleZ);
   g.add(flash);
@@ -166,11 +179,12 @@ export class WeaponManager {
 
     this.attachments = {};   // { weaponKey: [attachmentId,...] }
     this.classMods = null;
+    this.order = [...WEAPON_ORDER]; // live order (secret weapons append here)
     this.configure(null, null); // builds this.defs
 
     this.state = {};
     this.owned = {};
-    for (const k of WEAPON_ORDER) {
+    for (const k of this.order) {
       this.state[k] = { ammo: this.defs[k].mag, reserve: this.defs[k].reserve };
       this.owned[k] = true;
     }
@@ -191,7 +205,7 @@ export class WeaponManager {
     this.rig = new THREE.Group();
     this.rig.position.set(0.26, -0.26, -0.55);
     this.models = {};
-    for (const k of WEAPON_ORDER) {
+    for (const k of this.order) {
       const m = buildModel(k);
       m.visible = k === this.current;
       this.models[k] = m;
@@ -206,7 +220,7 @@ export class WeaponManager {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(LEVEL_KEY) || '{}'); } catch (_) {}
     this.levels = {};
-    for (const k of WEAPON_ORDER) {
+    for (const k of this.order) {
       const s = saved[k] || {};
       this.levels[k] = { xp: s.xp || 0, level: Math.min(MAX_LEVEL, s.level || 1) };
     }
@@ -234,14 +248,32 @@ export class WeaponManager {
   configure(attachments, classMods) {
     this.attachments = attachments || {};
     this.classMods = classMods || null;
-    this.defs = {};
-    for (const k of WEAPON_ORDER) {
+    this.defs = this.defs || {};
+    for (const k of this.order) {
       const w = { ...WEAPONS[k] };
       if (this.classMods && this.classMods.weapon) this.classMods.weapon(w, k);
       for (const id of (this.attachments[k] || [])) { const a = ATTACHMENTS[id]; if (a) a.apply(w); }
       this.defs[k] = w;
     }
   }
+
+  // ---- secret / unlockable weapons (e.g. the ARSENAL code) ----
+  unlockSecret(key) {
+    if (!WEAPONS[key] || this.owned[key]) return false;
+    if (!this.order.includes(key)) this.order.push(key);
+    const w = { ...WEAPONS[key] };
+    if (this.classMods && this.classMods.weapon) this.classMods.weapon(w, key);
+    this.defs[key] = w;
+    this.state[key] = { ammo: w.mag, reserve: w.reserve };
+    this.owned[key] = true;
+    if (!this.levels[key]) this.levels[key] = { xp: 0, level: 1 };
+    if (!this.models[key]) { const m = buildModel(key); m.visible = false; this.models[key] = m; this.rig.add(m); }
+    return true;
+  }
+  allDefs() { return this.defs; }
+  // cheat helpers
+  maxAll() { for (const k of this.order) if (this.levels[k]) this.levels[k].level = MAX_LEVEL; this.refill(); }
+  refill() { for (const k of this.order) { if (!this.owned[k]) continue; const w = this.defs[k], s = this.state[k]; s.ammo = w.mag; s.reserve = w.reserveMax; } }
 
   switchTo(key) {
     if (!this.owned[key] || key === this.current || this.reloading) return false;
@@ -254,13 +286,14 @@ export class WeaponManager {
   }
 
   cycle(dir) {
-    const i = WEAPON_ORDER.indexOf(this.current);
+    const ord = this.order;
+    const i = ord.indexOf(this.current);
     let n = i;
-    for (let s = 0; s < WEAPON_ORDER.length; s++) {
-      n = (n + dir + WEAPON_ORDER.length) % WEAPON_ORDER.length;
-      if (this.owned[WEAPON_ORDER[n]]) break;
+    for (let s = 0; s < ord.length; s++) {
+      n = (n + dir + ord.length) % ord.length;
+      if (this.owned[ord[n]]) break;
     }
-    this.switchTo(WEAPON_ORDER[n]);
+    this.switchTo(ord[n]);
   }
 
   setAds(on) { this.ads = on && !this.reloading; }
@@ -319,18 +352,18 @@ export class WeaponManager {
   muzzleWorldPos(out) { return this.models[this.current].userData.flash.getWorldPosition(out); }
 
   reset() {
-    for (const k of WEAPON_ORDER) {
+    for (const k of this.order) {
       this.state[k] = { ammo: this.defs[k].mag, reserve: this.defs[k].reserve };
     }
     this.current = 'rifle';
-    for (const k of WEAPON_ORDER) this.models[k].visible = k === 'rifle';
+    for (const k of this.order) this.models[k].visible = k === 'rifle';
     this.reloading = false; this.fireCd = 0; this.ads = false; this.adsT = 0;
     this.reloadMul = 1; this._shotIndex = 0; this._sinceShot = 99; this.adsLerp = 12;
     this.camera.fov = this.baseFov; this.camera.updateProjectionMatrix();
   }
 
   addAmmo(fraction) {
-    for (const k of WEAPON_ORDER) {
+    for (const k of this.order) {
       if (!this.owned[k]) continue;
       const w = WEAPONS[k], s = this.state[k];
       s.reserve = Math.min(w.reserveMax, s.reserve + Math.ceil(w.reserveMax * fraction));

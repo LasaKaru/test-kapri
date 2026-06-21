@@ -14,7 +14,7 @@ import { Player } from './player.js';
 import { WaveManager } from './enemy.js';
 import { HUD } from './hud.js';
 import { Audio } from './audio.js';
-import { WeaponManager, WEAPONS, WEAPON_ORDER } from './weapons.js';
+import { WeaponManager } from './weapons.js';
 import { Effects } from './effects.js';
 import { Pickups } from './pickups.js';
 import { PostFX } from './postfx.js';
@@ -22,6 +22,8 @@ import { Minimap } from './minimap.js';
 import { Settings } from './settings.js';
 import { Shop } from './shop.js';
 import { TouchControls } from './touch.js';
+import { Vehicles } from './vehicles.js';
+import { Cheats } from './cheats.js';
 
 const BASE_FOV = 75;
 
@@ -103,6 +105,10 @@ class Game {
     this.coop = new Coop(this);
     this.coopLobby = new CoopLobby(this);
     this.touch = new TouchControls(this);
+    this.vehicles = new Vehicles(this);
+    this.cheats = new Cheats(this);
+    this.godmode = false;
+    this.cheatArsenal = false;
     this._updateLoadoutLabel();
     this._updateContinueUI();
 
@@ -182,13 +188,16 @@ class Game {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
+      if (e.code === 'KeyE') this.vehicles.toggleMount();
+      if (this.vehicles.isMounted()) return; // driving — gun keys disabled
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
       if (e.code === 'KeyG') this._throwGrenade();
       if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
-      // weapon switch via number keys
-      const m = /^Digit([1-9])$/.exec(e.code);
+      // weapon switch via number keys (0 = secret slot, e.g. the rocket)
+      const m = /^Digit([0-9])$/.exec(e.code);
       if (m) {
-        const key = WEAPON_ORDER[parseInt(m[1], 10) - 1];
+        const dn = parseInt(m[1], 10);
+        const key = this.weapons.order[dn === 0 ? 9 : dn - 1];
         if (key && this.weapons.switchTo(key)) { this.audio.swap(); this._syncWeaponHud(); }
       }
     });
@@ -341,6 +350,9 @@ class Game {
     this.hud.setWeaponName(this.weapons.def.name, this.weapons.getLevel());
     this.hud.setAmmo(live.ammo, live.reserve);
   }
+  _rebuildWeaponSlots() {
+    this.hud.buildWeaponSlots(this.weapons.order, this.weapons.allDefs(), this.weapons.current);
+  }
 
   start(startWave = 1, opts = {}) {
     startWave = Math.max(1, Math.floor(startWave) || 1);
@@ -355,6 +367,8 @@ class Game {
     this.weapons.configure(this.attachments, this.classMods);
     this.weapons.reset();
     this.pickups.reset();
+    this.vehicles.reset();
+    this.godmode = false; this.cheatArsenal = false;
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -376,7 +390,7 @@ class Game {
     this.hud.setHealth(this.player.hp, this.player.maxHp);
     this.hud.setArmor(this.player.armor, this.player.maxArmor);
     this.hud.setStreak(0);
-    this.hud.buildWeaponSlots(WEAPON_ORDER, WEAPONS, this.weapons.current);
+    this._rebuildWeaponSlots();
     this._syncWeaponHud();
 
     this._hideOverlays();
@@ -488,6 +502,14 @@ class Game {
     const muzzle = new THREE.Vector3();
     this.weapons.muzzleWorldPos(muzzle);
 
+    // secret rocket launcher: fire an explosive projectile instead of hitscan
+    if (this.weapons.def.key === 'rocket') {
+      const rdir = new THREE.Vector3(); this.camera.getWorldDirection(rdir);
+      this.vehicles.launchOrdnance('rocket', muzzle, rdir);
+      this.shake = Math.min(0.6, this.shake + 0.25);
+      return;
+    }
+
     // co-op client: enemies are host-owned "ghosts"; hits are reported, not applied
     const clientCoop = this.coopMode && !this.coopHost;
     let anyHit = false, anyHead = false;
@@ -518,14 +540,22 @@ class Game {
           else this.effects.bloodBurst(endPoint);
         }
       } else {
-        // intersect ground plane y=0
-        let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
-        t = Math.min(t, shot.def.range);
-        endPoint = origin.clone().add(dir.clone().multiplyScalar(t));
-        this.effects.impact(endPoint, impactColor, false);
-        // barrel check at impact
-        const blast = this.world.hitBarrel(endPoint);
-        if (blast) this._explode(blast);
+        // direct bullet hit on the enemy base core (chip damage)
+        const bp = this.world.baseHitPoint(origin, dir);
+        if (bp && bp.distance < shot.def.range) {
+          endPoint = bp.point; anyHit = true;
+          if (this.world.damageBase(shot.dmg * 6)) this._onBaseDestroyed();
+          this.effects.impact(endPoint, 0xff7040, false);
+        } else {
+          // intersect ground plane y=0
+          let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
+          t = Math.min(t, shot.def.range);
+          endPoint = origin.clone().add(dir.clone().multiplyScalar(t));
+          this.effects.impact(endPoint, impactColor, false);
+          // barrel check at impact
+          const blast = this.world.hitBarrel(endPoint);
+          if (blast) this._explode(blast);
+        }
       }
       this.effects.tracer(muzzle, endPoint, shot.def.tracer);
     }
@@ -584,7 +614,7 @@ class Game {
       }
     }
     const pd = Math.hypot(this.player.position.x - x, this.player.position.z - z);
-    if (pd < radius) {
+    if (pd < radius && !this.godmode) {
       this.player.takeDamage(playerMax * (1 - pd / radius));
       this.hud.damageFlash();
       this._afterPlayerDamage();
@@ -686,6 +716,7 @@ class Game {
   }
 
   _onPlayerHit(dmg) {
+    if (this.godmode) return;
     this.player.takeDamage(dmg);
     this.hud.damageFlash();
     this.audio.hurt();
@@ -802,7 +833,27 @@ class Game {
     this._updateContinueUI();
     document.getElementById('gameover').classList.remove('hidden');
 
+    this.vehicles.reset();
     if (this.coopMode) { this.coopMode = false; this.coopHost = false; this.coop.clearGhosts(); }
+  }
+
+  _updateBaseBar() {
+    const wrap = document.getElementById('base-bar-wrap'); if (!wrap) return;
+    const b = this.world.base;
+    const d = b ? Math.hypot(this.player.position.x - b.x, this.player.position.z - b.z) : 1e9;
+    const show = !!(b && b.alive && (this.vehicles.isMounted() || d < 90));
+    wrap.classList.toggle('hidden', !show);
+    if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac() * 100) + '%'; }
+  }
+
+  _onBaseDestroyed() {
+    this.score += 5000;
+    this.hud.setScore(this.score);
+    this.hud.popKill();
+    this.hud.killFeed('☠ ENEMY BASE DESTROYED  +5000');
+    this.ach.unlock('basebuster');
+    this._detonate(this.world.base.x, this.world.base.z, 12, 0, 0);
+    this.postfx.pulseBloom(1.0);
   }
 
   loop() {
@@ -811,34 +862,42 @@ class Game {
 
     if (this.state === 'playing') {
       this._pollGamepad();
-      if (this.firing && (this.weapons.def.auto || !this._firedThisClick)) {
-        const before = this.weapons.fireCd;
-        if (before <= 0) {
-          this._fire();
-          if (!this.weapons.def.auto) this._firedThisClick = true;
+      const mounted = this.vehicles.isMounted();
+      if (this.firing) {
+        if (mounted) { this.vehicles.fire(); }
+        else if (this.weapons.def.auto || !this._firedThisClick) {
+          if (this.weapons.fireCd <= 0) {
+            this._fire();
+            if (!this.weapons.def.auto) this._firedThisClick = true;
+          }
         }
       }
       if (!this.firing) this._firedThisClick = false;
       const clientCoop = this.coopMode && !this.coopHost;
 
       if (this._meleeCd > 0) this._meleeCd -= dt;
-      this.player.update(dt);
+      if (mounted) { this.player.regenOnly ? this.player.regenOnly(dt) : null; }
+      else this.player.update(dt);
       this.weapons.update(dt);
+      if (this.cheatArsenal) this.weapons.refill();
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;
-      this.hud.setScope(this.weapons.def.key === 'sniper' && this.weapons.adsT > 0.6);
+      this.hud.setScope(!mounted && this.weapons.def.key === 'sniper' && this.weapons.adsT > 0.6);
 
       const live = this.weapons.live;
       this.hud.setAmmo(live.ammo, live.reserve);
       this.hud.setReloading(this.weapons.reloading);
 
       if (!clientCoop) {
+        // co-op host: enemies also target connected squadmates; damage to them
+        // is routed over the relay so single-player keeps a single target.
+        const extra = (this.coopMode && this.coopHost) ? this.coop.coopTargets() : null;
         this.waves.update(dt, this.player, this.camera, {
-          onPlayerHit: (d) => this._onPlayerHit(d),
+          onPlayerHit: (d, tid) => { if (tid) this.coop.sendDmg(tid, d); else this._onPlayerHit(d); },
           onWaveCleared: (w) => this._openShop(w),
           onEnemyShoot: (s) => this._spawnEnemyShot(s),
           onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
           onBark: (e) => this._enemyBark(e),
-        });
+        }, extra);
         this.waves.removeDead((e) => this._onKill(e));
         this.hud.setEnemies(this.waves.remaining);
 
@@ -876,6 +935,9 @@ class Game {
       }
       this._updateGrenades(dt);
       this.coop.update(dt);
+      this.vehicles.update(dt);     // ordnance + driving (sets the camera when mounted)
+      this.vehicles.promptTick();
+      this._updateBaseBar();
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
       const enemySrc = clientCoop ? [...this.coop.ghosts.values()] : this.waves.enemies;

@@ -81,6 +81,19 @@
         <div class="boss-bar"><div class="boss-fill" id="boss-fill"></div></div>
       </div>
 
+      <!-- Enemy base health (vehicle objective) -->
+      <div class="base-bar-wrap hidden" id="base-bar-wrap">
+        <div class="base-name">⌖ ENEMY BASE</div>
+        <div class="base-bar"><div class="base-fill" id="base-fill"></div></div>
+      </div>
+
+      <!-- vehicle prompt + driving HUD -->
+      <div class="vehicle-prompt hidden" id="vehicle-prompt">[E] Ride</div>
+      <div class="vehicle-hud hidden" id="vehicle-hud"></div>
+
+      <!-- secret code toast -->
+      <div class="cheat-toast" id="cheat-toast"></div>
+
       <!-- Compass -->
       <canvas id="compass" width="360" height="34"></canvas>
 
@@ -143,8 +156,9 @@
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
           <span><b>R-Click</b> Aim Down Sights</span><span><b>R</b> Reload</span>
           <span><b>1-9 / Wheel</b> Weapons</span><span><b>G</b> Grenade</span>
-          <span><b>V</b> Melee</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+          <span><b>V</b> Melee</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
         </div>
+        <div class="secret-hint">Psst… try typing secret codes in-game: <b>TANK</b>, <b>BIKE</b>, <b>JET</b>, <b>ARSENAL</b>, <b>GODMODE</b></div>
         <a class="back-link" href="index.html">← Back to site</a>
       </div>
     </div>

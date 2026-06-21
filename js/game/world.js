@@ -111,7 +111,62 @@ export class World {
     this._buildWater();
     this._scatterRocks();
     this._scatterGrass();
+    this._buildBase();
     this._critters = new Critters(this.root, this);
+  }
+
+  // ---------- Enemy base (vehicle attack objective) ----------
+  _buildBase() {
+    const bx = 0, bz = -118;
+    const g = new THREE.Group();
+    const wall = new THREE.MeshStandardMaterial({ color: 0x3a3f33, roughness: 0.9, metalness: 0.2, flatShading: true });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x55303a, roughness: 0.5, metalness: 0.6, flatShading: true });
+    const R = 14;
+    // perimeter walls (visual) + corner towers (solid)
+    for (const [dx, dz, w, d] of [[0, -R, 2 * R, 2], [0, R, 2 * R, 2], [-R, 0, 2, 2 * R], [R, 0, 2, 2 * R]]) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, 4, d), wall);
+      seg.position.set(bx + dx, 2, bz + dz); seg.castShadow = true; g.add(seg);
+    }
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 7, 6), wall);
+      t.position.set(bx + sx * R, 3.5, bz + sz * R); t.castShadow = true; g.add(t);
+      this.colliders.push({ x: bx + sx * R, z: bz + sz * R, r: 2 });
+    }
+    // central reactor core — the destructible target
+    const core = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(3.2, 0),
+      new THREE.MeshStandardMaterial({ color: 0xff5530, emissive: 0xff3010, emissiveIntensity: 0.85, roughness: 0.4, flatShading: true })
+    );
+    core.position.set(bx, 3.6, bz); core.castShadow = true; g.add(core);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(4.4, 0.4, 6, 16), metal);
+    ring.position.set(bx, 3.6, bz); ring.rotation.x = Math.PI / 2; g.add(ring);
+    this.colliders.push({ x: bx, z: bz, r: 4 });
+    this.root.add(g);
+    this.base = { group: g, core, ring, hp: 2600, maxHp: 2600, x: bx, z: bz, r: 3.8, alive: true, _flash: 0 };
+  }
+
+  baseHpFrac() { return this.base && this.base.alive ? this.base.hp / this.base.maxHp : 0; }
+
+  // apply damage; returns true the moment it is destroyed
+  damageBase(amount) {
+    const b = this.base;
+    if (!b || !b.alive) return false;
+    b.hp -= amount; b._flash = 0.12;
+    if (b.hp <= 0) { b.hp = 0; b.alive = false; return true; }
+    return false;
+  }
+
+  // ray–sphere test against the core (for direct bullet hits)
+  baseHitPoint(origin, dir) {
+    const b = this.base;
+    if (!b || !b.alive) return null;
+    const ox = origin.x - b.x, oy = origin.y - 3.6, oz = origin.z - b.z, R = b.r + 0.4;
+    const proj = ox * dir.x + oy * dir.y + oz * dir.z;
+    const disc = proj * proj - (ox * ox + oy * oy + oz * oz - R * R);
+    if (disc < 0) return null;
+    const t = -proj - Math.sqrt(disc);
+    if (t < 0) return null;
+    return { point: new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t), distance: t };
   }
 
   // ---------- Sky ----------
@@ -927,6 +982,17 @@ export class World {
     this._time += dt;
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
+    // enemy base: spin the core, flash on hit, collapse when destroyed
+    const b = this.base;
+    if (b) {
+      b.core.rotation.y += dt * 0.6;
+      if (b._flash > 0) { b._flash -= dt; b.core.material.emissiveIntensity = 0.85 + 4 * Math.max(0, b._flash / 0.12); }
+      else if (b.alive) b.core.material.emissiveIntensity = 0.85 + Math.sin(this._time * 3) * 0.15;
+      if (!b.alive && b.group.scale.y > 0.05) {
+        b.group.scale.y = Math.max(0.05, b.group.scale.y - dt * 0.5);
+        b.core.material.emissiveIntensity *= Math.max(0, 1 - dt * 2);
+      }
+    }
     for (const c of this._clouds) {
       c.s.position.x += c.speed * dt;
       if (c.s.position.x > 320) c.s.position.x = -320;

@@ -315,6 +315,31 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   background:linear-gradient(90deg,#7a0d08,#e03a2f,#ff7a3a);transition:width .15s}
 
 /* Bottom-left weapon slots */
+/* Enemy base health bar (vehicle objective) */
+.base-bar-wrap{position:absolute;top:64px;left:50%;transform:translateX(-50%);width:min(420px,60vw);text-align:center}
+.base-name{font-family:'Orbitron';font-size:.72rem;letter-spacing:.2em;color:#ff8a5a;margin-bottom:4px;text-shadow:0 0 8px rgba(255,80,40,.5)}
+.base-bar{height:10px;border-radius:6px;background:rgba(30,6,6,.7);border:1px solid rgba(255,120,80,.5);overflow:hidden}
+.base-fill{height:100%;width:100%;background:linear-gradient(90deg,#ff5530,#ffb040);transition:width .12s}
+
+/* Vehicle prompt + driving HUD */
+.vehicle-prompt{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);font-family:'Orbitron';
+  font-size:.82rem;letter-spacing:.14em;color:var(--lime-bright);background:rgba(8,16,4,.7);
+  border:1px solid var(--lime);border-radius:8px;padding:7px 16px;box-shadow:0 0 16px rgba(188,224,74,.25)}
+.vehicle-hud{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-family:'Orbitron';
+  font-size:.8rem;letter-spacing:.1em;color:var(--gold);background:rgba(8,16,4,.7);
+  border:1px solid rgba(255,210,74,.4);border-radius:8px;padding:8px 18px;white-space:nowrap}
+
+/* Secret code toast */
+.cheat-toast{position:absolute;top:90px;left:50%;transform:translateX(-50%) scale(.9);font-family:'Orbitron';
+  font-weight:700;font-size:1rem;letter-spacing:.16em;color:#fff;background:rgba(47,107,30,.85);
+  border:1px solid var(--lime-bright);border-radius:10px;padding:10px 22px;opacity:0;pointer-events:none;
+  box-shadow:0 0 26px rgba(188,224,74,.5);transition:opacity .2s,transform .2s}
+.cheat-toast.show{opacity:1;transform:translateX(-50%) scale(1)}
+
+/* Title secret hint */
+.secret-hint{margin-top:10px;font-size:.74rem;color:var(--muted);opacity:.8;max-width:460px;text-align:center}
+.secret-hint b{color:var(--gold);letter-spacing:.06em}
+
 .hud-weapons{position:absolute;bottom:24px;left:24px;display:flex;flex-direction:column;gap:6px}
 .wslot{display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:8px;
   background:rgba(8,16,4,.55);border:1px solid rgba(188,224,74,.18);font-family:'Orbitron';
