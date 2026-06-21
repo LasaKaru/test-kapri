@@ -25,7 +25,7 @@ export class CoopLobby {
     });
     document.getElementById('coop-leave').addEventListener('click', () => { game.coop.leave(); this._render(); });
     document.getElementById('coop-close').addEventListener('click', () => this.close());
-    this.deployBtn.addEventListener('click', () => { this.close(); this.game.start(); });
+    this.deployBtn.addEventListener('click', () => { this.close(); this.game.startCoop(); });
 
     game.coop.onRoster = (info) => this._render(info);
   }

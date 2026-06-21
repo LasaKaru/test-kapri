@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import { Enemy } from './enemy.js';
 
 const COLORS = [0x4aa3ff, 0xffcf4a, 0xff6ad5, 0x6affb0];
+// a no-op "world" so a ghost's death animation can run without any AI/collision
+const NULL_WORLD = { steerAround() { return { x: 0, z: 0 }; }, resolve(x, z) { return { x, z }; } };
 
 // Co-op: relays the local player's state and shows remote players as avatars.
 // Fully optional & isolated — if the server is unreachable nothing happens.
@@ -11,11 +14,20 @@ export class Coop {
     this.myId = null;
     this.room = '';
     this.peers = new Map(); // id -> { group, target, tyaw, name, hp, color }
+    this.ghosts = new Map(); // shared-wave enemies mirrored from the host (id -> Enemy)
     this._sendT = 0;
     this.onRoster = null;    // lobby callback
     const net = game.net;
     net.onCoop((m) => this._onMsg(m));
     net.onCoopState((s) => { this.state = s; this._notifyRoster(); });
+  }
+
+  // host = the lowest connected id in the room (deterministic, survives leaves)
+  isHost() {
+    if (!this.active || this.myId == null) return true;
+    let min = this.myId;
+    for (const id of this.peers.keys()) if (id < min) min = id;
+    return this.myId === min;
   }
 
   host() { const code = this._code(); this.join(code); return code; }
@@ -28,6 +40,7 @@ export class Coop {
     this.active = false;
     this.game.net.leaveCoop();
     for (const id of [...this.peers.keys()]) this._remove(id);
+    this.clearGhosts();
     this.myId = null;
     this._notifyRoster();
   }
@@ -43,9 +56,109 @@ export class Coop {
     else if (m.type === 'state') {
       const a = this.peers.get(m.id);
       if (a) { a.target.set(m.x, 0, m.z); a.tyaw = m.yaw; a.hp = m.hp; a.group.visible = true; }
+    } else if (m.type === 'event') {
+      this._onEvent(m);
     } else if (m.type === 'full') {
       this.full = true; this._notifyRoster();
     }
+  }
+
+  // ---- shared waves (host-authoritative) ----
+  _onEvent(m) {
+    const host = this.isHost();
+    if (m.ev === 'start' && !host) this.game._coopClientStart(m);
+    else if (m.ev === 'snap' && !host) this._applySnap(m);
+    else if (m.ev === 'hit' && host) this._applyClientHit(m);
+    else if (m.ev === 'over' && !host) this.game._coopRemoteOver();
+  }
+
+  // HOST: pack the live enemies + shared score/wave and relay to clients (~10/s)
+  broadcastSnapshot(waves, score) {
+    if (!this.active || !this.isHost()) return;
+    const en = [];
+    for (const e of waves.enemies) {
+      en.push([e.id, e.type,
+        Math.round(e.group.position.x * 10) / 10, Math.round(e.group.position.z * 10) / 10,
+        Math.round(e.group.rotation.y * 100) / 100,
+        Math.round((e.hp / e.maxHp) * 100) / 100, e.dead ? 1 : 0]);
+    }
+    this.game.net.sendCoopEvent({ ev: 'snap', w: waves.wave, s: score, en });
+  }
+
+  // CLIENT: reconcile local ghost enemies against the host's snapshot
+  _applySnap(m) {
+    this.game.score = m.s;
+    this.game.hud.setScore(m.s);
+    if (m.w !== this._lastWave) { this._lastWave = m.w; this.game.hud.setWave(m.w); }
+    const seen = new Set();
+    for (const a of m.en) {
+      const [id, t, x, z, yaw, hpf, dead] = a;
+      seen.add(id);
+      let gh = this.ghosts.get(id);
+      if (!gh) {
+        gh = new Enemy(this.game.scene, t, new THREE.Vector3(x, 0, z), 1, null);
+        gh.id = id; gh._ghost = true;
+        this.ghosts.set(id, gh);
+      }
+      if (dead) { if (!gh.dead) gh._startDeath(); }
+      else { gh._tx = x; gh._tz = z; gh._tyaw = yaw; gh.hp = hpf * gh.maxHp; gh._updateHealthBar(); }
+    }
+    // drop ghosts the host no longer reports (unless mid-death animation)
+    for (const [id, gh] of this.ghosts) {
+      if (!seen.has(id) && !gh.dead) { gh.remove(); this.ghosts.delete(id); }
+    }
+  }
+
+  // HOST: a client reported a hit — apply it to the authoritative enemy
+  _applyClientHit(m) {
+    const e = this.game.waves.enemies.find((x) => x.id === m.e && !x.dead);
+    if (!e) return;
+    const head = !!m.h;
+    e.hit(m.d * (head ? this.game.headMul : 1), head ? 'head' : 'body');
+    this.game.effects.bloodBurst(e.group.position.clone().setY(e.bodyHeight * 0.6));
+    if (head) this.game._pendingHeadshot = true;
+  }
+
+  // CLIENT: shoot a ghost — send the hit to the host (authoritative damage)
+  sendHit(id, dmg, head) { this.game.net.sendCoopEvent({ ev: 'hit', e: id, d: dmg, h: head ? 1 : 0 }); }
+
+  raycastGhosts(raycaster, origin, dir, far) {
+    raycaster.set(origin, dir); raycaster.far = far;
+    let best = null, bd = Infinity;
+    for (const gh of this.ghosts.values()) {
+      if (gh.dead) continue;
+      const hits = raycaster.intersectObject(gh.group, true);
+      if (hits.length && hits[0].distance < bd) {
+        bd = hits[0].distance;
+        best = { enemy: gh, point: hits[0].point, zone: hits[0].object.userData.zone || 'body' };
+      }
+    }
+    return best;
+  }
+
+  // CLIENT: drive the ghosts (interpolate live ones, animate the dying ones)
+  updateGhosts(dt, camera) {
+    for (const [id, gh] of [...this.ghosts]) {
+      if (gh.dead) {
+        gh.update(dt, gh.group.position, camera, NULL_WORLD); // death anim only
+        if (gh.dyingT <= 0) { gh.remove(); this.ghosts.delete(id); }
+        continue;
+      }
+      const k = Math.min(1, dt * 10);
+      const p = gh.group.position;
+      if (gh._tx != null) { p.x += (gh._tx - p.x) * k; p.z += (gh._tz - p.z) * k; }
+      let d = (gh._tyaw || 0) - gh.group.rotation.y;
+      while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+      gh.group.rotation.y += d * k;
+      gh._animWalk(dt);
+      if (gh.hbGroup.visible) gh.hbGroup.quaternion.copy(camera.quaternion);
+    }
+  }
+
+  clearGhosts() {
+    for (const gh of this.ghosts.values()) gh.remove();
+    this.ghosts.clear();
+    this._lastWave = -1;
   }
 
   _notifyRoster() {

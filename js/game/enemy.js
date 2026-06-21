@@ -384,6 +384,7 @@ export class WaveManager {
     this.spawnTimer = 0;
     this.state = 'idle'; // idle | spawning | active | between
     this.boss = null;
+    this._eid = 0; // stable per-enemy id (used by co-op snapshots)
     this.difficulty = { hp: 1, speed: 1, dmg: 1, spawn: 1, reward: 1 };
   }
 
@@ -451,12 +452,14 @@ export class WaveManager {
     const dist = 42 + Math.random() * 34;
     const pos = new THREE.Vector3(Math.cos(ang) * dist, 0, Math.sin(ang) * dist);
     const e = new Enemy(this.scene, type, pos, this._hpScale(), this._mods());
+    e.id = ++this._eid;
     if (e.isBoss) this.boss = e;
     this.enemies.push(e);
   }
 
   spawnAt(type, x, z) {
     const e = new Enemy(this.scene, type, new THREE.Vector3(x, 0, z), this._hpScale(), this._mods());
+    e.id = ++this._eid;
     this.enemies.push(e);
   }
 
