@@ -62,10 +62,20 @@ pickup blips, your heading, and pan/zoom.
   See **[DEPLOY.md](DEPLOY.md)** for hosting (static or full server, Docker, nginx/TLS).
 - **Full playable game** (`game.html`):
   - Pointer-lock FPS controls (WASD + mouse), sprint, **aim-down-sights** (zoom).
-  - **Arsenal of 6 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
-    LR-7 Marksman (scoped sniper), SD-9 Sidearm (pistol) and HG-50 Gatling (LMG)
-    — each with its own ammo, fire mode, **learnable recoil pattern** and
-    tracers. Switch with `1–6` or the scroll wheel.
+  - **Arsenal of 9 weapons** — KR-15 Rifle, V-9 SMG, BR-2 Breacher (shotgun),
+    LR-7 Marksman (scoped sniper), SD-9 Sidearm (pistol), HG-50 Gatling (LMG),
+    **MK-8 DMR** (semi-auto marksman), **AA-12 Auto** (full-auto shotgun) and
+    **ARC-9 Railgun** (high-velocity energy slug) — each with its own ammo, fire
+    mode, **learnable recoil pattern** and tracers. Switch with `1–9` or the
+    scroll wheel.
+  - **Checkpoints & missions** — your furthest wave on each battlefield is saved
+    as a checkpoint, so on death you can **Continue** instead of restarting from
+    wave 1. A **Missions** board shows waves 1→24 (boss waves and a Final Stand
+    marked) as **unlocked / locked**, and you can redeploy to any wave you've
+    reached, with a credit head-start to match.
+  - **Enemy voices** — procedurally-synthesised (formant) shouts: foes **bark**
+    when they first close in ("hey you" / "stop there" / "over here"), **scream**
+    on death, and bosses **roar** — alongside punchier, layered gun reports.
   - **Melee strike** (`V`) for point-blank kills, with a swing animation.
   - **Headshots** deal 2.5× damage with a HEADSHOT callout and score bonus.
   - **Weapon leveling** — each gun earns XP from kills and levels up (to LV10)
@@ -179,7 +189,7 @@ works offline.
 | `Mouse` | Aim |
 | `Left Click` | Fire (hold for auto) |
 | `Right Click` | Aim down sights (zoom) |
-| `1 – 4` / `Wheel` | Switch weapons |
+| `1 – 9` / `Wheel` | Switch weapons |
 | `G` | Throw frag grenade |
 | `R` | Reload |
 | `Shift` | Sprint |

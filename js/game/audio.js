@@ -49,10 +49,15 @@ export class Audio {
   }
   shoot(kind = 'rifle') {
     switch (kind) {
-      case 'smg': this._noise(0.06, 0.18, 2400); break;
-      case 'shotgun': this._noise(0.16, 0.32, 1400); this._blip(90, 0.12, 'square', 0.12, 50); break;
-      case 'sniper': this._noise(0.22, 0.35, 1100); this._blip(120, 0.18, 'sawtooth', 0.16, 60); break;
-      default: this._noise(0.09, 0.25, 1800);
+      case 'smg': this._noise(0.06, 0.18, 2400); this._blip(150, 0.05, 'square', 0.05, 70); break;
+      case 'shotgun':
+      case 'autoshotgun':
+        this._noise(0.16, 0.32, 1400); this._blip(90, 0.13, 'square', 0.15, 46); this._blip(58, 0.18, 'sine', 0.12, 30); break;
+      case 'sniper': this._noise(0.22, 0.35, 1100); this._blip(120, 0.18, 'sawtooth', 0.16, 60); this._blip(48, 0.3, 'sine', 0.15, 26); break;
+      case 'dmr': this._noise(0.12, 0.28, 1600); this._blip(130, 0.1, 'sawtooth', 0.13, 58); this._blip(60, 0.16, 'sine', 0.1, 30); break;
+      case 'railgun': this._blip(1300, 0.16, 'sawtooth', 0.16, 180); this._noise(0.12, 0.2, 3200); this._blip(70, 0.28, 'sine', 0.16, 30); break;
+      case 'lmg': this._noise(0.07, 0.22, 2000); this._blip(115, 0.05, 'square', 0.06, 60); break;
+      default: this._noise(0.09, 0.25, 1800); this._blip(125, 0.05, 'square', 0.05, 60);
     }
   }
   explosion() {
@@ -71,6 +76,70 @@ export class Audio {
     setTimeout(() => this._blip(660, 0.25, 'triangle', 0.2, 880), 180);
   }
   over() { this._blip(330, 0.5, 'sawtooth', 0.22, 80); }
+
+  // ---- procedural voice (formant synthesis) ----
+  // A glottal sawtooth (with pitch contour + vibrato) shaped by bandpass
+  // "formant" filters to fake a shouted vowel. Cheap, no audio assets.
+  _formant(o) {
+    const ctx = this._ensure();
+    if (!ctx || !this.enabled) return;
+    const t0 = ctx.currentTime, dur = o.dur;
+    const out = ctx.createGain();
+    out.gain.value = (o.vol || 0.3) * this.master;
+    out.connect(ctx.destination);
+
+    const src = ctx.createOscillator();
+    src.type = 'sawtooth';
+    src.frequency.setValueAtTime(o.f0, t0);
+    if (o.f1 != null) src.frequency.linearRampToValueAtTime(o.f1, t0 + dur);
+
+    // vibrato for a wavering, organic shout
+    const vib = ctx.createOscillator(), vibg = ctx.createGain();
+    vib.frequency.value = o.vib || 16; vibg.gain.value = o.vibDepth || 8;
+    vib.connect(vibg); vibg.connect(src.frequency);
+    vib.start(t0); vib.stop(t0 + dur + 0.02);
+
+    // amplitude envelope: quick attack, sustain, decay
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t0);
+    env.gain.exponentialRampToValueAtTime(1, t0 + 0.03);
+    env.gain.setValueAtTime(1, t0 + dur * 0.55);
+    env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(env);
+
+    (o.formants || [[700, 8, 1]]).forEach(([f, q, g]) => {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+      const fg = ctx.createGain(); fg.gain.value = g;
+      env.connect(bp); bp.connect(fg); fg.connect(out);
+    });
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
+
+  // type: 'taunt' (short enemy bark) | 'scream' (death) | 'boss' (deep roar)
+  voice(type) {
+    if (!this.enabled) return;
+    if (type === 'scream') {
+      this._noise(0.05, 0.1, 2600); // breath onset
+      this._formant({ f0: 440, f1: 170, dur: 0.7, vol: 0.3, vib: 13, vibDepth: 24,
+        formants: [[820, 8, 1], [1150, 9, 0.7], [2800, 10, 0.3]] });
+    } else if (type === 'boss') {
+      this._formant({ f0: 95, f1: 60, dur: 1.0, vol: 0.4, vib: 7, vibDepth: 9,
+        formants: [[300, 6, 1], [620, 7, 0.6], [1400, 9, 0.25]] });
+    } else { // taunt — two barked syllables ("hey you" / "stop there" / "over here")
+      const phrases = [
+        [{ f0: 165, fm: [[600, 9, 1], [1700, 10, 0.5]], d: 0.15 }, { f0: 140, fm: [[400, 9, 1], [900, 10, 0.5]], d: 0.2 }],
+        [{ f0: 150, fm: [[600, 8, 1], [1000, 9, 0.6]], d: 0.17 }, { f0: 138, fm: [[560, 9, 1], [1800, 10, 0.5]], d: 0.22 }],
+        [{ f0: 175, fm: [[500, 9, 1], [900, 9, 0.5]], d: 0.15 }, { f0: 150, fm: [[300, 9, 1], [2200, 11, 0.4]], d: 0.2 }],
+      ];
+      const ph = phrases[(Math.random() * phrases.length) | 0];
+      let delay = 0;
+      ph.forEach((syl) => {
+        setTimeout(() => this._formant({ f0: syl.f0, f1: syl.f0 * 0.85, dur: syl.d, vol: 0.24, vib: 15, vibDepth: 6, formants: syl.fm }), delay);
+        delay += syl.d * 850;
+      });
+    }
+  }
 
   // ---- procedural music + ambience ----
   setMusicVolume(v) { this.musicVol = v; if (this._musicGain) this._musicGain.gain.value = v; }

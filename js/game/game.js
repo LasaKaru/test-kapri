@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { World, MAPS } from './world.js';
 import { MapSelect, DIFFICULTIES } from './mapselect.js';
+import { Missions } from './missions.js';
 import { TacMap } from './tacmap.js';
 import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
@@ -88,6 +89,7 @@ class Game {
     this.settings.applyAll();
     this.shop = new Shop(this);
     this.mapSelect = new MapSelect(this);
+    this.missions = new Missions(this);
     this.tacmap = new TacMap(this);
     this.ach = new Achievements();
     this.loadout = new Loadout(this);
@@ -100,6 +102,7 @@ class Game {
     this.coopLobby = new CoopLobby(this);
     this.touch = new TouchControls(this);
     this._updateLoadoutLabel();
+    this._updateContinueUI();
 
     this.clock = new THREE.Clock();
     this._resize();
@@ -136,6 +139,12 @@ class Game {
     document.getElementById('start-btn').addEventListener('click', () => this.start());
     document.getElementById('restart-btn').addEventListener('click', () => this.start());
     document.getElementById('restart-btn-pause').addEventListener('click', () => this.start());
+    const cont = document.getElementById('continue-btn');
+    if (cont) cont.addEventListener('click', () => this.start(this.missions.maxWave()));
+    const contOver = document.getElementById('continue-btn-over');
+    if (contOver) contOver.addEventListener('click', () => this.start(this.missions.maxWave()));
+    const missBtn = document.getElementById('missions-btn');
+    if (missBtn) missBtn.addEventListener('click', () => this.missions.open());
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
     document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
     document.getElementById('loadout-btn').addEventListener('click', () => this.loadout.open());
@@ -175,7 +184,7 @@ class Game {
       if (e.code === 'KeyG') this._throwGrenade();
       if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
       // weapon switch via number keys
-      const m = /^Digit([1-6])$/.exec(e.code);
+      const m = /^Digit([1-9])$/.exec(e.code);
       if (m) {
         const key = WEAPON_ORDER[parseInt(m[1], 10) - 1];
         if (key && this.weapons.switchTo(key)) { this.audio.swap(); this._syncWeaponHud(); }
@@ -280,6 +289,7 @@ class Game {
     if (m) m.textContent = MAPS[this.world.mapId].name;
     if (d) d.textContent = DIFFICULTIES[this.difficultyId].name;
     if (c) c.textContent = CLASSES[this.classId].name;
+    if (this.missions) this._updateContinueUI(); // progress is per map+difficulty
   }
   _setClass(id) {
     if (!CLASSES[id]) return;
@@ -308,7 +318,20 @@ class Game {
     try { localStorage.setItem('verdant_diff', id); } catch (_) {}
     this._updateLoadoutLabel();
   }
-  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'loadout', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'missions', 'loadout', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+
+  // show/hide the Continue (checkpoint) buttons on title + game-over
+  _updateContinueUI() {
+    const has = this.missions.hasProgress();
+    const w = this.missions.maxWave();
+    ['continue-btn', 'continue-btn-over'].forEach((btnId) => {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.classList.toggle('hidden', !has);
+      const span = btn.querySelector('span');
+      if (span) span.textContent = w;
+    });
+  }
 
   _syncWeaponHud() {
     const live = this.weapons.live;
@@ -317,7 +340,9 @@ class Game {
     this.hud.setAmmo(live.ammo, live.reserve);
   }
 
-  start() {
+  start(startWave = 1) {
+    startWave = Math.max(1, Math.floor(startWave) || 1);
+    this.startWave = startWave;
     this.waves.reset();
     this.waves.difficulty = this.difficulty;
     this.player.reset();
@@ -338,7 +363,10 @@ class Game {
     // class-level bonuses (player/game)
     if (this.classMods && this.classMods.apply) this.classMods.apply(this);
     this.shop.reset();
-    this.hud.setCredits(0);
+    // resuming mid-campaign from a checkpoint: hand out a credit head-start so
+    // the player can rearm to match the wave they're dropping into.
+    if (startWave > 1) { this.credits = (startWave - 1) * 60; }
+    this.hud.setCredits(this.credits);
 
     this.hud.setScore(0);
     this.hud.setHealth(this.player.hp, this.player.maxHp);
@@ -355,11 +383,13 @@ class Game {
     this.audio.startMusic();
     this.ach.playedMap(this.world.mapId);
 
+    this.waves.wave = startWave - 1; // startNextWave() bumps to startWave
     const n = this.waves.startNextWave();
-    this._applyWaveStart(n, 'SURVIVE');
+    this._applyWaveStart(n, startWave > 1 ? 'CHECKPOINT' : 'SURVIVE');
   }
 
   _applyWaveStart(n, sub = 'INCOMING') {
+    this.missions.reached(n); // unlock this wave / advance the checkpoint
     this.hud.setWave(n);
     this.hud.popWave(n, this.waves.isBossWave ? '☠ BOSS WAVE ☠' : sub);
     this.audio.wave();
@@ -615,6 +645,20 @@ class Game {
     if (this.player.hp <= 0 && this.state === 'playing') this._gameOver();
   }
 
+  // throttled enemy voice barks as they close in (bosses roar)
+  _enemyBark(enemy) {
+    const now = performance.now ? performance.now() : Date.now();
+    if (enemy.isBoss) {
+      if (now - (this._lastRoar || -9999) < 4000) return;
+      this._lastRoar = now;
+      this.audio.voice('boss');
+      return;
+    }
+    if (now - (this._lastTaunt || -9999) < 2600) return; // avoid a wall of shouting
+    this._lastTaunt = now;
+    this.audio.voice('taunt');
+  }
+
   _onKill(enemy) {
     this.kills++;
     this.streak++;
@@ -628,6 +672,12 @@ class Game {
     if (!head) this.hud.popKill();
     this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}${head ? ' ☠' : ''}  +${pts}`);
     this.audio.kill();
+    // throttled death scream (boss always wails); keeps kills visceral, not noisy
+    const now = performance.now ? performance.now() : Date.now();
+    if (enemy.isBoss) { this.audio.voice('scream'); this._lastScream = now; }
+    else if (now - (this._lastScream || -9999) > 900 && Math.random() < 0.55) {
+      this._lastScream = now; this.audio.voice('scream');
+    }
     // credits + lifesteal
     this.credits += Math.round(enemy.score * 0.12 * this.creditMul * this.difficulty.reward);
     this.hud.setCredits(this.credits);
@@ -686,6 +736,9 @@ class Game {
 
     document.getElementById('over-best').textContent = this.score > best
       ? '★ NEW PERSONAL BEST ★' : `Personal best: ${String(best).padStart(4, '0')}`;
+    // bank the checkpoint so the player can Continue from the wave they fell on
+    this.missions.reached(this.waves.wave);
+    this._updateContinueUI();
     document.getElementById('gameover').classList.remove('hidden');
   }
 
@@ -719,6 +772,7 @@ class Game {
         onWaveCleared: (w) => this._openShop(w),
         onEnemyShoot: (s) => this._spawnEnemyShot(s),
         onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
+        onBark: (e) => this._enemyBark(e),
       });
       this.waves.removeDead((e) => this._onKill(e));
       this.hud.setEnemies(this.waves.remaining);
