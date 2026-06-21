@@ -39,9 +39,27 @@ export const WEAPONS = {
     spread: 0.022, adsSpread: 0.011, recoil: 0.02, recoilYaw: 0.013, kick: 0.03,
     pellets: 1, reload: 3.0, zoom: 1.2, range: 175, tracer: 0xffc060,
   },
+  dmr: {
+    key: 'dmr', name: 'MK-8 DMR', slot: 7, auto: false,
+    dmg: 3, fireRate: 0.26, mag: 12, reserveMax: 96, reserve: 60,
+    spread: 0.006, adsSpread: 0.001, recoil: 0.05, recoilYaw: 0.006, kick: 0.06,
+    pellets: 1, reload: 1.9, zoom: 2.2, range: 260, tracer: 0xfff0b0,
+  },
+  autoshotgun: {
+    key: 'autoshotgun', name: 'AA-12 AUTO', slot: 8, auto: true,
+    dmg: 0.8, fireRate: 0.22, mag: 20, reserveMax: 120, reserve: 80,
+    spread: 0.075, adsSpread: 0.055, recoil: 0.04, recoilYaw: 0.018, kick: 0.05,
+    pellets: 7, reload: 2.6, zoom: 1.1, range: 55, tracer: 0xffb060,
+  },
+  railgun: {
+    key: 'railgun', name: 'ARC-9 RAILGUN', slot: 9, auto: false,
+    dmg: 9, fireRate: 1.25, mag: 4, reserveMax: 32, reserve: 16,
+    spread: 0.0, adsSpread: 0.0, recoil: 0.1, recoilYaw: 0.0, kick: 0.12,
+    pellets: 1, reload: 2.8, zoom: 2.0, range: 320, tracer: 0x66e0ff,
+  },
 };
 
-export const WEAPON_ORDER = ['rifle', 'smg', 'shotgun', 'sniper', 'pistol', 'lmg'];
+export const WEAPON_ORDER = ['rifle', 'smg', 'shotgun', 'sniper', 'pistol', 'lmg', 'dmr', 'autoshotgun', 'railgun'];
 const LEVEL_KEY = 'verdant_weapon_levels';
 const MAX_LEVEL = 10;
 
@@ -93,6 +111,25 @@ function buildModel(kind) {
     add(new THREE.BoxGeometry(0.09, 0.14, 0.26), black, 0, 0, 0);
     add(new THREE.CylinderGeometry(0.018, 0.018, 0.24, 8), black, 0, 0.03, -0.2, Math.PI / 2);
     add(new THREE.BoxGeometry(0.07, 0.18, 0.1), dark, 0, -0.15, 0.06);
+  } else if (kind === 'dmr') {
+    add(new THREE.BoxGeometry(0.11, 0.15, 0.78), black, 0, 0, 0);
+    add(new THREE.CylinderGeometry(0.024, 0.024, 0.95, 8), black, 0, 0.01, -0.55, Math.PI / 2);
+    add(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 10), steel, 0, 0.1, -0.05, Math.PI / 2); // optic
+    add(new THREE.BoxGeometry(0.08, 0.22, 0.12), dark, 0, -0.16, 0.06);
+    add(new THREE.BoxGeometry(0.09, 0.12, 0.32), dark, 0, -0.01, 0.4);
+  } else if (kind === 'autoshotgun') {
+    add(new THREE.BoxGeometry(0.15, 0.18, 0.62), dark, 0, 0, 0);
+    add(new THREE.CylinderGeometry(0.045, 0.045, 0.7, 10), black, 0, 0.04, -0.45, Math.PI / 2);
+    add(new THREE.BoxGeometry(0.16, 0.2, 0.2), steel, 0, -0.04, 0.18); // drum mag
+    add(new THREE.BoxGeometry(0.09, 0.24, 0.14), dark, 0, -0.18, 0.06);
+  } else if (kind === 'railgun') {
+    const glow = new THREE.MeshStandardMaterial({ color: 0x0a2230, roughness: 0.3, metalness: 0.8, emissive: 0x1090c0, emissiveIntensity: 0.6 });
+    add(new THREE.BoxGeometry(0.13, 0.17, 0.7), black, 0, 0, 0);
+    // twin rails
+    add(new THREE.BoxGeometry(0.03, 0.03, 1.0), steel, -0.05, 0.06, -0.5);
+    add(new THREE.BoxGeometry(0.03, 0.03, 1.0), steel, 0.05, 0.06, -0.5);
+    add(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 12), glow, 0, 0.02, 0.12, Math.PI / 2); // energy coil
+    add(new THREE.BoxGeometry(0.08, 0.22, 0.12), dark, 0, -0.16, 0.08);
   } else { // lmg
     add(new THREE.BoxGeometry(0.16, 0.2, 0.7), black, 0, 0, 0);
     // rotary barrels
@@ -107,7 +144,8 @@ function buildModel(kind) {
   const flashMat = new THREE.SpriteMaterial({ color: 0xffe08a, transparent: true, opacity: 0, fog: false, depthTest: false });
   const flash = new THREE.Sprite(flashMat);
   flash.scale.set(0.5, 0.5, 0.5);
-  const muzzleZ = kind === 'sniper' ? -1.1 : kind === 'shotgun' || kind === 'lmg' ? -0.9 : kind === 'pistol' ? -0.35 : -0.8;
+  const muzzleZ = kind === 'sniper' ? -1.1 : kind === 'railgun' ? -1.05 : kind === 'dmr' ? -1.0
+    : (kind === 'shotgun' || kind === 'lmg' || kind === 'autoshotgun') ? -0.9 : kind === 'pistol' ? -0.35 : -0.8;
   flash.position.set(0, 0.02, muzzleZ);
   g.add(flash);
   g.userData.flash = flash;

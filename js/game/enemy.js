@@ -199,9 +199,9 @@ export class Enemy {
     this._fallDir = Math.random() < 0.5 ? 1 : -1;
   }
 
-  // returns { melee, shots, summon }
+  // returns { melee, shots, summon, bark }
   update(dt, target, camera, world) {
-    const result = { melee: false, shots: null, summon: false };
+    const result = { melee: false, shots: null, summon: false, bark: false };
 
     // ---- death / ragdoll animation ----
     if (this.dead) {
@@ -233,6 +233,9 @@ export class Enemy {
     const dz = target.z - g.position.z;
     const dist = Math.hypot(dx, dz);
     g.rotation.y = Math.atan2(dx, dz);
+
+    // first time this enemy closes to engagement range, it barks at the player
+    if (!this._barked && dist < 16) { this._barked = true; result.bark = true; }
 
     if (this._core) this._core.scale.setScalar(1 + Math.sin(this._time = (this._time || 0) + dt * 8) * 0.15);
 
@@ -415,6 +418,7 @@ export class WaveManager {
       const r = e.update(dt, player.position, camera, this.world);
       if (r.melee) callbacks.onPlayerHit(e.dmg);
       if (r.shots) for (const s of r.shots) callbacks.onEnemyShoot(s);
+      if (r.bark && callbacks.onBark) callbacks.onBark(e);
       if (r.summon && e.wantsSummon) {
         e.wantsSummon = false;
         if (this.liveCount < this.maxAlive) {

@@ -148,6 +148,23 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .diff-btn .db-name{font-family:'Orbitron';font-weight:700;color:var(--lime-bright);font-size:.9rem}
 .diff-btn .db-desc{font-size:.78rem;color:var(--muted)}
 
+/* Mission select (checkpoints) */
+.mission-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:10px;width:100%;margin:14px 0}
+.mtile{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;
+  background:rgba(10,18,6,.6);border:2px solid rgba(188,224,74,.22);border-radius:10px;padding:12px 8px;color:var(--text);transition:all .15s}
+.mtile:hover:not(.locked){border-color:var(--lime);transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,.4)}
+.mtile .mt-no{font-family:'Orbitron';font-weight:700;font-size:1.5rem;line-height:1;color:var(--lime-bright)}
+.mtile .mt-lbl{font-family:'Orbitron';font-size:.56rem;letter-spacing:.14em;color:var(--muted)}
+.mtile .mt-state{font-size:.62rem;letter-spacing:.08em;color:var(--gold);margin-top:2px}
+.mtile.boss{border-color:rgba(255,90,80,.4)}
+.mtile.boss .mt-no{color:#ff7a5a}
+.mtile.boss .mt-lbl{color:#ff9a7a}
+.mtile.final{border-color:rgba(255,210,74,.55);background:rgba(40,28,6,.55)}
+.mtile.final .mt-no{color:var(--gold)}
+.mtile.locked{cursor:not-allowed;opacity:.45;filter:grayscale(.5)}
+.mtile.locked .mt-no,.mtile.locked .mt-lbl{color:var(--muted)}
+.mtile.locked .mt-state{color:#7a8a5a}
+
 /* Co-op lobby */
 .coop-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;margin:14px 0}
 .coop-code{font-family:'Orbitron';letter-spacing:.2em;text-transform:uppercase;text-align:center;
