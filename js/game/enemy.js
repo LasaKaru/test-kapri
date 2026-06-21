@@ -70,6 +70,8 @@ export class Enemy {
     upper.position.y = 0.98 * s;
     upper.rotation.x = 0.06; // subtle aggressive lean
     this.group.add(upper);
+    this._upper = upper;
+    this._upperBaseY = 0.98 * s;
 
     const pelvis = box(0.6, 0.42, 0.42, darkMat); pelvis.position.y = 0.02 * s; pelvis.castShadow = true; upper.add(pelvis);
     const torso = box(0.8, 0.86, 0.48, mat); torso.position.y = 0.5 * s; torso.castShadow = true; upper.add(torso);
@@ -90,28 +92,30 @@ export class Enemy {
       upper.add(eye);
     });
 
-    // ---- articulated arms: shoulder-pivoted group of upper arm + forearm + hand
-    this.arms = [];
+    // ---- articulated arms: shoulder group -> upper arm -> elbow group (forearm + hand)
+    this.arms = []; this.elbows = [];
     [-1, 1].forEach((side) => {
       const arm = new THREE.Group();
       arm.position.set(side * 0.55 * s, 0.84 * s, 0);
       const up = box(0.2, 0.5, 0.22, darkMat); up.position.y = -0.25 * s; up.castShadow = true; arm.add(up);
-      const fore = box(0.17, 0.46, 0.19, mat); fore.position.set(0, -0.72 * s, 0.04 * s); fore.castShadow = true; arm.add(fore);
-      const hand = box(0.18, 0.18, 0.18, gearMat); hand.position.set(0, -0.98 * s, 0.06 * s); arm.add(hand);
+      const elbow = new THREE.Group(); elbow.position.y = -0.5 * s; arm.add(elbow);
+      const fore = box(0.17, 0.46, 0.19, mat); fore.position.set(0, -0.23 * s, 0.04 * s); fore.castShadow = true; elbow.add(fore);
+      const hand = box(0.18, 0.18, 0.18, gearMat); hand.position.set(0, -0.48 * s, 0.06 * s); elbow.add(hand);
       upper.add(arm);
-      this.arms.push(arm);
+      this.arms.push(arm); this.elbows.push(elbow);
     });
 
-    // ---- articulated legs: hip-pivoted group of thigh + shin + boot
-    this.legs = [];
+    // ---- articulated legs: hip group -> thigh -> knee group (shin + boot)
+    this.legs = []; this.knees = [];
     [-1, 1].forEach((side) => {
       const leg = new THREE.Group();
       leg.position.set(side * 0.2 * s, 0, 0); // hip ~= upper origin (y 0.98s)
       const thigh = box(0.28, 0.5, 0.3, darkMat); thigh.position.y = -0.27 * s; thigh.castShadow = true; leg.add(thigh);
-      const shin = box(0.22, 0.48, 0.24, darkMat); shin.position.y = -0.74 * s; shin.castShadow = true; leg.add(shin);
-      const boot = box(0.26, 0.16, 0.44, gearMat); boot.position.set(0, -1.0 * s, 0.1 * s); leg.add(boot);
+      const knee = new THREE.Group(); knee.position.y = -0.52 * s; leg.add(knee);
+      const shin = box(0.22, 0.48, 0.24, darkMat); shin.position.y = -0.22 * s; shin.castShadow = true; knee.add(shin);
+      const boot = box(0.26, 0.16, 0.44, gearMat); boot.position.set(0, -0.48 * s, 0.1 * s); knee.add(boot);
       upper.add(leg);
-      this.legs.push(leg);
+      this.legs.push(leg); this.knees.push(knee);
     });
 
     // ranged enemies (and summoner) carry a glowing orb (the muzzle/cast origin)
@@ -199,6 +203,7 @@ export class Enemy {
     this._mat.emissive.setHex(0xffffff);
     this._mat.emissiveIntensity = 1;
     this._flash = 0.1;
+    this._flinch = 0.18; // brief hit reaction (upper-body jerk)
     if (this.hp <= 0) { this._startDeath(); return true; }
     return false;
   }
@@ -210,6 +215,10 @@ export class Enemy {
     // topple direction
     this._fallAxis = Math.random() < 0.5 ? 'x' : 'z';
     this._fallDir = Math.random() < 0.5 ? 1 : -1;
+    // crumple the limbs so the body folds rather than toppling rigid
+    if (this.knees) { this.knees[0].rotation.x = 1.2; this.knees[1].rotation.x = 0.7; }
+    if (this.elbows) { this.elbows[0].rotation.x = 1.0; this.elbows[1].rotation.x = 1.3; }
+    if (this.arms) { this.arms[0].rotation.x = -0.6; this.arms[1].rotation.x = 0.9; }
   }
 
   // returns { melee, shots, summon, bark }
@@ -236,6 +245,11 @@ export class Enemy {
     if (this._flash > 0) {
       this._flash -= dt;
       if (this._flash <= 0) { this._mat.emissive.setHex(0x300000); this._mat.emissiveIntensity = 0.4; }
+    }
+    // hit flinch — brief upper-body jerk back, easing to the resting lean
+    if (this._upper) {
+      if (this._flinch > 0) { this._flinch -= dt; this._upper.rotation.x = 0.06 - 0.28 * (this._flinch / 0.18); }
+      else this._upper.rotation.x = 0.06;
     }
     if (this.attackCd > 0) this.attackCd -= dt;
     if (this.fireCd > 0) this.fireCd -= dt;
@@ -288,14 +302,48 @@ export class Enemy {
       const step = this.speed * dt;
       const r = world.resolve(g.position.x + (ddx / dl) * step, g.position.z + (ddz / dl) * step, this.radius);
       g.position.x = r.x; g.position.z = r.z;
-      this._walk = (this._walk || 0) + dt * this.speed * 1.6;
-      const swing = Math.sin(this._walk) * 0.4;
-      if (this.legs) { this.legs[0].rotation.x = swing; this.legs[1].rotation.x = -swing; }
-      if (this.arms && !this.ranged) { this.arms[0].rotation.x = -swing; this.arms[1].rotation.x = swing; }
+      this._animWalk(dt);
+    } else if (!this.dead) {
+      this._animIdle(dt);
     }
 
     if (this.hbGroup.visible) this.hbGroup.quaternion.copy(camera.quaternion);
     return result;
+  }
+
+  // jointed walk cycle — hips/shoulders swing, knees flex on the recovery,
+  // elbows stay bent, and the torso bobs with each stride
+  _animWalk(dt) {
+    this._walk = (this._walk || 0) + dt * this.speed * 1.6;
+    const w = this._walk, sc = this.def.scale;
+    const swing = Math.sin(w) * 0.5;
+    this.legs[0].rotation.x = swing; this.legs[1].rotation.x = -swing;
+    if (this.knees) {
+      this.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI * 0.5)) * 0.9;
+      this.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI * 0.5)) * 0.9;
+    }
+    if (!this.ranged) {
+      this.arms[0].rotation.x = -swing * 0.8; this.arms[1].rotation.x = swing * 0.8;
+      if (this.elbows) {
+        this.elbows[0].rotation.x = 0.4 + Math.max(0, swing) * 0.5;
+        this.elbows[1].rotation.x = 0.4 + Math.max(0, -swing) * 0.5;
+      }
+    }
+    if (this._upper) this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * 0.06 * sc;
+  }
+
+  // standing idle — gentle breathing bob and limbs easing back to rest
+  _animIdle(dt) {
+    this._idle = (this._idle || 0) + dt;
+    const sc = this.def.scale, k = Math.min(1, dt * 8);
+    if (this._upper) this._upper.position.y = this._upperBaseY + Math.sin(this._idle * 2) * 0.025 * sc;
+    const ease = (o, t) => { if (o) o.rotation.x += (t - o.rotation.x) * k; };
+    ease(this.legs[0], 0); ease(this.legs[1], 0);
+    if (this.knees) { ease(this.knees[0], 0.05); ease(this.knees[1], 0.05); }
+    if (!this.ranged) {
+      ease(this.arms[0], 0); ease(this.arms[1], 0);
+      if (this.elbows) { ease(this.elbows[0], 0.3); ease(this.elbows[1], 0.3); }
+    }
   }
 
   _buildShots(target) {
