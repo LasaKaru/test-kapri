@@ -61,43 +61,56 @@ export class Enemy {
   _buildBody(def) {
     const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.8, flatShading: true, emissive: 0x300000, emissiveIntensity: 0.4 });
     const darkMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x2a0608 : 0x5a0d08, roughness: 0.9, flatShading: true });
+    const gearMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x140305 : 0x3a3026, roughness: 0.85, flatShading: true, metalness: 0.2 });
     const s = def.scale;
+    const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w * s, h * s, d * s), m);
 
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9 * s, 1.1 * s, 0.55 * s), mat);
-    torso.position.y = 1.15 * s; torso.castShadow = true;
-    this.group.add(torso);
+    // ---- torso: pelvis + chest + a strapped vest, with a slight forward hunch
+    const upper = new THREE.Group();
+    upper.position.y = 0.98 * s;
+    upper.rotation.x = 0.06; // subtle aggressive lean
+    this.group.add(upper);
 
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.55 * s, 0.55 * s, 0.55 * s), mat);
-    head.position.y = 1.95 * s; head.castShadow = true;
-    head.userData.zone = 'head';
-    this.group.add(head);
+    const pelvis = box(0.6, 0.42, 0.42, darkMat); pelvis.position.y = 0.02 * s; pelvis.castShadow = true; upper.add(pelvis);
+    const torso = box(0.8, 0.86, 0.48, mat); torso.position.y = 0.5 * s; torso.castShadow = true; upper.add(torso);
+    const vest = box(0.7, 0.5, 0.16, gearMat); vest.position.set(0, 0.52 * s, 0.27 * s); upper.add(vest); // chest plate
+    const shoulders = box(1.0, 0.26, 0.42, mat); shoulders.position.y = 0.86 * s; shoulders.castShadow = true; upper.add(shoulders);
+    const neck = box(0.2, 0.18, 0.2, darkMat); neck.position.y = 1.0 * s; upper.add(neck);
 
-    // glowing eyes (boss/spitter glow a different hue)
+    // ---- head (carries the headshot zone) + brow + glowing eyes
+    const head = box(0.5, 0.5, 0.5, mat);
+    head.position.y = 1.28 * s; head.castShadow = true; head.userData.zone = 'head';
+    upper.add(head);
+    const brow = box(0.54, 0.12, 0.12, gearMat); brow.position.set(0, 1.4 * s, 0.22 * s); upper.add(brow);
     const eyeHex = this.ranged ? (this.isBoss ? 0xff5050 : 0xff66ff) : 0xffdd33;
     const eyeMat = new THREE.MeshBasicMaterial({ color: eyeHex });
-    [-0.13, 0.13].forEach((ex) => {
-      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.1 * s, 0.1 * s, 0.05), eyeMat);
-      eye.position.set(ex * s, 1.97 * s, 0.28 * s);
-      this.group.add(eye);
+    [-0.12, 0.12].forEach((ex) => {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.11 * s, 0.09 * s, 0.05), eyeMat);
+      eye.position.set(ex * s, 1.26 * s, 0.26 * s);
+      upper.add(eye);
     });
 
-    // arms
+    // ---- articulated arms: shoulder-pivoted group of upper arm + forearm + hand
     this.arms = [];
     [-1, 1].forEach((side) => {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.24 * s, 0.95 * s, 0.24 * s), darkMat);
-      arm.position.set(side * 0.62 * s, 1.2 * s, 0.1 * s);
-      arm.castShadow = true;
-      this.group.add(arm);
+      const arm = new THREE.Group();
+      arm.position.set(side * 0.55 * s, 0.84 * s, 0);
+      const up = box(0.2, 0.5, 0.22, darkMat); up.position.y = -0.25 * s; up.castShadow = true; arm.add(up);
+      const fore = box(0.17, 0.46, 0.19, mat); fore.position.set(0, -0.72 * s, 0.04 * s); fore.castShadow = true; arm.add(fore);
+      const hand = box(0.18, 0.18, 0.18, gearMat); hand.position.set(0, -0.98 * s, 0.06 * s); arm.add(hand);
+      upper.add(arm);
       this.arms.push(arm);
     });
 
-    // legs
+    // ---- articulated legs: hip-pivoted group of thigh + shin + boot
     this.legs = [];
     [-1, 1].forEach((side) => {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3 * s, 0.9 * s, 0.3 * s), darkMat);
-      leg.position.set(side * 0.24 * s, 0.45 * s, 0);
-      leg.castShadow = true;
-      this.group.add(leg);
+      const leg = new THREE.Group();
+      leg.position.set(side * 0.2 * s, 0, 0); // hip ~= upper origin (y 0.98s)
+      const thigh = box(0.28, 0.5, 0.3, darkMat); thigh.position.y = -0.27 * s; thigh.castShadow = true; leg.add(thigh);
+      const shin = box(0.22, 0.48, 0.24, darkMat); shin.position.y = -0.74 * s; shin.castShadow = true; leg.add(shin);
+      const boot = box(0.26, 0.16, 0.44, gearMat); boot.position.set(0, -1.0 * s, 0.1 * s); leg.add(boot);
+      upper.add(leg);
       this.legs.push(leg);
     });
 
@@ -120,7 +133,7 @@ export class Enemy {
         new THREE.SphereGeometry(0.3 * s, 10, 8),
         new THREE.MeshBasicMaterial({ color: 0xffff66 })
       );
-      core.position.y = 1.15 * s;
+      core.position.y = 1.45 * s;
       this.group.add(core);
       this._core = core;
     }
@@ -144,7 +157,7 @@ export class Enemy {
       });
     }
 
-    this.bodyHeight = 2.3 * s;
+    this.bodyHeight = 2.5 * s;
     this._mat = mat;
   }
 
