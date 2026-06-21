@@ -28,6 +28,23 @@ topography (ridgelines, valleys, lowland basins) that differs per map.
 Difficulty (**Recruit / Veteran / Nightmare**) scales enemy health, speed,
 damage, head-count and rewards.
 
+The world is **alive**: real-time **wind-animated grass** (vertex shader),
+flocks of **birds** wheeling overhead, **animals** that roam and flee the player,
+and **enterable buildings** — hollow structures with a doorway you can walk
+through and fight inside.
+
+### ⚡ Server scaling
+
+The optional server is built to take load with no dependencies:
+
+- **In-memory cache** over an **append-only JSONL** log — the read hot path
+  never touches disk, and single-line appends are atomic/multi-writer safe.
+- **Per-IP rate limiting** (configurable via `RL_MAX` / `RL_WINDOW`, `0` disables).
+- **Multi-core clustering** — `CLUSTER=auto node server/server.js` forks one HTTP
+  worker per core (workers stay consistent through the shared append-only log;
+  realtime chat/co-op run a single-process instance or behind a sticky LB).
+- Keep-alive, payload caps, auto-restart of crashed workers.
+
 ### 🛰️ Tactical map
 
 Press **M** (or the on-screen MAP button) — anytime on the title or mid-match —
