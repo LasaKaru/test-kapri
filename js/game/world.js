@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Critters } from './critters.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -110,6 +111,7 @@ export class World {
     this._buildWater();
     this._scatterRocks();
     this._scatterGrass();
+    this._critters = new Critters(this.root, this);
   }
 
   // ---------- Sky ----------
@@ -594,35 +596,48 @@ export class World {
     }
   }
 
+  // hollow, enterable building: 4 walls (doorway gap on the +z side), floor, roof
   _building(x, z, w, h, d, color, rot = 0) {
     const g = new THREE.Group();
     const wallMat = new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-    body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true; g.add(body);
+    const t = 0.4, door = 2.6;
 
-    // broken roofline (a couple of offset slabs)
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 1.05, 0.5, d * 1.05), new THREE.MeshStandardMaterial({ color: 0x3a352c, roughness: 1, flatShading: true }));
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, d), new THREE.MeshStandardMaterial({ color: 0x2a2620, roughness: 1, flatShading: true }));
+    floor.position.y = 0.1; floor.receiveShadow = true; g.add(floor);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 1.06, 0.5, d * 1.06), new THREE.MeshStandardMaterial({ color: 0x3a352c, roughness: 1, flatShading: true }));
     roof.position.y = h + 0.2; roof.castShadow = true; g.add(roof);
 
-    // glowing windows
-    const winMat = new THREE.MeshStandardMaterial({ color: 0x120c06, emissive: 0xffb14a, emissiveIntensity: 0.7, roughness: 0.6 });
-    const rows = Math.max(1, Math.floor(h / 3)), cols = Math.max(1, Math.floor(w / 2.5));
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (Math.random() < 0.25) continue; // some dark/broken
-        const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.1), winMat.clone());
-        win.material.emissiveIntensity = 0.3 + Math.random() * 0.7;
-        const wx = -w / 2 + 1.3 + c * (w - 2.6) / Math.max(1, cols - 1);
-        const wy = 1.6 + r * 2.6;
-        win.position.set(wx, wy, d / 2 + 0.01);
-        g.add(win);
-        const win2 = win.clone(); win2.position.z = -d / 2 - 0.01; g.add(win2);
-      }
+    const mkWall = (gw, gd, px, pz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(gw, h, gd), wallMat); m.position.set(px, h / 2, pz); m.castShadow = true; m.receiveShadow = true; g.add(m); };
+    mkWall(w, t, 0, -d / 2);          // back
+    mkWall(t, d, -w / 2, 0);          // left
+    mkWall(t, d, w / 2, 0);           // right
+    const seg = (w - door) / 2;       // front split around the doorway
+    mkWall(seg, t, -(door / 2 + seg / 2), d / 2);
+    mkWall(seg, t, (door / 2 + seg / 2), d / 2);
+    // lintel above the doorway
+    const lintH = Math.max(0.6, h - 2.6);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(door, lintH, t), wallMat);
+    lintel.position.set(0, h - lintH / 2, d / 2); g.add(lintel);
+
+    // glowing windows on the back & side walls
+    const winMat = new THREE.MeshStandardMaterial({ color: 0x120c06, emissive: 0xffb14a, emissiveIntensity: 0.6, roughness: 0.6 });
+    const cols = Math.max(1, Math.floor(w / 3));
+    for (let c = 0; c < cols; c++) {
+      if (Math.random() < 0.3) continue;
+      const wx = -w / 2 + 1.6 + c * (w - 3.2) / Math.max(1, cols - 1);
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.12), winMat.clone());
+      win.material.emissiveIntensity = 0.3 + Math.random() * 0.6;
+      win.position.set(wx, 1.7, -d / 2); g.add(win);
     }
+
     g.position.set(x, 0, z); g.rotation.y = rot;
     this.root.add(g);
-    // collider (approximate radius)
-    this.colliders.push({ x, z, r: Math.max(w, d) * 0.55 });
+
+    // wall colliders (skip the doorway) — local->world rotated by rot
+    const cs = Math.cos(rot), sn = Math.sin(rot);
+    const place = (lx, lz) => this.colliders.push({ x: x + lx * cs + lz * sn, z: z - lx * sn + lz * cs, r: 0.7 });
+    for (let i = -w / 2; i <= w / 2 + 0.01; i += 1.3) { place(i, -d / 2); if (Math.abs(i) > door / 2) place(i, d / 2); }
+    for (let j = -d / 2 + 1.3; j <= d / 2 - 1.3; j += 1.3) { place(-w / 2, j); place(w / 2, j); }
   }
 
   _watchtower(x, z) {
@@ -744,17 +759,30 @@ export class World {
 
   _scatterGrass() {
     const bladeMat = new THREE.MeshStandardMaterial({ color: 0x86b32a, roughness: 1, flatShading: true, side: THREE.DoubleSide });
-    const blade = new THREE.ConeGeometry(0.18, 0.9, 3);
+    // real-time wind: sway each blade's top by world position + time
+    bladeMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = this._windTime = (this._windTime || { value: 0 });
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         vec4 wpos = instanceMatrix * vec4(0.0,0.0,0.0,1.0);
+         float sway = sin(uTime*1.6 + wpos.x*0.25 + wpos.z*0.2) * 0.18 + sin(uTime*2.7 + wpos.z*0.4)*0.07;
+         transformed.x += sway * max(0.0, position.y);`
+      );
+    };
+    const blade = new THREE.ConeGeometry(0.16, 1.0, 3);
+    blade.translate(0, 0.5, 0); // pivot at base so the top sways
     const mesh = new THREE.InstancedMesh(blade, bladeMat, this.map.grass);
     const dummy = new THREE.Object3D();
     for (let i = 0; i < this.map.grass; i++) {
       const ang = Math.random() * Math.PI * 2, dist = 4 + Math.random() * 90;
       const gx = Math.cos(ang) * dist, gz = Math.sin(ang) * dist;
-      dummy.position.set(gx, 0.4, gz);
+      dummy.position.set(gx, 0, gz);
       dummy.rotation.y = Math.random() * Math.PI;
       dummy.scale.setScalar(this.waterAt(gx, gz) ? 0 : 0.6 + Math.random());
       dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     }
+    mesh.frustumCulled = false;
     this.root.add(mesh);
   }
 
@@ -830,6 +858,8 @@ export class World {
 
   update(dt, camera) {
     this._time += dt;
+    if (this._windTime) this._windTime.value = this._time;
+    if (this._critters) this._critters.update(dt, camera);
     for (const c of this._clouds) {
       c.s.position.x += c.speed * dt;
       if (c.s.position.x > 320) c.s.position.x = -320;

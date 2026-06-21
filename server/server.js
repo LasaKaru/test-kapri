@@ -1,24 +1,31 @@
 #!/usr/bin/env node
 // VERDANT online server — pure Node, ZERO npm dependencies.
-// Serves the static client AND a small leaderboard API.
-// Run:  node server/server.js   (defaults to http://localhost:8080)
+// Serves the static client AND a small leaderboard API + realtime (chat/co-op).
+//
+// Built to take load: in-memory cache, atomic append-only writes, per-IP rate
+// limiting, and optional multi-core clustering (CLUSTER=auto|<n>).
+//   node server/server.js                 # single process (realtime enabled)
+//   CLUSTER=auto node server/server.js     # fork one HTTP worker per CPU core
 //
 // The client treats this as entirely optional: if the server is down, the
 // game still runs as full single-player and reports "offline".
 'use strict';
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const url = require('url');
+const cluster = require('cluster');
 const ws = require('./ws');
 
 const PORT = process.env.PORT || 8080;
 const ROOT = path.join(__dirname, '..');           // repo root (static client)
 const DATA_DIR = path.join(__dirname, 'data');
-const SCORES_FILE = path.join(DATA_DIR, 'scores.json');
+const SCORES_FILE = path.join(DATA_DIR, 'scores.jsonl'); // append-only (multi-writer safe)
+const CLUSTERED = !!process.env.CLUSTER;
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(SCORES_FILE)) fs.writeFileSync(SCORES_FILE, '[]');
+if (!fs.existsSync(SCORES_FILE)) fs.writeFileSync(SCORES_FILE, '');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -26,13 +33,52 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon',
 };
 
-function readScores() {
-  try { return JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8')) || []; } catch (_) { return []; }
+// ---- scores: in-memory cache over an append-only JSONL log ----
+// Reads are served from RAM; the cache reloads only when the file changes, so
+// the hot path never touches disk. Writes append a single atomic line.
+let _cache = [];
+let _cacheSize = -1;
+function refreshScores() {
+  let st; try { st = fs.statSync(SCORES_FILE); } catch (_) { return; }
+  if (st.size === _cacheSize) return;           // unchanged -> serve from RAM
+  try {
+    const lines = fs.readFileSync(SCORES_FILE, 'utf8').split('\n');
+    const out = [];
+    for (const ln of lines) { if (!ln) continue; try { out.push(JSON.parse(ln)); } catch (_) {} }
+    _cache = out; _cacheSize = st.size;
+    if (_cache.length > 6000) rotate();          // keep the log bounded
+  } catch (_) {}
 }
-function writeScores(list) {
-  try { fs.writeFileSync(SCORES_FILE, JSON.stringify(list.slice(0, 2000))); } catch (_) {}
+function rotate() {
+  _cache.sort((a, b) => b.score - a.score);
+  _cache = _cache.slice(0, 2000);
+  try { fs.writeFileSync(SCORES_FILE, _cache.map((s) => JSON.stringify(s)).join('\n') + '\n'); _cacheSize = -1; } catch (_) {}
 }
+function appendScore(entry) {
+  try { fs.appendFileSync(SCORES_FILE, JSON.stringify(entry) + '\n'); _cacheSize = -1; } catch (_) {}
+}
+function topScores(map, diff) {
+  refreshScores();
+  let list = _cache;
+  if (map) list = list.filter((s) => s.map === map);
+  if (diff) list = list.filter((s) => s.diff === diff);
+  return list.slice().sort((a, b) => b.score - a.score).slice(0, 20);
+}
+
 function clean(s, max) { return String(s == null ? '' : s).replace(/[^A-Za-z0-9_ -]/g, '').slice(0, max); }
+
+// ---- per-IP rate limiter (fixed window; configurable, 0 disables) ----
+const RL_WINDOW = parseInt(process.env.RL_WINDOW, 10) || 10000;
+const RL_MAX = process.env.RL_MAX != null ? parseInt(process.env.RL_MAX, 10) : 120;
+const rl = new Map();
+function rateLimited(ip) {
+  if (RL_MAX <= 0) return false;
+  const now = Date.now();
+  let e = rl.get(ip);
+  if (!e || now - e.t > RL_WINDOW) { e = { t: now, n: 0 }; rl.set(ip, e); }
+  return ++e.n > RL_MAX;
+}
+setInterval(() => { const now = Date.now(); for (const [k, e] of rl) if (now - e.t > RL_WINDOW) rl.delete(k); }, 30000).unref();
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -48,11 +94,7 @@ function handleApi(req, res, parsed) {
 
   if (p === '/leaderboard' && req.method === 'GET') {
     const q = parsed.query || {};
-    let list = readScores();
-    if (q.map) list = list.filter((s) => s.map === q.map);
-    if (q.diff) list = list.filter((s) => s.diff === q.diff);
-    list.sort((a, b) => b.score - a.score);
-    return sendJSON(res, 200, { scores: list.slice(0, 20) });
+    return sendJSON(res, 200, { scores: topScores(q.map, q.diff) });
   }
 
   if (p === '/scores' && req.method === 'POST') {
@@ -62,15 +104,13 @@ function handleApi(req, res, parsed) {
       let e; try { e = JSON.parse(body); } catch (_) { return sendJSON(res, 400, { error: 'bad json' }); }
       const entry = {
         name: clean(e.name, 12) || 'GHOST',
-        score: Math.max(0, Math.min(9_999_999, parseInt(e.score, 10) || 0)),
+        score: Math.max(0, Math.min(9999999, parseInt(e.score, 10) || 0)),
         wave: Math.max(1, Math.min(9999, parseInt(e.wave, 10) || 1)),
         kills: Math.max(0, Math.min(99999, parseInt(e.kills, 10) || 0)),
         map: clean(e.map, 16), diff: clean(e.diff, 16),
         ts: Date.now(),
       };
-      const list = readScores();
-      list.push(entry);
-      writeScores(list);
+      appendScore(entry);
       return sendJSON(res, 200, { ok: true });
     });
     return;
@@ -165,12 +205,31 @@ function handleCoop(conn) {
   };
 }
 
-const server = http.createServer((req, res) => {
-  const parsed = url.parse(req.url, true);
-  if (parsed.pathname.startsWith('/api')) return handleApi(req, res, parsed);
-  return serveStatic(req, res, parsed);
-});
-ws.attach(server, (pathname) => (pathname === '/api/chat' ? handleChat : pathname === '/api/coop' ? handleCoop : null));
-server.listen(PORT, () => {
-  console.log(`VERDANT server on http://localhost:${PORT}  (API /api, chat ws /api/chat, scores -> server/data/scores.json)`);
-});
+function startWorker() {
+  const server = http.createServer((req, res) => {
+    // per-IP rate limit on the API (static assets are exempt)
+    if (req.url.startsWith('/api')) {
+      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      if (rateLimited(ip)) { cors(res); res.writeHead(429, { 'Content-Type': 'application/json' }); return res.end('{"error":"rate limited"}'); }
+    }
+    const parsed = url.parse(req.url, true);
+    if (parsed.pathname.startsWith('/api')) return handleApi(req, res, parsed);
+    return serveStatic(req, res, parsed);
+  });
+  server.keepAliveTimeout = 15000;
+  // realtime (chat/co-op) needs shared in-process state -> single process only.
+  if (!CLUSTERED) ws.attach(server, (pn) => (pn === '/api/chat' ? handleChat : pn === '/api/coop' ? handleCoop : null));
+  server.listen(PORT, () => {
+    const who = cluster.worker ? `worker ${cluster.worker.id}` : 'single process';
+    console.log(`VERDANT server (${who}) on http://localhost:${PORT}  [realtime: ${CLUSTERED ? 'use single process' : 'on'}]`);
+  });
+}
+
+if (CLUSTERED && cluster.isPrimary) {
+  const n = process.env.CLUSTER === 'auto' ? os.cpus().length : Math.max(1, parseInt(process.env.CLUSTER, 10) || 1);
+  console.log(`VERDANT clustered: forking ${n} HTTP workers (realtime/chat/co-op run a separate single-process instance)`);
+  for (let i = 0; i < n; i++) cluster.fork();
+  cluster.on('exit', () => cluster.fork()); // auto-restart
+} else {
+  startWorker();
+}
