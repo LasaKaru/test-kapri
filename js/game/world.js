@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Critters } from './critters.js';
+import { plantFlora } from './flora.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -111,8 +112,14 @@ export class World {
     this._buildWater();
     this._scatterRocks();
     this._scatterGrass();
+    this._scatterFlora();
     this._buildBase();
     this._critters = new Critters(this.root, this);
+  }
+
+  _scatterFlora() {
+    const cols = plantFlora(this);
+    for (const c of cols) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
   }
 
   // ---------- Enemy base (vehicle attack objective) ----------
