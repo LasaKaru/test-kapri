@@ -118,8 +118,30 @@ export class World {
   }
 
   _scatterFlora() {
-    const cols = plantFlora(this);
-    for (const c of cols) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
+    if (this._floraDensity == null) this._floraDensity = 1;
+    const { group, colliders } = plantFlora(this, this._floraDensity);
+    this._floraGroup = group;
+    this._floraColliders = new Set();
+    this.root.add(group);
+    for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) { this.colliders.push(c); this._floraColliders.add(c); }
+  }
+
+  // density: 0..1.5 (Foliage Density setting). Rebuilds the instanced flora.
+  setFloraDensity(factor) {
+    factor = Math.max(0, factor);
+    if (this._floraGroup && this._floraDensity === factor) return; // no change
+    this._floraDensity = factor;
+    clearTimeout(this._floraT);
+    this._floraT = setTimeout(() => this._rebuildFlora(), 120);
+  }
+  _rebuildFlora() {
+    if (this._floraGroup) {
+      this.root.remove(this._floraGroup);
+      this._floraGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      const mat = this._floraGroup.userData.floraMat; if (mat) mat.dispose();
+    }
+    if (this._floraColliders) this.colliders = this.colliders.filter((c) => !this._floraColliders.has(c));
+    this._scatterFlora();
   }
 
   // ---------- Enemy base (vehicle attack objective) ----------
