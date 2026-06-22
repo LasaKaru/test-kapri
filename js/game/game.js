@@ -115,6 +115,13 @@ class Game {
     this._updateLoadoutLabel();
     this._updateContinueUI();
 
+    // crisp UI click on any menu button / card (first click also unlocks audio)
+    document.addEventListener('pointerdown', (e) => {
+      if (e.target && e.target.closest && e.target.closest('.btn, .map-card, .mtile, .diff-btn, .lo-chip, .olb-filter, .lb-tab, .nav a, .set-toggle')) {
+        try { this.audio.ui('click'); } catch (_) {}
+      }
+    }, true);
+
     this.clock = new THREE.Clock();
     this._resize();
     this._bindUI();

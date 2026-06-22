@@ -44,13 +44,15 @@ Settings → *Cinematic Menu* switch; click/any key skips the intro).
 
 ### ⚡ Server scaling
 
-The optional server is built to take load with no dependencies:
+The optional server is built to take load with no npm dependencies:
 
-- **In-memory cache** over an **append-only JSONL** log — the read hot path
-  never touches disk, and single-line appends are atomic/multi-writer safe.
+- **Global leaderboard via Supabase** (REST) — set `SUPABASE_URL` / `SUPABASE_KEY`
+  and scores POST/GET against a `leaderboard` table (top 20 by score, filterable
+  by map/difficulty). With no credentials the leaderboard simply returns empty
+  and the client uses your **local** scores — single-player is never affected.
 - **Per-IP rate limiting** (configurable via `RL_MAX` / `RL_WINDOW`, `0` disables).
 - **Multi-core clustering** — `CLUSTER=auto node server/server.js` forks one HTTP
-  worker per core (workers stay consistent through the shared append-only log;
+  worker per core (the leaderboard store is remote, so workers stay consistent;
   realtime chat/co-op run a single-process instance or behind a sticky LB).
 - Keep-alive, payload caps, auto-restart of crashed workers.
 
@@ -195,9 +197,11 @@ A **dependency-free** Node server (`server/`) hosts the client *and* the API:
 node server/server.js          # http://localhost:8080
 ```
 
-Then open `http://localhost:8080/` — the pill turns **ONLINE**, scores sync and
-**chat** goes live (WebSocket at `/api/chat`, implemented in pure Node).
-Leaderboard data persists to `server/data/scores.json`. No `npm install` needed.
+Then open `http://localhost:8080/` — the pill turns **ONLINE** and **chat** /
+**co-op** go live (WebSockets at `/api/chat` and `/api/coop`, pure Node). The
+global leaderboard persists to **Supabase** when `SUPABASE_URL` / `SUPABASE_KEY`
+are set (otherwise it stays empty and the client uses local scores). No
+`npm install` needed.
 
 To point the static client at a remote server, set `window.VERDANT_SERVER` or
 `localStorage.verdant_server` to its base URL. With no server, everything still

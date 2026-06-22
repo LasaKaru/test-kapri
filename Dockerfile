@@ -6,8 +6,8 @@ WORKDIR /app
 # copy the whole repo (client is static; server is server/)
 COPY . .
 
-# leaderboard data lives here (mount a volume to persist it)
-VOLUME /app/server/data
+# The global leaderboard is stored in Supabase (set SUPABASE_URL / SUPABASE_KEY
+# at runtime); the container is stateless, so no volume is required.
 ENV PORT=8080
 EXPOSE 8080
 
