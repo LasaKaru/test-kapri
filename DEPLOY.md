@@ -44,16 +44,19 @@ thing at `http://<host>:8080/`.
 ```bash
 node server/server.js          # http://localhost:8080
 ```
-No install step — there are no dependencies. Requires Node 16+.
+No install step — there are no dependencies. Requires **Node 18+** (the server
+uses the built-in global `fetch` for the Supabase REST calls). For a global
+leaderboard, set `SUPABASE_URL` and `SUPABASE_KEY` (see Configuration below).
 
 ### 2. Docker (recommended for servers)
 ```bash
 docker build -t verdant .
 docker run -d --name verdant -p 80:8080 \
-  -v verdant-data:/app/server/data \
+  -e SUPABASE_URL="https://xxxx.supabase.co" -e SUPABASE_KEY="<key>" \
   --restart unless-stopped verdant
 ```
-- `-v verdant-data:/app/server/data` persists the leaderboard across restarts.
+- The leaderboard is stored in Supabase, so **no volume is required** — instances
+  are stateless. Omit the env vars to run without an online leaderboard.
 - Visit `http://<host>/`.
 
 ### 3. A bare VPS with systemd
@@ -78,7 +81,8 @@ sudo systemctl enable --now verdant
 ### 4. PaaS (Render / Railway / Fly.io)
 - **Start command:** `node server/server.js`
 - **No build command.** **Port:** `8080` (or read `$PORT` — the server already does).
-- Add a **persistent disk/volume** mounted at `server/data` for the leaderboard.
+- Set `SUPABASE_URL` / `SUPABASE_KEY` env vars for the global leaderboard
+  (no persistent disk needed — the store is remote).
 - WebSockets (chat/co-op) work out of the box on these platforms.
 
 ---
@@ -112,17 +116,23 @@ server {
 | Var | Default | Purpose |
 | --- | ------- | ------- |
 | `PORT` | `8080` | Listen port |
+| `SUPABASE_URL` | *(none)* | Supabase project URL — enables the global leaderboard |
+| `SUPABASE_KEY` | *(none)* | Supabase API key (service/anon) used for the REST calls |
 | `RL_MAX` | `120` | Max API requests / window per IP (`0` disables) |
 | `RL_WINDOW` | `10000` | Rate-limit window in ms |
 | `CLUSTER` | *(off)* | `auto` (one HTTP worker per core) or a number |
 
+> **Leaderboard storage:** scores are stored in a Supabase `leaderboard` table
+> over REST (columns: `name, score, wave, kills, map, diff, ts`). Set
+> `SUPABASE_URL` + `SUPABASE_KEY` to enable it. **Without them the leaderboard is
+> simply disabled** (returns empty) and the client falls back to local scores —
+> no persistent disk/volume is needed.
+
 ### Scaling for heavy traffic
-- The leaderboard API is the hot path. It serves from an **in-memory cache** over
-  an **append-only log**, so reads never hit disk.
-- **Vertically:** `CLUSTER=auto node server/server.js` forks one HTTP worker per
-  core; workers stay consistent via the shared append-only file.
-- **Horizontally:** run multiple instances behind a load balancer. For the
-  leaderboard, point them at a shared volume (or swap the JSONL store for a DB).
+- The leaderboard store is **remote (Supabase)**, so it scales independently and
+  every worker/instance shares the same data with no local state.
+- **Vertically:** `CLUSTER=auto node server/server.js` forks one HTTP worker per core.
+- **Horizontally:** run multiple stateless instances behind a load balancer.
   **Realtime (chat/co-op) must use sticky sessions** (or a single realtime
   instance) because room state is in-process — run one non-clustered instance for
   `/api/chat` + `/api/coop`, and clustered instances for the rest.
