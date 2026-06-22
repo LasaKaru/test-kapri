@@ -24,6 +24,7 @@ import { Shop } from './shop.js';
 import { TouchControls } from './touch.js';
 import { Vehicles } from './vehicles.js';
 import { Cheats } from './cheats.js';
+import { Cinematic } from './cinematic.js';
 
 const BASE_FOV = 75;
 
@@ -107,6 +108,8 @@ class Game {
     this.touch = new TouchControls(this);
     this.vehicles = new Vehicles(this);
     this.cheats = new Cheats(this);
+    this.cinematic = new Cinematic(this);
+    this.cinematicEnabled = true;
     this.godmode = false;
     this.cheatArsenal = false;
     this._updateLoadoutLabel();
@@ -121,6 +124,7 @@ class Game {
     requestAnimationFrame(() => {
       document.getElementById('loading').classList.add('hidden');
       this._render();
+      this._startIntro();
     });
 
     this.loop = this.loop.bind(this);
@@ -331,6 +335,35 @@ class Game {
   }
   _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'missions', 'loadout', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
+  // ---- cinematic studio intro (plays once on load) ----
+  _startIntro() {
+    const el = document.getElementById('intro');
+    if (!el) return;
+    if (!this.cinematicEnabled) { el.classList.add('hidden'); return; }
+    const studio = el.querySelector('.intro-studio');
+    const logo = el.querySelector('.intro-logo');
+    el.classList.remove('hidden');
+    const skip = () => this._skipIntro();
+    this._introSkip = skip;
+    el.addEventListener('click', skip);
+    window.addEventListener('keydown', skip, { once: true });
+    // staged timeline (ms)
+    this._introTimers = [
+      setTimeout(() => studio.classList.add('show'), 250),
+      setTimeout(() => studio.classList.remove('show'), 2200),
+      setTimeout(() => logo.classList.add('show'), 2600),
+      setTimeout(() => el.classList.add('fade'), 4200),
+      setTimeout(() => el.classList.add('hidden'), 4900),
+    ];
+  }
+  _skipIntro() {
+    const el = document.getElementById('intro');
+    if (!el || el.classList.contains('hidden')) return;
+    (this._introTimers || []).forEach(clearTimeout);
+    el.classList.add('fade');
+    setTimeout(() => el.classList.add('hidden'), 500);
+  }
+
   // show/hide the Continue (checkpoint) buttons on title + game-over
   _updateContinueUI() {
     const has = this.missions.hasProgress();
@@ -395,11 +428,13 @@ class Game {
 
     this._hideOverlays();
     this.hud.show();
-    this.state = 'playing';
     this._requestLock();
     this.audio._ensure();
     this.audio.startMusic();
     this.ach.playedMap(this.world.mapId);
+    // brief cinematic drop-in (skipped in co-op so the squad stays in sync)
+    if (this.cinematicEnabled && !this.coopMode) this._beginDeploy();
+    else this.state = 'playing';
 
     if (this.coopMode && !this.coopHost) {
       // co-op client: the host runs the wave sim; we mirror ghost enemies.
@@ -411,6 +446,29 @@ class Game {
       const n = this.waves.startNextWave();
       this._applyWaveStart(n, startWave > 1 ? 'CHECKPOINT' : (this.coopMode ? 'CO-OP' : 'SURVIVE'));
     }
+  }
+
+  // short camera sweep from the sky down to the player when a run begins
+  _beginDeploy() {
+    const p = this.player;
+    const fwd = new THREE.Vector3(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
+    this._depT = 0;
+    this._depStart = new THREE.Vector3(p.position.x - fwd.x * 10, p.position.y + 24, p.position.z - fwd.z * 10);
+    this._depEnd = new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight, p.position.z);
+    this._depLook0 = new THREE.Vector3(p.position.x, p.position.y + 1, p.position.z);
+    this._depLook1 = this._depEnd.clone().add(fwd.clone().multiplyScalar(20));
+    this.state = 'deploy';
+    this.audio.wave();
+  }
+  _updateDeploy(dt) {
+    this._depT += dt;
+    const k = Math.min(1, this._depT / 1.7);
+    const e = k * k * (3 - 2 * k);
+    this.camera.position.lerpVectors(this._depStart, this._depEnd, e);
+    this.camera.lookAt(this._depLook0.clone().lerp(this._depLook1, e));
+    this.world.update(dt, this.camera);
+    this.effects.update(dt, this.player.position);
+    if (k >= 1) this.state = 'playing';
   }
 
   // ---- co-op deploy / lifecycle (gated; single-player never reaches here) ----
@@ -959,11 +1017,17 @@ class Game {
         this.shake *= Math.max(0, 1 - dt * 6);
       }
     } else if (this.state === 'title') {
-      this._idleT = (this._idleT || 0) + dt;
-      this.camera.position.set(0, this.player.eyeHeight, 30);
-      this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
+      if (this.cinematicEnabled) {
+        this.cinematic.update(dt);
+      } else {
+        this._idleT = (this._idleT || 0) + dt;
+        this.camera.position.set(0, this.player.eyeHeight, 30);
+        this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
+      }
       this.world.update(dt, this.camera);
       this.effects.update(dt, this.camera.position);
+    } else if (this.state === 'deploy') {
+      this._updateDeploy(dt);
     } else if (this.state === 'shop') {
       // keep the world alive behind the shop overlay
       this.world.update(dt, this.camera);

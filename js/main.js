@@ -56,6 +56,7 @@
     ['gunsmith', 'Gunsmith', 'Level a weapon to LV5'],
     ['globetrotter', 'Globetrotter', 'Fight on every map'],
     ['nightmare', 'Nightmare', 'Clear a wave on Nightmare'],
+    ['basebuster', 'Base Buster', 'Destroy the enemy base'],
   ];
   const achHost = document.getElementById('ach-gallery');
   if (achHost) {

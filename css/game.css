@@ -3,6 +3,23 @@
   --lime:#bce04a;--lime-bright:#d8ff5e;--gold:#ffcf4a;--crimson:#e03a2f;
   --text:#e9f3d6;--muted:#9bb07e;
 }
+
+/* Cinematic studio intro */
+.intro{position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#04070a;
+  color:var(--lime-bright);transition:opacity .6s ease}
+.intro.hidden{display:none}
+.intro.fade{opacity:0;pointer-events:none}
+.intro-stage{position:absolute;display:flex;flex-direction:column;align-items:center;gap:6px;
+  opacity:0;transform:translateY(8px) scale(.98);transition:opacity 1s ease,transform 1s ease;text-align:center}
+.intro-stage.show{opacity:1;transform:none}
+.intro-emblem{color:var(--lime);filter:drop-shadow(0 0 18px rgba(188,224,74,.5));margin-bottom:6px}
+.intro-name{font-family:'Orbitron',sans-serif;font-weight:800;font-size:clamp(1.6rem,5vw,3rem);letter-spacing:.18em;color:#eaf6d2}
+.intro-presents{font-family:'Orbitron',sans-serif;font-size:.8rem;letter-spacing:.5em;color:var(--muted);text-transform:uppercase}
+.intro-title{font-family:'Orbitron',sans-serif;font-weight:900;font-size:clamp(3rem,12vw,7rem);letter-spacing:.22em;
+  color:var(--lime-bright);text-shadow:0 0 40px rgba(188,224,74,.45)}
+.intro-skip{position:absolute;bottom:28px;right:32px;font-family:'Orbitron',sans-serif;font-size:.66rem;
+  letter-spacing:.2em;color:var(--muted);opacity:.6;text-transform:uppercase}
+
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',system-ui,sans-serif;color:var(--text)}
 #app{position:fixed;inset:0}
