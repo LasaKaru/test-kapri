@@ -1,6 +1,6 @@
 // Player-facing settings: persisted to localStorage and applied to the game.
 const KEY = 'verdant_settings';
-const DEFAULTS = { volume: 70, music: 50, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100 };
+const DEFAULTS = { volume: 70, music: 50, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true };
 
 export class Settings {
   constructor(game) {
@@ -26,6 +26,7 @@ export class Settings {
     g.renderer.shadowMap.needsUpdate = true;
     g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1);
     g.world.setFloraDensity(this.v.flora / 100);
+    g.cinematicEnabled = this.v.cinematic;
   }
 
   buildUI(container) {
@@ -63,5 +64,6 @@ export class Settings {
     toggle('Shadows', 'shadows', () => { g.renderer.shadowMap.enabled = this.v.shadows; g.renderer.shadowMap.needsUpdate = true; });
     toggle('High Detail', 'highDetail', () => { g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1); });
     slider('Foliage Density', 'flora', 0, 150, '%', () => { g.world.setFloraDensity(this.v.flora / 100); });
+    toggle('Cinematic Menu', 'cinematic', () => { g.cinematicEnabled = this.v.cinematic; });
   }
 }

@@ -28,11 +28,17 @@ topography (ridgelines, valleys, lowland basins) that differs per map.
 Difficulty (**Recruit / Veteran / Nightmare**) scales enemy health, speed,
 damage, head-count and rewards.
 
-The world is **alive**: real-time **wind-animated grass** (vertex shader),
-a **mixed forest** of layered conifers and clustered-canopy broadleaf trees
-with **low scrub undergrowth**, flocks of **birds** wheeling overhead, **animals**
+The world is **alive**: real-time **wind-animated grass** (vertex shader) and a
+fully **procedural flora system** (`flora.js`) — branching trees, wind-swayed
+flowers, ferns, mushrooms, berry bushes and water's-edge cattails, all
+GPU-instanced and re-tinted with a **per-biome palette** (summer plains, autumn
+highlands, lush lowlands, snow-dusted mountains). Density is tunable with a
+**Foliage Density** slider. Add flocks of **birds** wheeling overhead, **animals**
 that roam and flee the player, and **enterable buildings** — hollow structures
 with a doorway you can walk through and fight inside.
+
+A looping **cinematic camera flythrough** tours the map behind the title menu
+(toggleable in Settings).
 
 ### ⚡ Server scaling
 
@@ -110,7 +116,8 @@ pickup blips, your heading, and pan/zoom.
     and lakes, with the player at centre.
   - **Settings menu** (from the title or pause) — master volume, SFX toggle,
     mouse sensitivity, field of view, a **Realism slider (0–100%)**, day/night
-    and weather toggles, shadows and detail, all saved to `localStorage`.
+    and weather toggles, shadows, detail, **Foliage Density** and a
+    **Cinematic Menu** toggle, all saved to `localStorage`.
   - **Day/night cycle** — sun & moon arc across the sky with dynamic sky
     colours, fog and lighting; enemies hit harder at night.
   - **Weather** — rolling **rain** with falling particles, grayer fog and
@@ -253,18 +260,24 @@ css/game.css        HUD & overlay styles
 js/main.js          Landing interactions (particles, reveal, leaderboard)
 js/game/
   game.js           Entry point, loop, state machine, combat orchestration
-  world.js          Sky, mountains, terrain, town/buildings, props, collisions
+  world.js          Sky, mountains, terrain, town/buildings, base, collisions
+  flora.js          Procedural instanced flora (trees, flowers, ferns, biomes)
+  cinematic.js      Looping menu camera flythrough
   player.js         Controls, movement, health, armor, regen, recoil
   weapons.js        Arsenal definitions, view models, ADS, firing, reload
-  enemy.js          Enemy types + wave manager
+  enemy.js          Enemy types + wave manager (nearest-target AI)
+  vehicles.js       Rideable tank / bike / jet + shared ordnance
+  cheats.js         Secret-code listener (vehicles, arsenal, godmode)
   effects.js        Tracers, impacts, smoke, embers, blood, ground decals
   postfx.js         Post-processing (bloom, color grade, vignette, grain)
   pickups.js        Health / armor / ammo drops
   hud.js            HUD updates, weapon panel, kill feed, scope, popups
   minimap.js        Rotating top-down radar (enemies, pickups, lakes)
+  missions.js       Checkpoints + mission select
   settings.js       Settings menu (volume, sensitivity, FOV, graphics)
   shop.js           Between-wave shop: credits, resupply & perks
-  audio.js          Procedural per-weapon sound effects
+  audio.js          Procedural SFX, voice barks, music
+  net.js / coop.js / lobby.js / chat.js / onlineboard.js   Optional online layer
 assets/favicon.svg
 ```
 

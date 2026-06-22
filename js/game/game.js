@@ -24,6 +24,7 @@ import { Shop } from './shop.js';
 import { TouchControls } from './touch.js';
 import { Vehicles } from './vehicles.js';
 import { Cheats } from './cheats.js';
+import { Cinematic } from './cinematic.js';
 
 const BASE_FOV = 75;
 
@@ -107,6 +108,8 @@ class Game {
     this.touch = new TouchControls(this);
     this.vehicles = new Vehicles(this);
     this.cheats = new Cheats(this);
+    this.cinematic = new Cinematic(this);
+    this.cinematicEnabled = true;
     this.godmode = false;
     this.cheatArsenal = false;
     this._updateLoadoutLabel();
@@ -959,9 +962,13 @@ class Game {
         this.shake *= Math.max(0, 1 - dt * 6);
       }
     } else if (this.state === 'title') {
-      this._idleT = (this._idleT || 0) + dt;
-      this.camera.position.set(0, this.player.eyeHeight, 30);
-      this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
+      if (this.cinematicEnabled) {
+        this.cinematic.update(dt);
+      } else {
+        this._idleT = (this._idleT || 0) + dt;
+        this.camera.position.set(0, this.player.eyeHeight, 30);
+        this.camera.rotation.set(0, Math.PI + Math.sin(this._idleT * 0.15) * 0.15, 0);
+      }
       this.world.update(dt, this.camera);
       this.effects.update(dt, this.camera.position);
     } else if (this.state === 'shop') {
