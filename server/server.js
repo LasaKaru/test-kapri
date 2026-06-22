@@ -20,12 +20,11 @@ const ws = require('./ws');
 
 const PORT = process.env.PORT || 8080;
 const ROOT = path.join(__dirname, '..');           // repo root (static client)
-const DATA_DIR = path.join(__dirname, 'data');
-const SCORES_FILE = path.join(DATA_DIR, 'scores.jsonl'); // append-only (multi-writer safe)
 const CLUSTERED = !!process.env.CLUSTER;
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(SCORES_FILE)) fs.writeFileSync(SCORES_FILE, '');
+// Supabase Credentials from Environment Variables
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -33,36 +32,49 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon',
 };
 
-// ---- scores: in-memory cache over an append-only JSONL log ----
-// Reads are served from RAM; the cache reloads only when the file changes, so
-// the hot path never touches disk. Writes append a single atomic line.
-let _cache = [];
-let _cacheSize = -1;
-function refreshScores() {
-  let st; try { st = fs.statSync(SCORES_FILE); } catch (_) { return; }
-  if (st.size === _cacheSize) return;           // unchanged -> serve from RAM
+// ---- scores: Remote Database over REST (Zero Dependencies) ----
+
+async function appendScore(entry) {
+  if (!SUPABASE_URL) return;
   try {
-    const lines = fs.readFileSync(SCORES_FILE, 'utf8').split('\n');
-    const out = [];
-    for (const ln of lines) { if (!ln) continue; try { out.push(JSON.parse(ln)); } catch (_) {} }
-    _cache = out; _cacheSize = st.size;
-    if (_cache.length > 6000) rotate();          // keep the log bounded
-  } catch (_) {}
+    await fetch(`${SUPABASE_URL}/rest/v1/leaderboard`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(entry)
+    });
+  } catch (err) {
+    console.error('Supabase Write Error:', err);
+  }
 }
-function rotate() {
-  _cache.sort((a, b) => b.score - a.score);
-  _cache = _cache.slice(0, 2000);
-  try { fs.writeFileSync(SCORES_FILE, _cache.map((s) => JSON.stringify(s)).join('\n') + '\n'); _cacheSize = -1; } catch (_) {}
-}
-function appendScore(entry) {
-  try { fs.appendFileSync(SCORES_FILE, JSON.stringify(entry) + '\n'); _cacheSize = -1; } catch (_) {}
-}
-function topScores(map, diff) {
-  refreshScores();
-  let list = _cache;
-  if (map) list = list.filter((s) => s.map === map);
-  if (diff) list = list.filter((s) => s.diff === diff);
-  return list.slice().sort((a, b) => b.score - a.score).slice(0, 20);
+
+async function topScores(map, diff) {
+  if (!SUPABASE_URL) return [];
+  try {
+    let query = `${SUPABASE_URL}/rest/v1/leaderboard?select=*&order=score.desc&limit=20`;
+    
+    if (map) query += `&map=eq.${map}`;
+    if (diff) query += `&diff=eq.${diff}`;
+
+    const res = await fetch(query, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error('Supabase Read Error:', err);
+    return [];
+  }
 }
 
 function clean(s, max) { return String(s == null ? '' : s).replace(/[^A-Za-z0-9_ -]/g, '').slice(0, max); }
@@ -86,7 +98,8 @@ function cors(res) {
 }
 function sendJSON(res, code, obj) { cors(res); res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); }
 
-function handleApi(req, res, parsed) {
+// NOTE: handleApi is now an async function
+async function handleApi(req, res, parsed) {
   const p = parsed.pathname.replace(/^\/api/, '') || '/';
   if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
 
@@ -94,7 +107,8 @@ function handleApi(req, res, parsed) {
 
   if (p === '/leaderboard' && req.method === 'GET') {
     const q = parsed.query || {};
-    return sendJSON(res, 200, { scores: topScores(q.map, q.diff) });
+    const scores = await topScores(q.map, q.diff);
+    return sendJSON(res, 200, { scores });
   }
 
   if (p === '/scores' && req.method === 'POST') {
@@ -206,14 +220,15 @@ function handleCoop(conn) {
 }
 
 function startWorker() {
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     // per-IP rate limit on the API (static assets are exempt)
     if (req.url.startsWith('/api')) {
       const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
       if (rateLimited(ip)) { cors(res); res.writeHead(429, { 'Content-Type': 'application/json' }); return res.end('{"error":"rate limited"}'); }
     }
     const parsed = url.parse(req.url, true);
-    if (parsed.pathname.startsWith('/api')) return handleApi(req, res, parsed);
+    // Added await here for the handleApi response
+    if (parsed.pathname.startsWith('/api')) return await handleApi(req, res, parsed);
     return serveStatic(req, res, parsed);
   });
   server.keepAliveTimeout = 15000;
