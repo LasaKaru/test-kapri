@@ -12,11 +12,28 @@ export class Audio {
   _ensure() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) this.ctx = new AC();
+      if (AC) { this.ctx = new AC(); this._buildBus(); }
     }
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
     return this.ctx;
   }
+  // master bus + a short algorithmic reverb (generated impulse) for space/punch
+  _buildBus() {
+    const ctx = this.ctx;
+    this._bus = ctx.createGain(); this._bus.connect(ctx.destination);
+    this._verb = ctx.createConvolver(); this._verb.buffer = this._makeIR(0.5, 2.8);
+    this._wet = ctx.createGain(); this._wet.gain.value = 0.8;
+    this._verb.connect(this._wet); this._wet.connect(ctx.destination);
+  }
+  _makeIR(dur, decay) {
+    const ctx = this.ctx, len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay); }
+    return buf;
+  }
+  _dest() { return this._bus || this.ctx.destination; }
+  _send(node, amt) { if (!this._verb || !amt) return; const g = this.ctx.createGain(); g.gain.value = amt; node.connect(g); g.connect(this._verb); }
+
   _blip(freq, dur, type = 'square', vol = 0.15, slideTo = null) {
     const ctx = this._ensure();
     if (!ctx || !this.enabled) return;
@@ -28,7 +45,7 @@ export class Audio {
     if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, ctx.currentTime + dur);
     g.gain.setValueAtTime(vol, ctx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    o.connect(g); g.connect(ctx.destination);
+    o.connect(g); g.connect(this._dest());
     o.start(); o.stop(ctx.currentTime + dur);
   }
   _noise(dur, vol, cutoff) {
@@ -44,38 +61,123 @@ export class Audio {
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
     const filt = ctx.createBiquadFilter();
     filt.type = 'lowpass'; filt.frequency.value = cutoff;
-    src.connect(filt); filt.connect(g); g.connect(ctx.destination);
+    src.connect(filt); filt.connect(g); g.connect(this._dest());
     src.start();
   }
+
+  // ---- realistic SFX building blocks ----
+  // sharp high-frequency transient (the "crack" / mechanical snap)
+  _click(vol = 0.2, hp = 2600) {
+    const ctx = this._ensure(); if (!ctx || !this.enabled) return;
+    const t0 = ctx.currentTime, len = Math.floor(ctx.sampleRate * 0.012);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+    const g = ctx.createGain(); g.gain.value = vol * this.master;
+    src.connect(f); f.connect(g); g.connect(this._dest());
+    src.start(t0);
+  }
+  // low sine "punch" that drops in pitch — the body/weight of a shot or blast
+  _thump(f0, f1, dur, vol) {
+    const ctx = this._ensure(); if (!ctx || !this.enabled) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(f0, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(18, f1), t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol * this.master, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(this._dest());
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  // filtered noise body with an optional cutoff sweep and reverb send
+  _burst(o) {
+    const ctx = this._ensure(); if (!ctx || !this.enabled) return;
+    const t0 = ctx.currentTime, dur = o.dur, len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const filt = ctx.createBiquadFilter(); filt.type = o.type || 'lowpass';
+    filt.frequency.setValueAtTime(o.cut, t0);
+    if (o.slideCut) filt.frequency.exponentialRampToValueAtTime(Math.max(60, o.slideCut), t0 + dur);
+    if (o.q) filt.Q.value = o.q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(o.vol * this.master, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filt); filt.connect(g); g.connect(this._dest());
+    this._send(g, o.verb || 0);
+    src.start(t0);
+  }
+  _mech(freq, dur, vol) { this._burst({ dur, vol, cut: freq, q: 1.6, type: 'bandpass', verb: 0.05 }); }
+  _toneVerb(freq, dur, type, vol, verb, slideTo) {
+    const ctx = this._ensure(); if (!ctx || !this.enabled) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(vol * this.master, t0 + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(lp); lp.connect(g); g.connect(this._dest()); this._send(g, verb || 0);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+
+  // ---- weapons & combat ----
   shoot(kind = 'rifle') {
-    switch (kind) {
-      case 'smg': this._noise(0.06, 0.18, 2400); this._blip(150, 0.05, 'square', 0.05, 70); break;
-      case 'shotgun':
-      case 'autoshotgun':
-        this._noise(0.16, 0.32, 1400); this._blip(90, 0.13, 'square', 0.15, 46); this._blip(58, 0.18, 'sine', 0.12, 30); break;
-      case 'sniper': this._noise(0.22, 0.35, 1100); this._blip(120, 0.18, 'sawtooth', 0.16, 60); this._blip(48, 0.3, 'sine', 0.15, 26); break;
-      case 'dmr': this._noise(0.12, 0.28, 1600); this._blip(130, 0.1, 'sawtooth', 0.13, 58); this._blip(60, 0.16, 'sine', 0.1, 30); break;
-      case 'railgun': this._blip(1300, 0.16, 'sawtooth', 0.16, 180); this._noise(0.12, 0.2, 3200); this._blip(70, 0.28, 'sine', 0.16, 30); break;
-      case 'lmg': this._noise(0.07, 0.22, 2000); this._blip(115, 0.05, 'square', 0.06, 60); break;
-      default: this._noise(0.09, 0.25, 1800); this._blip(125, 0.05, 'square', 0.05, 60);
+    if (!this._ensure() || !this.enabled) return;
+    if (kind === 'railgun') {
+      this._click(0.32, 3000);
+      const ctx = this.ctx, t0 = ctx.currentTime;
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(1900, t0); o.frequency.exponentialRampToValueAtTime(210, t0 + 0.18);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.3 * this.master, t0 + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+      o.connect(g); g.connect(this._dest()); this._send(g, 0.4);
+      o.start(t0); o.stop(t0 + 0.22);
+      this._thump(70, 30, 0.3, 0.4);
+      return;
     }
+    const TABLE = {
+      rifle:       { cut: 3600, dur: 0.10, vol: 0.34, sub: 95, subV: 0.32, verb: 0.16 },
+      smg:         { cut: 4300, dur: 0.06, vol: 0.26, sub: 120, subV: 0.20, verb: 0.10 },
+      lmg:         { cut: 3000, dur: 0.08, vol: 0.34, sub: 80, subV: 0.34, verb: 0.18 },
+      pistol:      { cut: 3800, dur: 0.08, vol: 0.30, sub: 110, subV: 0.24, verb: 0.12 },
+      dmr:         { cut: 2900, dur: 0.13, vol: 0.40, sub: 78, subV: 0.40, verb: 0.24 },
+      sniper:      { cut: 2300, dur: 0.20, vol: 0.50, sub: 58, subV: 0.52, verb: 0.42 },
+      shotgun:     { cut: 1700, dur: 0.18, vol: 0.50, sub: 62, subV: 0.52, verb: 0.30 },
+      autoshotgun: { cut: 1900, dur: 0.13, vol: 0.40, sub: 70, subV: 0.38, verb: 0.20 },
+    };
+    const p = TABLE[kind] || TABLE.rifle;
+    this._click(0.16 + p.vol * 0.35);
+    this._burst({ dur: p.dur, vol: p.vol, cut: p.cut, slideCut: p.cut * 0.35, verb: p.verb });
+    this._thump(p.sub, p.sub * 0.45, p.dur * 1.5, p.subV);
   }
   explosion() {
-    this._noise(0.5, 0.45, 700);
-    this._blip(70, 0.5, 'sawtooth', 0.3, 30);
+    if (!this._ensure() || !this.enabled) return;
+    this._thump(130, 26, 0.8, 0.85);
+    this._burst({ dur: 0.7, vol: 0.5, cut: 1000, slideCut: 180, verb: 0.6 });
+    this._click(0.25, 1800);
+    for (let i = 0; i < 5; i++) setTimeout(() => this._burst({ dur: 0.05, vol: 0.14, cut: 2600, verb: 0.2 }), 60 + i * 70 + Math.random() * 40);
   }
-  pickup() { this._blip(660, 0.1, 'sine', 0.18, 990); setTimeout(() => this._blip(990, 0.1, 'sine', 0.15, 1320), 80); }
-  swap() { this._blip(300, 0.05, 'square', 0.08); }
-  melee() { this._noise(0.12, 0.16, 2600); this._blip(220, 0.1, 'square', 0.08, 120); }
-  empty() { this._blip(180, 0.06, 'square', 0.08); }
-  kill() { this._blip(660, 0.12, 'triangle', 0.18, 1100); }
-  hurt() { this._blip(150, 0.25, 'sawtooth', 0.2, 60); }
-  reload() { this._blip(300, 0.08, 'square', 0.1); setTimeout(() => this._blip(420, 0.08, 'square', 0.1), 140); }
+  pickup() { this._blip(720, 0.09, 'sine', 0.13, 1080); setTimeout(() => this._blip(1080, 0.1, 'sine', 0.11, 1440), 70); }
+  swap() { this._mech(2000, 0.04, 0.12); }
+  melee() { this._burst({ dur: 0.14, vol: 0.22, cut: 3200, slideCut: 600, type: 'bandpass', q: 0.8, verb: 0.1 }); this._thump(170, 70, 0.12, 0.2); }
+  empty() { this._click(0.12, 3200); setTimeout(() => this._click(0.07, 3200), 55); }
+  kill() { this._thump(240, 120, 0.12, 0.18); this._burst({ dur: 0.05, vol: 0.1, cut: 1800 }); }
+  hurt() { this._burst({ dur: 0.18, vol: 0.26, cut: 900, slideCut: 300 }); this._thump(150, 70, 0.18, 0.24); }
+  reload() {
+    this._mech(1800, 0.05, 0.2);                                   // mag release
+    setTimeout(() => this._mech(1300, 0.06, 0.22), 165);           // mag seated
+    setTimeout(() => { this._mech(2300, 0.05, 0.18); this._click(0.1); }, 345); // charging handle
+  }
   wave() {
-    this._blip(440, 0.18, 'triangle', 0.2, 660);
-    setTimeout(() => this._blip(660, 0.25, 'triangle', 0.2, 880), 180);
+    this._toneVerb(294, 0.5, 'sawtooth', 0.16, 0.4);
+    setTimeout(() => this._toneVerb(392, 0.6, 'sawtooth', 0.16, 0.4), 200);
   }
-  over() { this._blip(330, 0.5, 'sawtooth', 0.22, 80); }
+  over() { this._toneVerb(220, 0.9, 'sawtooth', 0.2, 0.5, 90); this._thump(120, 42, 0.9, 0.3); }
 
   // ---- procedural voice (formant synthesis) ----
   // A glottal sawtooth (with pitch contour + vibrato) shaped by bandpass

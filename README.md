@@ -37,8 +37,10 @@ highlands, lush lowlands, snow-dusted mountains). Density is tunable with a
 that roam and flee the player, and **enterable buildings** — hollow structures
 with a doorway you can walk through and fight inside.
 
-A looping **cinematic camera flythrough** tours the map behind the title menu
-(toggleable in Settings).
+A **"HelaO2 Studio presents"** intro plays on load, a looping **cinematic
+camera flythrough** tours the map behind the title menu, and pressing **Start**
+drops you in with a short **sky-to-ground deploy sweep** (all toggleable via the
+Settings → *Cinematic Menu* switch; click/any key skips the intro).
 
 ### ⚡ Server scaling
 
@@ -134,7 +136,10 @@ pickup blips, your heading, and pan/zoom.
     **Realism slider** (0% = flat natural low-poly look, 100% = full cinematic).
   - **Particle FX**: drifting ambient embers, explosion fireballs &amp; smoke,
     blood bursts and fading ground decals (blood / scorch).
-  - Procedural WebAudio sound effects, per-weapon (no asset downloads), plus
+  - **Punchy, layered WebAudio SFX** (no asset downloads) — every shot is a
+    transient *crack* + filtered-noise body + sub *thump*, tuned per weapon, run
+    through a generated **convolution reverb** for space; deep explosions with
+    debris crackle, mechanical multi-click reloads, and impact-based hits. Plus
     **procedural music** (an ambient pad + beat that escalates with the wave) and
     a wind soundscape — with a separate Music volume slider.
   - **Floating damage numbers** (crit-coloured on headshots) and a **compass**
