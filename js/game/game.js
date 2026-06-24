@@ -113,9 +113,11 @@ class Game {
     this.godmode = false;
     this.cheatArsenal = false;
     this.speedRun = false;
-    // persistent loot inventory (meat from hunted animals, eaten to heal)
-    try { this.inventory = JSON.parse(localStorage.getItem('verdant_inventory') || '{"meat":0}'); } catch (_) { this.inventory = { meat: 0 }; }
-    if (!this.inventory || typeof this.inventory !== 'object') this.inventory = { meat: 0 };
+    // persistent loot inventory (meat eaten to heal; hides/feathers/fangs traded)
+    const INV0 = { meat: 0, hide: 0, feather: 0, fang: 0 };
+    try { this.inventory = { ...INV0, ...JSON.parse(localStorage.getItem('verdant_inventory') || '{}') }; } catch (_) { this.inventory = { ...INV0 }; }
+    // wolves can bite the player (predator wildlife)
+    this.world.onCritterBite = (d) => { if (this.state === 'playing' && !this.vehicles.isMounted()) this._onPlayerHit(d); };
     this._updateLoadoutLabel();
     this._updateContinueUI();
 
@@ -415,6 +417,7 @@ class Game {
     this.pickups.reset();
     this.vehicles.reset();
     this.godmode = false; this.cheatArsenal = false; this.speedRun = false;
+    this.world._combatActive = true; // predators (wolves) hunt during a run
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -625,7 +628,7 @@ class Game {
           endPoint = ah.point; anyHit = true;
           this.effects.bloodBurst(endPoint);
           const res = this.world._critters.damageAnimal(ah.animal, shot.dmg);
-          if (res && res.killed) this._onAnimalKilled(res.pos);
+          if (res && res.killed) this._onAnimalKilled(res.pos, res.drops);
         } else {
           // intersect ground plane y=0
           let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
@@ -870,9 +873,11 @@ class Game {
 
   // ---- loot / inventory (hunted-animal meat, eaten to heal) ----
   _saveInventory() { try { localStorage.setItem('verdant_inventory', JSON.stringify(this.inventory)); } catch (_) {} }
-  _onAnimalKilled(pos) {
-    this.pickups.spawn('meat', pos);
-    this.hud.killFeed('▸ ANIMAL DOWNED — meat dropped');
+  _onAnimalKilled(pos, drops) {
+    const meat = (drops && drops.meat) || 1;
+    for (let i = 0; i < meat; i++) { const a = Math.random() * 6.283; this.pickups.spawn('meat', { x: pos.x + Math.cos(a) * 0.6, z: pos.z + Math.sin(a) * 0.6 }); }
+    if (drops && drops.loot) this.pickups.spawn(drops.loot, pos);
+    this.hud.killFeed('▸ ANIMAL DOWNED — loot dropped');
     this.audio.kill();
   }
   _eatMeat() {
@@ -892,6 +897,7 @@ class Game {
     else if (kind === 'armor') { this.player.addArmor(50); this.hud.killFeed('+ ARMOR'); }
     else if (kind === 'ammo') { this.weapons.addAmmo(0.4); this.hud.killFeed('+ AMMO'); }
     else if (kind === 'meat') { this.inventory.meat = (this.inventory.meat || 0) + 1; this._saveInventory(); this.hud.setMeat(this.inventory.meat); this.hud.killFeed('🍖 + MEAT'); }
+    else if (kind === 'hide' || kind === 'feather' || kind === 'fang') { this.inventory[kind] = (this.inventory[kind] || 0) + 1; this._saveInventory(); this.hud.killFeed('+ ' + kind.toUpperCase()); }
     this.hud.setHealth(this.player.hp, this.player.maxHp);
     this.hud.setArmor(this.player.armor, this.player.maxArmor);
     this._syncWeaponHud();
@@ -933,6 +939,7 @@ class Game {
     document.getElementById('gameover').classList.remove('hidden');
 
     this.vehicles.reset();
+    this.world._combatActive = false;
     if (this.coopMode) { this.coopMode = false; this.coopHost = false; this.coop.clearGhosts(); }
   }
 

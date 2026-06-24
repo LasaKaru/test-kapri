@@ -34,10 +34,13 @@ flowers, ferns, mushrooms, berry bushes and water's-edge cattails, all
 GPU-instanced and re-tinted with a **per-biome palette** (summer plains, autumn
 highlands, lush lowlands, snow-dusted mountains). Density is tunable with a
 **Foliage Density** slider. Add flocks of **birds** wheeling overhead, **animals**
-that roam and flee the player (you can **hunt** them — shoot an animal and it
-drops **meat** you collect into a persistent inventory and **eat with `C`** to
-heal), and **enterable buildings** — hollow structures with a doorway you can
-walk through and fight inside.
+that roam the field — **deer, boar, roosters** and predatory **wolves** that
+hunt you. You can **hunt** them: shots make them bolt, and a kill drops **meat**
+plus a trade material (**hide / feather / fang**). Loot goes into a persistent
+inventory — **eat meat with `C`** to heal, or **sell &amp; craft** it at the
+between-wave shop (sell loot for credits, or craft armor/speed/lifesteal
+upgrades). There are also **enterable buildings** — hollow structures with a
+doorway you can walk through and fight inside.
 
 A **"HelaO2 Studio presents"** intro plays on load, a looping **cinematic
 camera flythrough** tours the map behind the title menu, and pressing **Start**

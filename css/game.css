@@ -278,6 +278,9 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   margin:8px 0 18px}
 .shop-section{grid-column:1/-1;font-family:'Orbitron';font-size:.78rem;letter-spacing:.18em;
   color:var(--lime);text-align:left;margin-top:8px;padding-bottom:4px;border-bottom:1px solid rgba(188,224,74,.18)}
+.shop-loot{grid-column:1/-1;font-family:'Orbitron';font-size:.8rem;letter-spacing:.06em;color:#e0c0a0;
+  background:rgba(40,28,16,.4);border:1px solid rgba(255,207,74,.2);border-radius:8px;padding:6px 12px}
+.shop-card .sc-sell{color:var(--gold)}
 .shop-card{cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
   background:rgba(10,18,6,.7);border:1px solid rgba(188,224,74,.2);border-radius:10px;padding:12px 14px;
   color:var(--text);transition:transform .12s,border-color .15s,box-shadow .15s}
