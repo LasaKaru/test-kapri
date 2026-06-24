@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540">
+  <defs>
+    <linearGradient id="sky8" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d3552"/><stop offset="0.6" stop-color="#9a6a2a"/><stop offset="1" stop-color="#d8801a"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#sky8)"/>
+  <polygon points="0,310 200,210 420,300 620,200 820,300 960,230 960,330 0,330" fill="#5a4a2a" opacity="0.5"/>
+  <rect y="330" width="960" height="210" fill="#3d4a20"/>
+  <!-- jet -->
+  <g transform="translate(250,140) rotate(8)" fill="#9aa3ad">
+    <polygon points="0,0 130,10 150,22 130,34 0,30"/>
+    <polygon points="40,12 70,-26 88,-22 70,18"/><polygon points="40,22 70,60 88,56 70,24"/>
+    <polygon points="150,16 176,22 150,30" fill="#ffcf4a"/>
+  </g>
+  <!-- rockets -->
+  <g fill="#ffd070"><rect x="386" y="168" width="34" height="5" rx="2"/><rect x="430" y="186" width="34" height="5" rx="2"/></g>
+  <!-- tank -->
+  <g transform="translate(120,392)" fill="#46502f">
+    <rect x="0" y="22" width="190" height="44" rx="8"/><rect x="-6" y="58" width="202" height="22" rx="10" fill="#1c1c18"/>
+    <rect x="50" y="-2" width="96" height="34" rx="6" fill="#3c4528"/><rect x="140" y="6" width="150" height="10" rx="5" fill="#3c4528"/>
+  </g>
+  <!-- base (target) -->
+  <g transform="translate(720,300)">
+    <rect x="-70" y="40" width="140" height="14" fill="#3a3f33"/><rect x="-70" y="-30" width="14" height="84" fill="#3a3f33"/><rect x="56" y="-30" width="14" height="84" fill="#3a3f33"/>
+    <circle cx="0" cy="14" r="26" fill="#ff5530"/><circle cx="0" cy="14" r="14" fill="#ffb040"/>
+  </g>
+  <text x="40" y="500" font-family="Orbitron, Arial, sans-serif" font-size="32" font-weight="700" fill="#ffcf4a" letter-spacing="5">RIDE OUT · STRIKE THE BASE</text>
+</svg>

@@ -31,6 +31,8 @@ export class Coop {
   }
 
   host() { const code = this._code(); this.join(code); return code; }
+  // Quick Match: auto-join the first public room with a free slot (no code).
+  quickPlay() { this._quick = true; this._quickN = 1; this.join('QUICKPLAY-1'); }
   join(room) {
     this.room = (room || 'LOBBY').toUpperCase();
     this.active = true;
@@ -48,6 +50,7 @@ export class Coop {
 
   _onMsg(m) {
     if (m.type === 'welcome') {
+      this._quick = false; // joined successfully
       this.myId = m.id; this.room = m.room;
       // adopt the unique handle the server assigned us
       if (m.name) {
@@ -65,6 +68,8 @@ export class Coop {
     } else if (m.type === 'event') {
       this._onEvent(m);
     } else if (m.type === 'full') {
+      // quick match: a room was full, roll to the next public room
+      if (this._quick && this._quickN < 12) { this._quickN++; this.join('QUICKPLAY-' + this._quickN); return; }
       this.full = true; this._notifyRoster();
     }
   }

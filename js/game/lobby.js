@@ -13,6 +13,12 @@ export class CoopLobby {
     name.value = game.net.name;
     name.addEventListener('change', () => { game.net.setName(name.value); name.value = game.net.name; this._render(); });
 
+    const quick = document.getElementById('coop-quick');
+    if (quick) quick.addEventListener('click', () => {
+      if (!game.net.enabled) return this._noServer();
+      this.status.textContent = '● Finding a match…'; this.status.className = 'coop-status connecting';
+      game.coop.quickPlay();
+    });
     document.getElementById('coop-host').addEventListener('click', () => {
       if (!game.net.enabled) return this._noServer();
       const code = game.coop.host();

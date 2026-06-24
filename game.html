@@ -152,7 +152,7 @@
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
         <button class="btn btn-ghost" id="leaderboard-btn">🏅 Leaderboard</button>
-        <button class="btn btn-ghost" id="coop-btn">👥 Co-op</button>
+        <button class="btn btn-ghost" id="coop-btn">👥 Multiplayer</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
@@ -196,11 +196,12 @@
     <!-- Co-op lobby -->
     <div id="coop" class="overlay hidden">
       <div class="overlay-inner">
-        <h2 class="pause-word">CO-OP</h2>
-        <p class="shop-sub">Squad up over the network — host a room or join with a code.</p>
+        <h2 class="pause-word">MULTIPLAYER</h2>
+        <p class="shop-sub">Squad up over the network — Quick Match, host a room, or join with a code. Everyone gets a unique callsign shown above their character.</p>
         <label class="olb-namewrap">CALLSIGN <input id="coop-name" maxlength="12" value="GHOST" /></label>
         <div class="coop-controls">
-          <button class="btn btn-primary" id="coop-host">Host Room</button>
+          <button class="btn btn-primary" id="coop-quick">⚡ Quick Match</button>
+          <button class="btn btn-ghost" id="coop-host">Host Room</button>
           <input id="coop-code" class="coop-code" maxlength="8" placeholder="ROOM CODE" />
           <button class="btn btn-ghost" id="coop-join">Join</button>
         </div>

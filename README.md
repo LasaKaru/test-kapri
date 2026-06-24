@@ -176,7 +176,9 @@ exactly as before and shows an **OFFLINE** status — nothing is blocked or brok
 - **Live chat** (press **Y**) — global room with presence count; connects lazily
   and greys out with "reconnecting…" when offline. Available from the title and
   in-match (typing releases the cursor so movement isn't triggered).
-- **Co-op — shared waves** — host or join a room by code (up to 4). Press
+- **Co-op — shared waves** — **Quick Match** (auto-join a public room) or host/join
+  by code (up to 4); every player gets a **unique callsign shown above their
+  character**. Press
   **Deploy Together** and the whole squad drops into **one shared battle**: the
   host runs the wave simulation authoritatively and streams enemy snapshots, so
   everyone sees and shoots the *same* enemies, with a **shared score**. Enemies
