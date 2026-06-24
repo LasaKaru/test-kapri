@@ -49,6 +49,12 @@ export class Coop {
   _onMsg(m) {
     if (m.type === 'welcome') {
       this.myId = m.id; this.room = m.room;
+      // adopt the unique handle the server assigned us
+      if (m.name) {
+        this.game.net.name = m.name;
+        const el = document.getElementById('coop-name'); if (el) el.value = m.name;
+        const ol = document.getElementById('olb-name'); if (ol) ol.value = m.name;
+      }
       (m.peers || []).forEach((p) => this._add(p.id, p.name));
       this._notifyRoster();
     } else if (m.type === 'peer-join') { this._add(m.id, m.name); this._notifyRoster(); }
