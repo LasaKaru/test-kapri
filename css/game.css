@@ -77,6 +77,8 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .ammo-mag.empty{color:var(--crimson);animation:blink .5s steps(2) infinite}
 @keyframes blink{50%{opacity:.3}}
 .grenade-line{margin-top:4px;font-family:'Orbitron';font-weight:700;font-size:1rem;color:var(--gold);letter-spacing:.06em}
+.inv-meat{margin-top:4px;font-family:'Orbitron';font-weight:700;font-size:1rem;color:#e08a5a;letter-spacing:.06em}
+.inv-meat.hidden{display:none}
 .grenade-line .nade-icon{filter:drop-shadow(0 0 6px rgba(255,207,74,.6))}
 .grenade-line .nade-lbl{font-size:.6rem;color:var(--muted);letter-spacing:.12em}
 

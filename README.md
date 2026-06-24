@@ -34,8 +34,10 @@ flowers, ferns, mushrooms, berry bushes and water's-edge cattails, all
 GPU-instanced and re-tinted with a **per-biome palette** (summer plains, autumn
 highlands, lush lowlands, snow-dusted mountains). Density is tunable with a
 **Foliage Density** slider. Add flocks of **birds** wheeling overhead, **animals**
-that roam and flee the player, and **enterable buildings** — hollow structures
-with a doorway you can walk through and fight inside.
+that roam and flee the player (you can **hunt** them — shoot an animal and it
+drops **meat** you collect into a persistent inventory and **eat with `C`** to
+heal), and **enterable buildings** — hollow structures with a doorway you can
+walk through and fight inside.
 
 A **"HelaO2 Studio presents"** intro plays on load, a looping **cinematic
 camera flythrough** tours the map behind the title menu, and pressing **Start**
@@ -219,6 +221,7 @@ works offline.
 | `G` | Throw frag grenade |
 | `R` | Reload |
 | `Space` | Jump |
+| `C` | Eat a meal (heal from hunted meat) |
 | `E` | Ride / exit a nearby vehicle |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |

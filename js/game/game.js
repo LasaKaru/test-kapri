@@ -112,6 +112,10 @@ class Game {
     this.cinematicEnabled = true;
     this.godmode = false;
     this.cheatArsenal = false;
+    this.speedRun = false;
+    // persistent loot inventory (meat from hunted animals, eaten to heal)
+    try { this.inventory = JSON.parse(localStorage.getItem('verdant_inventory') || '{"meat":0}'); } catch (_) { this.inventory = { meat: 0 }; }
+    if (!this.inventory || typeof this.inventory !== 'object') this.inventory = { meat: 0 };
     this._updateLoadoutLabel();
     this._updateContinueUI();
 
@@ -205,6 +209,7 @@ class Game {
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
       if (e.code === 'KeyG') this._throwGrenade();
       if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
+      if (e.code === 'KeyC') this._eatMeat();
       // weapon switch via number keys (0 = secret slot, e.g. the rocket)
       const m = /^Digit([0-9])$/.exec(e.code);
       if (m) {
@@ -409,7 +414,7 @@ class Game {
     this.weapons.reset();
     this.pickups.reset();
     this.vehicles.reset();
-    this.godmode = false; this.cheatArsenal = false;
+    this.godmode = false; this.cheatArsenal = false; this.speedRun = false;
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -433,6 +438,7 @@ class Game {
     this.hud.setStreak(0);
     this._rebuildWeaponSlots();
     this._syncWeaponHud();
+    this.hud.setMeat(this.inventory.meat || 0);
 
     this._hideOverlays();
     this.hud.show();
@@ -606,12 +612,20 @@ class Game {
           else this.effects.bloodBurst(endPoint);
         }
       } else {
-        // direct bullet hit on the enemy base core (chip damage)
+        // nearest of: enemy base core, a huntable animal, else the ground
         const bp = this.world.baseHitPoint(origin, dir);
-        if (bp && bp.distance < shot.def.range) {
+        const ah = (this.world._critters && this.world._critters.raycastAnimal(this.raycaster, origin, dir, shot.def.range)) || null;
+        const baseD = bp ? bp.distance : Infinity;
+        const animD = ah ? ah.distance : Infinity;
+        if (bp && baseD <= animD && baseD < shot.def.range) {
           endPoint = bp.point; anyHit = true;
           if (this.world.damageBase(shot.dmg * 6)) this._onBaseDestroyed();
           this.effects.impact(endPoint, 0xff7040, false);
+        } else if (ah && animD < shot.def.range) {
+          endPoint = ah.point; anyHit = true;
+          this.effects.bloodBurst(endPoint);
+          const res = this.world._critters.damageAnimal(ah.animal, shot.dmg);
+          if (res && res.killed) this._onAnimalKilled(res.pos);
         } else {
           // intersect ground plane y=0
           let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range;
@@ -854,11 +868,30 @@ class Game {
     this.pickups.maybeDrop(enemy.group.position, this.player.hp / this.player.maxHp);
   }
 
+  // ---- loot / inventory (hunted-animal meat, eaten to heal) ----
+  _saveInventory() { try { localStorage.setItem('verdant_inventory', JSON.stringify(this.inventory)); } catch (_) {} }
+  _onAnimalKilled(pos) {
+    this.pickups.spawn('meat', pos);
+    this.hud.killFeed('▸ ANIMAL DOWNED — meat dropped');
+    this.audio.kill();
+  }
+  _eatMeat() {
+    if ((this.inventory.meat || 0) <= 0) return;
+    if (this.player.hp >= this.player.maxHp) { this.hud.killFeed('Already at full health'); return; }
+    this.inventory.meat -= 1; this._saveInventory();
+    this.player.heal(30 * (this.medicHealMul || 1));
+    this.hud.setHealth(this.player.hp, this.player.maxHp);
+    this.hud.setMeat(this.inventory.meat);
+    this.hud.killFeed('🍖 ATE MEAL  +30 HP');
+    this.audio.pickup();
+  }
+
   _collect(kind) {
     this.audio.pickup();
     if (kind === 'health') { this.player.heal(35 * this.medicHealMul); this.hud.killFeed('+ MEDKIT'); }
     else if (kind === 'armor') { this.player.addArmor(50); this.hud.killFeed('+ ARMOR'); }
     else if (kind === 'ammo') { this.weapons.addAmmo(0.4); this.hud.killFeed('+ AMMO'); }
+    else if (kind === 'meat') { this.inventory.meat = (this.inventory.meat || 0) + 1; this._saveInventory(); this.hud.setMeat(this.inventory.meat); this.hud.killFeed('🍖 + MEAT'); }
     this.hud.setHealth(this.player.hp, this.player.maxHp);
     this.hud.setArmor(this.player.armor, this.player.maxArmor);
     this._syncWeaponHud();

@@ -147,6 +147,7 @@ export class Player {
     this.yaw = Math.PI; this.pitch = 0;
     // restore base stats (perks/class from a previous run are cleared)
     this.maxHp = 100; this.maxArmor = 100; this.speed = 7;
+    this.sprintMul = 1.6; this.jumpStrength = 7.2;
     this.regenRate = 14; this.regenDelay = 4.0;
     this.hp = this.maxHp; this.armor = 0;
     this.hurtCd = 0; this.recoilPitch = 0; this._bob = 0;

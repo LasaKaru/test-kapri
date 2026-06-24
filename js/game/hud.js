@@ -48,6 +48,7 @@ export class HUD {
   }
   setReloading(on) { this.el.reload.classList.toggle('show', on); }
   setGrenades(n) { if (this.el.nade) this.el.nade.textContent = n; }
+  setMeat(n) { const el = document.getElementById('inv-meat'); if (el) { el.querySelector('.inv-n').textContent = n; el.classList.toggle('hidden', !(n > 0)); } }
 
   // ---- floating damage numbers (pooled DOM) ----
   damageNumber(sx, sy, amount, crit) {

@@ -4,6 +4,7 @@ const KINDS = {
   health: { color: 0x35e06a, emissive: 0x0d6b28, symbol: 'cross' },
   armor:  { color: 0x4aa3ff, emissive: 0x0d3a6b, symbol: 'shield' },
   ammo:   { color: 0xffcf4a, emissive: 0x6b4f0d, symbol: 'box' },
+  meat:   { color: 0xb5532a, emissive: 0x5a1e0d, symbol: 'box' }, // dropped by hunted animals
 };
 
 export class Pickups {
@@ -44,7 +45,7 @@ export class Pickups {
 
     g.position.set(pos.x, 0.9, pos.z);
     this.scene.add(g);
-    this.items.push({ group: g, kind, spin: Math.random() * Math.PI, ttl: 18 });
+    this.items.push({ group: g, kind, spin: Math.random() * Math.PI, ttl: kind === 'meat' ? 60 : 18 });
   }
 
   // maybe drop something where an enemy died
