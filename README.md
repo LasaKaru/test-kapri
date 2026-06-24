@@ -176,9 +176,12 @@ exactly as before and shows an **OFFLINE** status — nothing is blocked or brok
 - **Live chat** (press **Y**) — global room with presence count; connects lazily
   and greys out with "reconnecting…" when offline. Available from the title and
   in-match (typing releases the cursor so movement isn't triggered).
-- **Co-op — shared waves** — **Quick Match** (auto-join a public room) or host/join
-  by code (up to 4); every player gets a **unique callsign shown above their
-  character**. Press
+- **Third-person camera** — toggle with **`T`** (or in Settings); a chase cam
+  with a visible soldier body, switchable any time mid-match.
+- **Multiplayer** — **Quick Match** (auto-join a public room), host/join by code,
+  or a **PvP Arena** mode where the squad frags each other. A lobby **ready-up**
+  gates the shared deploy, and every player gets a **unique callsign shown above
+  their character**. In co-op, press
   **Deploy Together** and the whole squad drops into **one shared battle**: the
   host runs the wave simulation authoritatively and streams enemy snapshots, so
   everyone sees and shoots the *same* enemies, with a **shared score**. Enemies
@@ -227,6 +230,7 @@ works offline.
 | `R` | Reload |
 | `Space` | Jump |
 | `C` | Eat a meal (heal from hunted meat) |
+| `T` | Toggle third-person camera |
 | `E` | Ride / exit a nearby vehicle |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |

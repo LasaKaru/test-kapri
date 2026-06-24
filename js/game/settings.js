@@ -1,6 +1,6 @@
 // Player-facing settings: persisted to localStorage and applied to the game.
 const KEY = 'verdant_settings';
-const DEFAULTS = { volume: 70, music: 32, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true };
+const DEFAULTS = { volume: 70, music: 32, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true, thirdPerson: false };
 
 export class Settings {
   constructor(game) {
@@ -27,6 +27,7 @@ export class Settings {
     g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1);
     g.world.setFloraDensity(this.v.flora / 100);
     g.cinematicEnabled = this.v.cinematic;
+    g.thirdPerson = this.v.thirdPerson;
   }
 
   buildUI(container) {
@@ -65,5 +66,6 @@ export class Settings {
     toggle('High Detail', 'highDetail', () => { g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1); });
     slider('Foliage Density', 'flora', 0, 150, '%', () => { g.world.setFloraDensity(this.v.flora / 100); });
     toggle('Cinematic Menu', 'cinematic', () => { g.cinematicEnabled = this.v.cinematic; });
+    toggle('Third-Person Camera', 'thirdPerson', () => { g.thirdPerson = this.v.thirdPerson; });
   }
 }

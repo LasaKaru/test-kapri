@@ -82,7 +82,28 @@ export class Coop {
     else if (m.ev === 'hit' && host) this._applyClientHit(m);
     else if (m.ev === 'dmg' && !host && m.to === this.myId) this.game._onPlayerHit(m.a);
     else if (m.ev === 'over' && !host) this.game._coopRemoteOver();
+    else if (m.ev === 'ready') { const a = this.peers.get(m.id); if (a) { a.ready = !!m.v; this._notifyRoster(); } }
+    else if (m.ev === 'pvpstart' && !host) this.game._pvpClientStart(m);
+    else if (m.ev === 'pvphit' && m.to === this.myId) this.game._onPvpHit(m.d, m.id);
+    else if (m.ev === 'pvpfrag') this.game._onPvpFrag(m.by, m.victim);
   }
+
+  // ---- lobby: ready-up ----
+  setReady(v) { this.ready = !!v; if (this.active) this.game.net.sendCoopEvent({ ev: 'ready', v: this.ready }); this._notifyRoster(); }
+
+  // ---- PvP: shoot other players' avatars ----
+  raycastPeers(raycaster, origin, dir, far) {
+    raycaster.set(origin, dir); raycaster.far = far;
+    let best = null, bd = Infinity;
+    for (const [id, a] of this.peers) {
+      if (!a.group.visible) continue;
+      const hits = raycaster.intersectObject(a.group, true);
+      if (hits.length && hits[0].distance < bd) { bd = hits[0].distance; best = { id, point: hits[0].point }; }
+    }
+    return best;
+  }
+  sendPvpHit(id, d) { this.game.net.sendCoopEvent({ ev: 'pvphit', to: id, d }); }
+  broadcastFrag(by) { this.game.net.sendCoopEvent({ ev: 'pvpfrag', by, victim: this.myId }); }
 
   // HOST: live positions of the OTHER players so enemies can target the nearest
   coopTargets() {
@@ -185,8 +206,8 @@ export class Coop {
 
   _notifyRoster() {
     if (this.onRoster) {
-      const list = [...this.peers.values()].map((a) => a.name);
-      this.onRoster({ state: this.state, room: this.room, peers: list, me: this.game.net.name, full: this.full });
+      const peers = [...this.peers.values()].map((a) => ({ name: a.name, ready: !!a.ready }));
+      this.onRoster({ state: this.state, room: this.room, peers, me: this.game.net.name, meReady: !!this.ready, full: this.full });
     }
   }
 
@@ -196,7 +217,7 @@ export class Coop {
     const group = this._buildAvatar(color, name);
     group.visible = false;
     this.game.scene.add(group);
-    this.peers.set(id, { group, target: new THREE.Vector3(0, 0, 30), tyaw: 0, name, hp: 100, color });
+    this.peers.set(id, { group, target: new THREE.Vector3(0, 0, 30), tyaw: 0, name, hp: 100, color, ready: false });
   }
   _remove(id) {
     const a = this.peers.get(id); if (!a) return;

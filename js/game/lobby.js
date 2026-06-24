@@ -29,6 +29,10 @@ export class CoopLobby {
       const code = (this.codeInput.value || '').trim().toUpperCase();
       if (code) game.coop.join(code);
     });
+    const ready = document.getElementById('coop-ready');
+    if (ready) ready.addEventListener('click', () => { game.coop.setReady(!game.coop.ready); this._render(); });
+    const pvp = document.getElementById('coop-pvp');
+    if (pvp) pvp.addEventListener('click', () => { this.close(); game.startPvp(); });
     document.getElementById('coop-leave').addEventListener('click', () => { game.coop.leave(); this._render(); });
     document.getElementById('coop-close').addEventListener('click', () => this.close());
     this.deployBtn.addEventListener('click', () => { this.close(); this.game.startCoop(); });
@@ -48,16 +52,23 @@ export class CoopLobby {
     else if (st === 'connecting') { this.status.textContent = '● Connecting…'; }
     else { this.status.textContent = '● Not connected — Host or Join a room'; }
 
-    const names = (info && info.peers) || [...c.peers.values()].map((a) => a.name);
+    const peers = (info && info.peers) || [...c.peers.values()].map((a) => ({ name: a.name, ready: !!a.ready }));
+    const meReady = info ? !!info.meReady : !!c.ready;
     const me = this.game.net.name;
     this.roster.innerHTML = '';
     if (st === 'online') {
-      const all = [me + ' (you)', ...names];
-      all.forEach((n) => { const li = document.createElement('li'); li.textContent = n; this.roster.appendChild(li); });
+      const tick = (r) => r ? ' ✓' : '';
+      const all = [{ name: me + ' (you)', ready: meReady }, ...peers];
+      all.forEach((pr) => { const li = document.createElement('li'); li.textContent = pr.name + tick(pr.ready); li.classList.toggle('ready', pr.ready); this.roster.appendChild(li); });
     } else {
       this.roster.innerHTML = '<li class="coop-empty">No squad yet.</li>';
     }
-    this.deployBtn.disabled = st !== 'online';
+    // ready button label
+    const rb = document.getElementById('coop-ready');
+    if (rb) { rb.textContent = meReady ? '✓ Ready' : 'Ready Up'; rb.classList.toggle('btn-primary', meReady); rb.disabled = st !== 'online'; }
+    // everyone must be ready to deploy together (solo host can always go)
+    const allReady = meReady && peers.every((p) => p.ready);
+    this.deployBtn.disabled = st !== 'online' || (peers.length > 0 && !allReady);
   }
 
   open() {

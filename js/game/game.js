@@ -113,6 +113,10 @@ class Game {
     this.godmode = false;
     this.cheatArsenal = false;
     this.speedRun = false;
+    this.thirdPerson = false;
+    this._tpBody = this._buildPlayerBody();
+    this._tpBody.visible = false;
+    this.scene.add(this._tpBody);
     // persistent loot inventory (meat eaten to heal; hides/feathers/fangs traded)
     const INV0 = { meat: 0, hide: 0, feather: 0, fang: 0 };
     try { this.inventory = { ...INV0, ...JSON.parse(localStorage.getItem('verdant_inventory') || '{}') }; } catch (_) { this.inventory = { ...INV0 }; }
@@ -208,6 +212,7 @@ class Game {
       if (e.code === 'KeyE') this.vehicles.toggleMount();
       if (this.vehicles.isMounted()) return; // driving — gun keys disabled
       if (e.code === 'Space') { e.preventDefault(); if (this.player.jump()) this.audio.jump(); }
+      if (e.code === 'KeyT') this._toggleThirdPerson();
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
       if (e.code === 'KeyG') this._throwGrenade();
       if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
@@ -265,6 +270,35 @@ class Game {
   }
 
   _requestLock() { this.canvas.requestPointerLock(); }
+
+  // simple low-poly soldier body for the third-person camera
+  _buildPlayerBody() {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4a6b2a, roughness: 0.8, flatShading: true });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2a3a18, roughness: 0.9, flatShading: true });
+    const add = (geo, m, x, y, z) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; g.add(me); return me; };
+    add(new THREE.BoxGeometry(0.6, 0.42, 0.4), dark, 0, 0.95, 0);        // pelvis
+    add(new THREE.BoxGeometry(0.7, 0.8, 0.42), mat, 0, 1.45, 0);         // torso
+    add(new THREE.BoxGeometry(0.9, 0.22, 0.42), mat, 0, 1.8, 0);         // shoulders
+    add(new THREE.BoxGeometry(0.42, 0.42, 0.42), mat, 0, 2.12, 0);       // head
+    [-0.13, 0.13].forEach((ex) => add(new THREE.BoxGeometry(0.09, 0.07, 0.05), new THREE.MeshBasicMaterial({ color: 0xffdd33 }), ex, 2.13, 0.22));
+    [-1, 1].forEach((s) => add(new THREE.BoxGeometry(0.18, 0.7, 0.2), dark, s * 0.46, 1.45, 0.06)); // arms
+    [-1, 1].forEach((s) => add(new THREE.BoxGeometry(0.22, 0.85, 0.24), dark, s * 0.18, 0.5, 0));   // legs
+    return g;
+  }
+  _toggleThirdPerson() {
+    this.thirdPerson = !this.thirdPerson;
+    try { this.settings.v.thirdPerson = this.thirdPerson; this.settings.save(); } catch (_) {}
+    this.hud.killFeed(this.thirdPerson ? 'THIRD-PERSON' : 'FIRST-PERSON');
+  }
+  // chase cam: keep the camera's look direction, pull it back behind the body
+  _applyThirdPerson() {
+    const p = this.player, cam = this.camera;
+    this._tpBody.position.set(p.position.x, p.position.y, p.position.z);
+    this._tpBody.rotation.y = p.yaw;
+    const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
+    cam.position.addScaledVector(fwd, -4.6); cam.position.y += 0.7;
+  }
 
   _updateNetPill(s) {
     const el = document.getElementById('netpill'); if (!el) return;
@@ -407,6 +441,7 @@ class Game {
     this.startWave = startWave;
     this.coopMode = !!opts.coop;
     this.coopHost = !!opts.host;
+    this.pvpMode = !!opts.pvp;
     this.waves.reset();
     this.waves.difficulty = this.difficulty;
     this.player.reset();
@@ -453,7 +488,11 @@ class Game {
     if (this.cinematicEnabled && !this.coopMode) this._beginDeploy();
     else this.state = 'playing';
 
-    if (this.coopMode && !this.coopHost) {
+    if (this.pvpMode) {
+      // PvP arena: no enemies — players fight each other.
+      this.world._combatActive = false;
+      this.hud.setWave('PvP'); this.hud.killFeed('⚔ PVP ARENA — frag the squad!'); this.audio.wave();
+    } else if (this.coopMode && !this.coopHost) {
       // co-op client: the host runs the wave sim; we mirror ghost enemies.
       this.coop.clearGhosts();
       this.hud.setWave(1); this.hud.popWave(1, 'CO-OP'); this.audio.wave();
@@ -511,6 +550,46 @@ class Game {
     if (!this.coopMode || this.coopHost) return;
     this.hud.killFeed('Host fell — match over');
     this._gameOver();
+  }
+
+  // ---- PvP arena (experimental; reuses the co-op avatar sync) ----
+  startPvp() {
+    if (!this.coop.active) { this.hud && this.hud.killFeed && this.hud.killFeed('PvP needs a squad — Quick Match or join a room'); return; }
+    this.frags = {};
+    if (this.coop.isHost()) {
+      this.net.sendCoopEvent({ ev: 'pvpstart', map: this.world.mapId });
+      this.start(1, { pvp: true });
+    } else { this._coopWaiting = true; this.hud.killFeed && this.hud.killFeed('Waiting for host to start PvP…'); }
+  }
+  _pvpClientStart(m) {
+    this._coopWaiting = false;
+    if (m.map && m.map !== this.world.mapId) this._setMap(m.map);
+    this.frags = {};
+    this.start(1, { pvp: true });
+  }
+  _pvpName(id) {
+    if (id === this.coop.myId) return this.net.name + ' (you)';
+    const a = this.coop.peers.get(id); return a ? a.name : 'player ' + id;
+  }
+  _onPvpHit(d, byId) {
+    if (this.godmode || !this.pvpMode) return;
+    this.player.takeDamage(d); this.hud.damageFlash(); this.audio.hurt();
+    this.hud.setHealth(this.player.hp, this.player.maxHp);
+    this.hud.setArmor(this.player.armor, this.player.maxArmor);
+    if (this.player.hp <= 0) { this.coop.broadcastFrag(byId); this.hud.killFeed(`☠ ${this._pvpName(byId)} fragged you`); this._pvpRespawn(); }
+  }
+  _onPvpFrag(by, victim) {
+    this.frags = this.frags || {};
+    this.frags[by] = (this.frags[by] || 0) + 1;
+    if (by !== this.coop.myId) this.hud.killFeed(`▸ ${this._pvpName(by)} fragged ${this._pvpName(victim)}  (${this.frags[by]})`);
+    else this.hud.popKill();
+  }
+  _pvpRespawn() {
+    const a = Math.random() * Math.PI * 2, d = 20 + Math.random() * 20;
+    this.player.position.set(Math.cos(a) * d, 0, Math.sin(a) * d);
+    this.player.hp = this.player.maxHp; this.player.armor = 0; this.player.vy = 0;
+    this.hud.setHealth(this.player.hp, this.player.maxHp);
+    this.hud.killFeed('↻ RESPAWN');
   }
 
   _applyWaveStart(n, sub = 'INCOMING') {
@@ -576,6 +655,24 @@ class Game {
     this.camera.getWorldPosition(origin);
     const muzzle = new THREE.Vector3();
     this.weapons.muzzleWorldPos(muzzle);
+
+    // PvP: shots resolve against other players' avatars, reported over the relay
+    if (this.pvpMode) {
+      let anyHit = false;
+      for (const dir of shot.rays) {
+        const hit = this.coop.raycastPeers(this.raycaster, origin, dir, shot.def.range);
+        let endPoint;
+        if (hit) { endPoint = hit.point; anyHit = true; this.coop.sendPvpHit(hit.id, Math.round(shot.dmg * 12)); this.effects.bloodBurst(endPoint); }
+        else {
+          let t = dir.y < -0.001 ? -origin.y / dir.y : shot.def.range; t = Math.min(t, shot.def.range);
+          endPoint = origin.clone().add(dir.clone().multiplyScalar(t));
+          this.effects.impact(endPoint, 0xd8c79a, false);
+        }
+        this.effects.tracer(muzzle, endPoint, shot.def.tracer);
+      }
+      if (anyHit) this.hud.hitMarker();
+      return;
+    }
 
     // secret rocket launcher: fire an explosive projectile instead of hitscan
     if (this.weapons.def.key === 'rocket') {
@@ -939,7 +1036,9 @@ class Game {
     document.getElementById('gameover').classList.remove('hidden');
 
     this.vehicles.reset();
+    if (this._tpBody) this._tpBody.visible = false;
     this.world._combatActive = false;
+    this.pvpMode = false;
     if (this.coopMode) { this.coopMode = false; this.coopHost = false; this.coop.clearGhosts(); }
   }
 
@@ -982,12 +1081,16 @@ class Game {
       const clientCoop = this.coopMode && !this.coopHost;
 
       if (this._meleeCd > 0) this._meleeCd -= dt;
+      const tp = this.thirdPerson && !mounted;
       if (mounted) { this.player.regenOnly ? this.player.regenOnly(dt) : null; }
       else {
         this.player.update(dt);
         if (this._wasAir && this.player.onGround) this.audio.land();
         this._wasAir = !this.player.onGround;
+        if (tp) this._applyThirdPerson();
       }
+      this.weapons.rig.visible = !mounted && !this.thirdPerson;
+      if (this._tpBody) this._tpBody.visible = tp;
       this.weapons.update(dt);
       if (this.cheatArsenal) this.weapons.refill();
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;
@@ -997,7 +1100,10 @@ class Game {
       this.hud.setAmmo(live.ammo, live.reserve);
       this.hud.setReloading(this.weapons.reloading);
 
-      if (!clientCoop) {
+      if (this.pvpMode) {
+        // PvP: no enemies — combat is player-vs-player (handled in _fire)
+        this.hud.setEnemies(0); this.hud.showBoss(false);
+      } else if (!clientCoop) {
         // co-op host: enemies also target connected squadmates; damage to them
         // is routed over the relay so single-player keeps a single target.
         const extra = (this.coopMode && this.coopHost) ? this.coop.coopTargets() : null;
