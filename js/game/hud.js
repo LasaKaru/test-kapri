@@ -174,6 +174,19 @@ export class HUD {
     this._dmgT = setTimeout(() => this.el.dmg.classList.remove('show'), 110);
   }
 
+  // directional damage indicator. `angle` (radians) is the source bearing
+  // relative to the player's facing: 0 = dead ahead (top), +clockwise.
+  hitDirection(angle) {
+    const host = document.getElementById('hit-dirs');
+    if (!host) return;
+    if (!this._hdPool) { this._hdPool = []; this._hdIdx = 0; }
+    let el;
+    if (this._hdPool.length < 8) { el = document.createElement('div'); el.className = 'hit-dir'; el.innerHTML = '<i></i>'; host.appendChild(el); this._hdPool.push(el); }
+    else { el = this._hdPool[this._hdIdx = (this._hdIdx + 1) % this._hdPool.length]; }
+    el.style.transform = `rotate(${angle}rad)`;
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  }
+
   popKill() {
     const p = this.el.pop;
     p.className = 'center-pop kill';

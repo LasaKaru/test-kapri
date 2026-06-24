@@ -429,6 +429,15 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   80%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(.95)}}
 .center-pop .sub{display:block;font-size:.3em;letter-spacing:.3em;color:var(--gold);margin-top:8px}
 
+/* directional hit indicators — a red wedge points toward the damage source */
+.hit-dirs{position:absolute;inset:0;pointer-events:none}
+.hit-dir{position:absolute;inset:0;opacity:0;transform-origin:50% 50%}
+.hit-dir i{position:absolute;left:50%;top:6%;width:170px;height:96px;margin-left:-85px;display:block;
+  background:radial-gradient(ellipse at 50% 100%, rgba(230,46,36,.92), rgba(230,46,36,0) 72%);
+  clip-path:polygon(50% 100%, 8% 0, 92% 0)}
+.hit-dir{animation:hitdir .9s ease-out}
+@keyframes hitdir{0%{opacity:0}8%{opacity:1}100%{opacity:0}}
+
 /* damage flash + reload */
 .dmg-flash{position:absolute;inset:0;pointer-events:none;opacity:0;
   box-shadow:inset 0 0 160px 40px rgba(224,58,47,.7);transition:opacity .1s}

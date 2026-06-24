@@ -259,11 +259,13 @@ class Game {
           this.state = 'playing';
           this._hideOverlays();
           this.hud.show();
+          this.audio.setMuffle(false);     // un-muffle on resume
         }
       } else if (this.state === 'playing') {
         this.state = 'paused';
         this.firing = false;
         this.weapons.setAds(false);
+        this.audio.setMuffle(true);        // low-pass "muffle" the whole mix while paused
         document.getElementById('pause').classList.remove('hidden');
       }
     });
@@ -597,14 +599,30 @@ class Game {
     this.hud.setWave(n);
     this.hud.popWave(n, this.waves.isBossWave ? '☠ BOSS WAVE ☠' : sub);
     this.audio.wave();
+    this.audio.announce('wave');
     this.audio.setIntensity(Math.min(1, 0.2 + n * 0.06 + (this.waves.isBossWave ? 0.35 : 0)));
+    this.audio.setMusicState(this.waves.isBossWave ? 'boss' : 'combat');
     if (n >= 5) this.ach.unlock('wave5');
     if (n >= 10) this.ach.unlock('wave10');
     this._syncWeaponHud();
   }
 
   // wave cleared -> open the between-wave shop
+  // last enemy of a wave fell: a beat of slow-mo before the shop opens
+  _onWaveCleared(w) {
+    if (this._pendingShopWave != null) return;   // already handling this clear
+    this._triggerKillCam();
+    this.audio.setMusicState('calm');
+    this._pendingShopWave = w;
+    setTimeout(() => {
+      if (this.state === 'playing' && this._pendingShopWave != null) {
+        const ww = this._pendingShopWave; this._pendingShopWave = null; this._openShop(ww);
+      }
+    }, 950);
+  }
+
   _openShop(clearedWave) {
+    this.audio.setMusicState('calm');
     // co-op: no shop (it would desync the squad) — free resupply and roll on
     if (this.coopMode) {
       this.credits += 100 + clearedWave * 50;
@@ -883,7 +901,7 @@ class Game {
       const hitGround = p.y <= 0.2;
       const hitWorld = (() => { const r = this.world.resolve(p.x, p.z, 0.2); return r.x !== p.x || r.z !== p.z; })();
       if (hitPlayer || hitGround || hitWorld || s.life <= 0) {
-        if (hitPlayer) { this._onPlayerHit(s.dmg); }
+        if (hitPlayer) { this._onPlayerHit(s.dmg, p); }
         this.effects.impact(p.clone(), s.boss ? 0xff5030 : 0xd86bff, false);
         this._releaseShot(s, i);
       }
@@ -895,12 +913,33 @@ class Game {
     this.enemyShots = [];
   }
 
-  _onPlayerHit(dmg) {
+  _onPlayerHit(dmg, srcPos) {
     if (this.godmode) return;
     this.player.takeDamage(dmg);
     this.hud.damageFlash();
+    // directional "screen-space damage" indicator pointing at the source
+    let src = srcPos;
+    if (!src) {                       // melee / unknown -> nearest live enemy
+      let best = 1e9;
+      for (const e of this.waves.enemies) {
+        if (e.dead) continue;
+        const dx = e.group.position.x - this.player.position.x, dz = e.group.position.z - this.player.position.z;
+        const d2 = dx * dx + dz * dz; if (d2 < best) { best = d2; src = e.group.position; }
+      }
+    }
+    if (src) {
+      const dx = src.x - this.player.position.x, dz = src.z - this.player.position.z;
+      this.hud.hitDirection(Math.atan2(dx, -dz) + this.player.yaw);
+    }
     this.audio.hurt();
     this._afterPlayerDamage();
+  }
+
+  // brief slow-mo + cold cinematic grade on a climactic kill (boss / wave clear)
+  _triggerKillCam() {
+    this._kcDur = 1.0;
+    this._kcT = this._kcDur;
+    try { this.audio.duck(0.3, 0.9); } catch (_) {}
   }
 
   _afterPlayerDamage() {
@@ -935,6 +974,8 @@ class Game {
     this.score += pts;
     this.hud.setScore(this.score);
     this.hud.setStreak(this.streak);
+    if ([3, 5, 7, 10, 15, 20].includes(this.streak)) this.audio.announce('streak', this.streak);
+    if (enemy.isBoss) this._triggerKillCam();   // climactic boss kill -> slow-mo
     if (!head) this.hud.popKill();
     this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}${head ? ' ☠' : ''}  +${pts}`);
     this.audio.kill();
@@ -1006,6 +1047,8 @@ class Game {
     this.hud.hide();
     document.exitPointerLock();
     this.audio.over();
+    this.audio.setMusicState('calm');
+    this.postfx.setKillcam(0); this._kcT = 0;
 
     // co-op: host tells the squad the run is over; tidy up the shared state
     const coopClient = this.coopMode && !this.coopHost;
@@ -1056,6 +1099,8 @@ class Game {
     this.hud.setScore(this.score);
     this.hud.popKill();
     this.hud.killFeed('☠ ENEMY BASE DESTROYED  +5000');
+    this.audio.announce('base');
+    this._triggerKillCam();
     this.ach.unlock('basebuster');
     this._detonate(this.world.base.x, this.world.base.z, 12, 0, 0);
     this.postfx.pulseBloom(1.0);
@@ -1063,7 +1108,19 @@ class Game {
 
   loop() {
     requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = Math.min(0.05, this.clock.getDelta());
+    // kill-cam slow-mo: scales the sim while real time drives the recovery, so
+    // it always returns to normal speed even if a frame is dropped.
+    let scale = 1;
+    if (this.state === 'playing' && this._kcT > 0) {
+      this._kcT -= rawDt;
+      const f = Math.max(0, this._kcT / (this._kcDur || 1)); // 1 -> 0
+      scale = 0.3 + 0.7 * (1 - f);                           // 0.3x at impact, easing back to 1x
+      this.postfx.setKillcam(f);
+      if (this._kcT <= 0) { this._kcT = 0; this.postfx.setKillcam(0); }
+    }
+    this.timeScale = scale;
+    const dt = rawDt * scale;
 
     if (this.state === 'playing') {
       this._pollGamepad();
@@ -1109,7 +1166,7 @@ class Game {
         const extra = (this.coopMode && this.coopHost) ? this.coop.coopTargets() : null;
         this.waves.update(dt, this.player, this.camera, {
           onPlayerHit: (d, tid) => { if (tid) this.coop.sendDmg(tid, d); else this._onPlayerHit(d); },
-          onWaveCleared: (w) => this._openShop(w),
+          onWaveCleared: (w) => this._onWaveCleared(w),
           onEnemyShoot: (s) => this._spawnEnemyShot(s),
           onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
           onBark: (e) => this._enemyBark(e),

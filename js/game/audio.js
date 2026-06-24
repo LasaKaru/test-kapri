@@ -17,13 +17,18 @@ export class Audio {
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
     return this.ctx;
   }
-  // master bus + a short algorithmic reverb (generated impulse) for space/punch
+  // master bus + a short algorithmic reverb (generated impulse) for space/punch.
+  // Everything funnels through a master low-pass so we can "muffle" the whole
+  // mix while paused (a film-style underwater duck).
   _buildBus() {
     const ctx = this.ctx;
-    this._bus = ctx.createGain(); this._bus.connect(ctx.destination);
+    this._outLP = ctx.createBiquadFilter(); this._outLP.type = 'lowpass';
+    this._outLP.frequency.value = 20000; this._outLP.Q.value = 0.4;
+    this._outLP.connect(ctx.destination);
+    this._bus = ctx.createGain(); this._bus.connect(this._outLP);
     this._verb = ctx.createConvolver(); this._verb.buffer = this._makeIR(0.5, 2.8);
     this._wet = ctx.createGain(); this._wet.gain.value = 0.8;
-    this._verb.connect(this._wet); this._wet.connect(ctx.destination);
+    this._verb.connect(this._wet); this._wet.connect(this._outLP);
   }
   _makeIR(dur, decay) {
     const ctx = this.ctx, len = Math.max(1, Math.floor(ctx.sampleRate * dur));
@@ -32,6 +37,15 @@ export class Audio {
     return buf;
   }
   _dest() { return this._bus || this.ctx.destination; }
+  _out() { return this._outLP || this.ctx.destination; }
+
+  // muffle the entire mix (paused) by collapsing the master low-pass
+  setMuffle(on) {
+    const ctx = this._ensure(); if (!ctx || !this._outLP) return;
+    const t = ctx.currentTime, f = this._outLP.frequency;
+    f.cancelScheduledValues(t); f.setValueAtTime(f.value, t);
+    f.exponentialRampToValueAtTime(on ? 430 : 20000, t + 0.25);
+  }
   _send(node, amt) { if (!this._verb || !amt) return; const g = this.ctx.createGain(); g.gain.value = amt; node.connect(g); g.connect(this._verb); }
 
   _blip(freq, dur, type = 'square', vol = 0.15, slideTo = null) {
@@ -157,6 +171,7 @@ export class Audio {
   }
   explosion() {
     if (!this._ensure() || !this.enabled) return;
+    this.duck(0.5, 0.7);                       // dynamic ducking: music dips under the blast
     this._thump(130, 26, 0.8, 0.85);
     this._burst({ dur: 0.7, vol: 0.5, cut: 1000, slideCut: 180, verb: 0.6 });
     this._click(0.25, 1800);
@@ -190,7 +205,13 @@ export class Audio {
     const t0 = ctx.currentTime, dur = o.dur;
     const out = ctx.createGain();
     out.gain.value = (o.vol || 0.3) * this.master;
-    out.connect(ctx.destination);
+    // optional "radio" colouring for announcer comms (band-limited + crunch)
+    if (o.radio) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q.value = 0.9;
+      out.connect(bp); bp.connect(this._out());
+    } else {
+      out.connect(this._out());
+    }
 
     const src = ctx.createOscillator();
     src.type = 'sawtooth';
@@ -245,60 +266,131 @@ export class Audio {
     }
   }
 
+  // ---- announcer (formant "voice" with a comms beep + radio colour) ----
+  // Not real words — an authoritative, band-limited shout that reads as an
+  // in-game announcer. Deeper f0 + steady (low-vibrato) formants vs enemy barks.
+  _commsBeep() { this._blip(1320, 0.05, 'sine', 0.06, 1320); }
+  // syls: [{f0, fm:[[freq,q,gain]...], d}] spoken in sequence
+  _say(syls, vol = 0.34) {
+    let delay = 0;
+    syls.forEach((s) => {
+      setTimeout(() => this._formant({
+        f0: s.f0, f1: s.f0 * 0.9, dur: s.d, vol, vib: 7, vibDepth: 4,
+        radio: true, formants: s.fm,
+      }), delay);
+      delay += s.d * 900 + 30;
+    });
+  }
+  announce(type, n = 0) {
+    if (!this._ensure() || !this.enabled) return;
+    // a couple of vowel formant sets to vary the "syllables"
+    const A = [[720, 8, 1], [1100, 9, 0.6], [2600, 10, 0.25]]; // "ah"
+    const E = [[500, 8, 1], [1700, 9, 0.6], [2500, 10, 0.25]]; // "eh"
+    const O = [[450, 8, 1], [800, 9, 0.6], [2400, 10, 0.2]];   // "oh"
+    this._commsBeep();
+    setTimeout(() => {
+      if (type === 'wave') {
+        this._say([{ f0: 150, fm: E, d: 0.18 }, { f0: 140, fm: A, d: 0.16 }, { f0: 120, fm: O, d: 0.26 }], 0.32);
+      } else if (type === 'base') {
+        this._say([{ f0: 135, fm: O, d: 0.2 }, { f0: 128, fm: E, d: 0.16 }, { f0: 110, fm: A, d: 0.3 }], 0.4);
+      } else if (type === 'streak') {
+        // higher & more syllables the bigger the streak
+        const lvl = n >= 10 ? 4 : n >= 7 ? 3 : n >= 5 ? 2 : 1;
+        const base = 150 + lvl * 14;
+        const syls = [];
+        for (let i = 0; i <= lvl; i++) syls.push({ f0: base + i * 10, fm: [A, E, O][i % 3], d: 0.15 });
+        this._say(syls, 0.3 + lvl * 0.02);
+      }
+    }, 90);
+  }
+
   // ---- procedural music + ambience ----
   setMusicVolume(v) { this.musicVol = v; if (this._musicGain) this._musicGain.gain.value = v; }
   setIntensity(level) { this._intensity = Math.max(0, Math.min(1, level)); }
+
+  // Crossfade between three musical stems. 'calm' (exploration/shop),
+  // 'combat' (a live wave) and 'boss' (boss wave). Layers run continuously and
+  // only their gains crossfade, so transitions are seamless.
+  setMusicState(state) {
+    this._pendingState = state;
+    if (!this._musicOn || !this._layers || !this.ctx) return;
+    this._state = state;
+    const t = this.ctx.currentTime, R = 2.4;
+    const ramp = (g, v) => { g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(v, t + R); };
+    ramp(this._layers.calm, state === 'calm' ? 1 : 0.14);          // pad never fully vanishes
+    ramp(this._layers.combat, state === 'combat' ? 1 : (state === 'boss' ? 0.45 : 0));
+    ramp(this._layers.boss, state === 'boss' ? 1 : 0);
+    this._drive = state === 'calm' ? 0.25 : state === 'combat' ? 0.75 : 1;
+  }
+
+  // duck the music under a loud event (explosion); recovers over `dur`
+  duck(amount = 0.5, dur = 0.6) {
+    if (!this._duckGain || !this.ctx) return;
+    const t = this.ctx.currentTime, g = this._duckGain.gain;
+    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001, g.value), t);
+    g.linearRampToValueAtTime(Math.max(0.05, 1 - amount), t + 0.04);
+    g.linearRampToValueAtTime(1, t + dur);
+  }
 
   startMusic() {
     const ctx = this._ensure();
     if (!ctx || this._musicOn) return;
     this._musicOn = true;
     this._beat = 0;
+    this._drive = 0.25;
+    this._state = 'calm';
+    this._stems = [];
 
+    // music sub-master -> ducking gain -> master out (through the muffle LP)
     this._musicGain = ctx.createGain();
     this._musicGain.gain.value = this.musicVol;
-    this._musicGain.connect(ctx.destination);
+    this._duckGain = ctx.createGain(); this._duckGain.gain.value = 1;
+    this._musicGain.connect(this._duckGain); this._duckGain.connect(this._out());
     // gentle reverb send so the music sits in the same space as the SFX
     this._musicVerb = ctx.createGain(); this._musicVerb.gain.value = 0.16;
     if (this._verb) this._musicVerb.connect(this._verb);
 
-    // warm pad: three detuned saws through a resonant low-pass swept by an LFO
-    this._droneFilter = ctx.createBiquadFilter();
-    this._droneFilter.type = 'lowpass'; this._droneFilter.frequency.value = 460; this._droneFilter.Q.value = 3;
-    const padGain = ctx.createGain(); padGain.gain.value = 0.065;
-    this._droneFilter.connect(padGain); padGain.connect(this._musicGain); padGain.connect(this._musicVerb);
-    this._drones = [];
-    [55, 82.5, 110].forEach((f, i) => {
-      const o = ctx.createOscillator(); o.type = 'sawtooth';
-      o.frequency.value = f * (1 + (i - 1) * 0.004);
-      o.connect(this._droneFilter); o.start();
-      this._drones.push(o);
-    });
-    this._padLfo = ctx.createOscillator(); this._padLfoGain = ctx.createGain();
-    this._padLfo.frequency.value = 0.06; this._padLfoGain.gain.value = 170;
-    this._padLfo.connect(this._padLfoGain); this._padLfoGain.connect(this._droneFilter.frequency);
-    this._padLfo.start();
+    // three crossfading stem layers
+    this._layers = {};
+    const layer = (name, start) => { const g = ctx.createGain(); g.gain.value = start; g.connect(this._musicGain); g.connect(this._musicVerb); this._layers[name] = g; return g; };
+    const gCalm = layer('calm', 1), gCombat = layer('combat', 0), gBoss = layer('boss', 0);
+    this._padLayer(ctx, gCalm, [55, 82.5, 110], 0.065, 460, 0.06, 170);          // warm exploration pad
+    this._padLayer(ctx, gCombat, [110, 165, 220], 0.05, 900, 0.12, 360);         // brighter, tense fifths
+    this._padLayer(ctx, gBoss, [55, 58.27, 110], 0.06, 360, 0.05, 90);           // dissonant minor-2nd dread
 
-    // wind ambience: filtered looping noise
+    // wind ambience (routed to the calm layer so it ducks naturally)
     const wbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const wd = wbuf.getChannelData(0);
     for (let i = 0; i < wd.length; i++) wd[i] = Math.random() * 2 - 1;
     this._wind = ctx.createBufferSource(); this._wind.buffer = wbuf; this._wind.loop = true;
     const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 600; wf.Q.value = 0.5;
     const wg = ctx.createGain(); wg.gain.value = 0.022;
-    this._wind.connect(wf); wf.connect(wg); wg.connect(this._musicGain); this._wind.start();
+    this._wind.connect(wf); wf.connect(wg); wg.connect(gCalm); this._wind.start();
 
+    if (this._pendingState) this.setMusicState(this._pendingState);
     this._scheduleBeat();
+  }
+
+  // detuned-saw pad through a resonant low-pass swept by a slow LFO, into `dest`
+  _padLayer(ctx, dest, freqs, gain, cut, lfoRate, lfoDepth) {
+    const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = cut; filt.Q.value = 3;
+    const pad = ctx.createGain(); pad.gain.value = gain;
+    filt.connect(pad); pad.connect(dest);
+    freqs.forEach((f, i) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * (1 + (i - 1) * 0.004); o.connect(filt); o.start(); this._stems.push(o); });
+    const lfo = ctx.createOscillator(), lg = ctx.createGain();
+    lfo.frequency.value = lfoRate; lg.gain.value = lfoDepth;
+    lfo.connect(lg); lg.connect(filt.frequency); lfo.start();
+    this._stems.push(lfo);
   }
 
   stopMusic() {
     this._musicOn = false;
     if (this._musicTimer) clearTimeout(this._musicTimer);
-    try { this._drones && this._drones.forEach((o) => o.stop()); } catch (_) {}
-    try { this._padLfo && this._padLfo.stop(); } catch (_) {}
+    try { this._stems && this._stems.forEach((o) => { try { o.stop(); } catch (_) {} }); } catch (_) {}
     try { this._wind && this._wind.stop(); } catch (_) {}
     if (this._musicGain) { try { this._musicGain.disconnect(); } catch (_) {} }
-    this._drones = null; this._wind = null; this._musicGain = null; this._padLfo = null;
+    if (this._duckGain) { try { this._duckGain.disconnect(); } catch (_) {} }
+    this._stems = null; this._wind = null; this._musicGain = null; this._duckGain = null; this._layers = null;
   }
 
   // a tuned musical note with attack/decay, optional low-pass body + verb send
@@ -342,18 +434,20 @@ export class Audio {
   // the lead only build in as the wave intensity climbs, so it never feels busy.
   _scheduleBeat() {
     if (!this._musicOn || !this.ctx) return;
-    const i = this._intensity, step = this._beat % 16;
+    const i = Math.max(this._drive || 0, this._intensity || 0), step = this._beat % 16;
+    const boss = this._state === 'boss';
     const root = 55; // A1
     if ([0, 6, 8, 14].includes(step)) this._bass(root * (step === 8 ? 1.5 : 1), 0.32, 0.14 + i * 0.05);
     if (i > 0.15 && step % 4 === 0) this._kick(0.38 + i * 0.18);
+    if (boss && step % 8 === 0) this._kick(0.6);                                            // boss: heavy downbeat
     if (i > 0.4 && step % 4 === 2) this._perc(0.04 + i * 0.05, 8200, 0.03, true);          // hat (sparse)
     if (i > 0.5 && (step === 4 || step === 12)) this._perc(0.1 + i * 0.07, 1900, 0.12, false); // snare
     if (i > 0.6 && step % 4 === 0) {                                                       // lead (only when intense)
-      const motif = [0, 3, 7, 10];
+      const motif = boss ? [0, 1, 6, 8] : [0, 3, 7, 10];                                   // boss: dissonant motif
       this._mnote(220 * Math.pow(2, motif[(step / 4) % motif.length] / 12), 0.34, 'triangle', 0.04 + i * 0.05, 2200, true);
     }
     this._beat++;
-    const bpm = 78 + i * 36;
+    const bpm = (boss ? 96 : 78) + i * 36;
     this._musicTimer = setTimeout(() => this._scheduleBeat(), (60 / bpm / 2) * 1000);
   }
 
