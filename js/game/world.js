@@ -68,6 +68,8 @@ export class World {
     this.map = MAPS[this.mapId];
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this.colliders = []; // {x,z,r}
+    this.climbVolumes = []; // {x,z,r,baseY,top} — ladder zones on watchtowers
+    this.platforms = [];    // {x,z,hw,y} — climbable tower decks you can stand on
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
     this.bounds = 130;
     this._clouds = [];
@@ -96,7 +98,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.barrels = []; this._clouds = []; this._waterMats = []; this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this._clouds = []; this._waterMats = []; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -114,7 +116,65 @@ export class World {
     this._scatterGrass();
     this._scatterFlora();
     this._buildBase();
+    this._buildTowers();
     this._critters = new Critters(this.root, this);
+  }
+
+  // ---------- Climbable watchtowers (vantage points) ----------
+  // Wooden towers with a ladder you climb (hold W / Space in the ladder zone)
+  // up to a railed deck — a tactical sniping perch enemies can't follow you onto.
+  _buildTowers() {
+    this.climbVolumes = this.climbVolumes || [];
+    this.platforms = this.platforms || [];
+    this.towers = [];
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.95, flatShading: true });
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x7d5836, roughness: 0.9, flatShading: true });
+    const spots = [[-46, -22], [52, 28], [-32, 56], [58, -50]];
+    for (const [x, z] of spots) {
+      if (this.waterAt(x, z)) continue;
+      const base = Math.max(0, this.heightAt(x, z));
+      const H = 8, topY = base + H, hw = 1.7;
+      const g = new THREE.Group(); g.position.set(x, 0, z);
+      // four corner legs (thin colliders so you can walk between them at ground)
+      const legGeo = new THREE.BoxGeometry(0.28, H, 0.28);
+      for (const [lx, lz] of [[-hw, -hw], [hw, -hw], [-hw, hw], [hw, hw]]) {
+        const leg = new THREE.Mesh(legGeo, wood); leg.position.set(lx, base + H / 2, lz); leg.castShadow = true; g.add(leg);
+        this.colliders.push({ x: x + lx, z: z + lz, r: 0.4 });
+      }
+      // deck
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 0.4, 0.3, hw * 2 + 0.4), deckMat);
+      deck.position.set(0, topY, 0); deck.castShadow = true; deck.receiveShadow = true; g.add(deck);
+      // railings on three sides (ladder face at +z stays open)
+      g.add(this._railing(0, topY + 0.55, -hw - 0.1, hw * 2 + 0.4, 0.12, wood));
+      g.add(this._railing(-hw - 0.1, topY + 0.55, 0, 0.12, hw * 2 + 0.4, wood));
+      g.add(this._railing(hw + 0.1, topY + 0.55, 0, 0.12, hw * 2 + 0.4, wood));
+      // ladder rungs + rails on the +z face
+      for (let yy = base + 0.5; yy < topY; yy += 0.55) {
+        const rung = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.09, 0.09), wood); rung.position.set(0, yy, hw + 0.05); g.add(rung);
+      }
+      [-0.5, 0.5].forEach((rx) => { const sr = new THREE.Mesh(new THREE.BoxGeometry(0.1, H, 0.1), wood); sr.position.set(rx, base + H / 2, hw + 0.05); g.add(sr); });
+      this.root.add(g);
+      // ladder zone sits just inside the deck edge so the top of the climb lands
+      // you on the deck even if you climb straight up with Space
+      this.climbVolumes.push({ x, z: z + hw - 0.15, r: 1.4, baseY: base, top: topY + 0.1 });
+      this.platforms.push({ x, z, hw, y: topY + 0.15 });
+      this.towers.push({ x, z, topY });
+    }
+  }
+  _railing(px, py, pz, w, d, mat) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.7, d), mat); m.position.set(px, py, pz); return m; }
+
+  // climbable ladder volume at (x,z), or null
+  climbAt(x, z) {
+    for (const c of this.climbVolumes) if (Math.hypot(x - c.x, z - c.z) <= c.r) return c;
+    return null;
+  }
+  // ground height incl. tower decks (only when the player is near deck height)
+  groundHeight(x, z, y) {
+    let h = Math.max(0, this.heightAt(x, z));
+    for (const p of this.platforms) {
+      if (Math.abs(x - p.x) <= p.hw && Math.abs(z - p.z) <= p.hw && (y == null || y > p.y - 2.2)) h = Math.max(h, p.y);
+    }
+    return h;
   }
 
   _scatterFlora() {

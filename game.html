@@ -66,7 +66,7 @@
           <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
         </div>
         <div class="grenade-line"><span class="nade-icon">✸</span> <span id="nade-num">3</span> <span class="nade-lbl">FRAG · G</span></div>
-        <div class="inv-meat hidden" id="inv-meat">🍖 <span class="inv-n">0</span> <span class="nade-lbl">MEAL · C</span></div>
+        <div class="inv-meat hidden" id="inv-meat">🍖 <span class="inv-n">0</span> <span class="nade-lbl">MEAL · B</span></div>
       </div>
 
       <!-- Bottom-left: weapon slots -->
@@ -119,6 +119,7 @@
       <div class="lowhp-vignette" id="lowhp-vignette"></div>
       <div class="threat-vignette" id="threat-vignette"></div>
       <div class="reload-note" id="reload-note">RELOADING…</div>
+      <div class="stealth-tag hidden" id="stealth-tag">◈ HIDDEN</div>
 
       <!-- sniper scope overlay -->
       <div class="scope" id="scope">
@@ -152,6 +153,7 @@
         <button class="btn btn-ghost" id="missions-btn">🎯 Missions</button>
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
+        <button class="btn btn-ghost" id="perks-btn">⭐ Perks</button>
         <button class="btn btn-ghost" id="leaderboard-btn">🏅 Leaderboard</button>
         <button class="btn btn-ghost" id="coop-btn">👥 Multiplayer</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
@@ -159,7 +161,7 @@
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
           <span><b>R-Click</b> Aim Down Sights</span><span><b>R</b> Reload</span>
           <span><b>1-9 / Wheel</b> Weapons</span><span><b>G</b> Grenade</span>
-          <span><b>V</b> Melee</span><span><b>Space</b> Jump</span><span><b>T</b> 3rd Person</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+          <span><b>V</b> Melee</span><span><b>Space</b> Jump</span><span><b>C</b> Crouch / Stealth</span><span><b>W / Space</b> Climb ladders</span><span><b>B</b> Eat Meal</span><span><b>T</b> 3rd Person</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
         </div>
         <div class="secret-hint">Psst… try typing secret codes in-game: <b>TANK</b>, <b>BIKE</b>, <b>JET</b>, <b>ARSENAL</b>, <b>GODMODE</b>, <b>SPEED</b></div>
         <a class="back-link" href="index.html">← Back to site</a>
@@ -245,6 +247,21 @@
         <div class="diff-label">WEAPON ATTACHMENTS · max 2 each</div>
         <div class="loadout-grid" id="loadout-grid"></div>
         <button class="btn btn-primary btn-lg" id="loadout-close">Confirm</button>
+      </div>
+    </div>
+
+    <!-- Perks / meta-progression -->
+    <div id="perks" class="overlay hidden">
+      <div class="overlay-inner mapselect-inner">
+        <h2 class="pause-word">PERKS</h2>
+        <div class="perks-head">
+          <span id="perks-level" class="perks-level">LV 1</span>
+          <div class="perks-xp"><div class="perks-xp-fill" id="perks-xp-fill"></div><span class="perks-xp-text" id="perks-xp-text">0 / 0 XP</span></div>
+          <span id="perks-points" class="perks-points">0 points</span>
+        </div>
+        <p class="shop-sub">Earn XP every run. Spend perk points to permanently boost your soldier — perks stack with your class &amp; attachments. Click a perk to rank it up, − to refund.</p>
+        <div class="perks-grid" id="perks-grid"></div>
+        <button class="btn btn-primary btn-lg" id="perks-close">Done</button>
       </div>
     </div>
 

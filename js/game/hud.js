@@ -116,6 +116,15 @@ export class HUD {
     el.classList.toggle('show', level > 0.02);
   }
   showBoss(on) { const w = document.getElementById('boss-bar-wrap'); if (w) w.classList.toggle('hidden', !on); }
+  setBossName(name) { const el = document.querySelector('#boss-bar-wrap .boss-name'); if (el && name) el.textContent = name; }
+  // stealth state pill: shown only while crouched (HIDDEN green / DETECTED red)
+  setStealth(crouching, detected) {
+    const el = document.getElementById('stealth-tag'); if (!el) return;
+    el.classList.toggle('hidden', !crouching);
+    if (!crouching) return;
+    el.classList.toggle('detected', detected);
+    el.textContent = detected ? '◉ DETECTED' : '◈ HIDDEN';
+  }
   setBoss(hp, max) { const f = document.getElementById('boss-fill'); if (f) f.style.width = Math.max(0, hp / max) * 100 + '%'; }
   setScope(on) {
     this.el.scope.classList.toggle('show', on);

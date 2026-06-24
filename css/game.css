@@ -88,6 +88,34 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   background:rgba(8,16,4,.5)}
 #minimap{width:170px;height:170px;display:block}
 
+/* Perks / meta-progression */
+.perks-head{display:flex;align-items:center;gap:16px;margin:6px 0 10px;flex-wrap:wrap;justify-content:center}
+.perks-level{font-family:'Orbitron';font-weight:800;color:var(--lime-bright);font-size:1.1rem;letter-spacing:.08em}
+.perks-points{font-family:'Rajdhani';font-weight:700;color:var(--gold);letter-spacing:.05em}
+.perks-xp{position:relative;flex:1;min-width:200px;height:16px;border:1px solid rgba(188,224,74,.3);
+  border-radius:9px;background:rgba(8,16,4,.7);overflow:hidden}
+.perks-xp-fill{position:absolute;inset:0;width:0;background:linear-gradient(90deg,#5a8a1c,var(--lime-bright));transition:width .3s}
+.perks-xp-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron';font-size:.62rem;color:#eaf6d0;text-shadow:0 1px 2px #000;letter-spacing:.04em}
+.perks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;width:100%;margin:6px 0 16px}
+.perk-card{display:flex;align-items:center;gap:12px;text-align:left;padding:11px 13px;cursor:pointer;
+  background:rgba(10,18,6,.6);border:1px solid rgba(188,224,74,.16);border-radius:11px;transition:border-color .15s,transform .1s}
+.perk-card.buyable{border-color:rgba(188,224,74,.6);box-shadow:0 0 12px rgba(140,200,40,.2)}
+.perk-card.buyable:hover{transform:translateY(-2px)}
+.perk-card.locked{opacity:.5;cursor:not-allowed;filter:grayscale(.6)}
+.perk-card.maxed{border-color:var(--gold)}
+.perk-ico{font-size:1.7rem;width:34px;text-align:center;flex:none}
+.perk-body{flex:1;min-width:0}
+.perk-name{font-family:'Orbitron';font-weight:700;color:var(--text);font-size:.92rem}
+.perk-desc{font-family:'Rajdhani';color:#a9bd86;font-size:.82rem;line-height:1.15}
+.perk-pips{display:flex;gap:4px;margin-top:5px;align-items:center}
+.perk-pips i{width:13px;height:8px;border-radius:2px;background:rgba(188,224,74,.18);display:inline-block}
+.perk-pips i.on{background:var(--lime-bright);box-shadow:0 0 6px rgba(188,224,74,.6)}
+.perk-lock{font-family:'Rajdhani';font-size:.74rem;color:#caa84a}
+.perk-minus{flex:none;width:26px;height:26px;border-radius:6px;border:1px solid rgba(224,80,60,.4);
+  background:rgba(40,10,8,.6);color:#e0584a;font-weight:800;cursor:pointer;font-size:1rem;line-height:1}
+.perk-minus:hover{background:rgba(60,14,10,.8)}
+
 /* Settings */
 .settings-inner{min-width:min(440px,92vw);max-height:90vh;overflow-y:auto}
 .settings-grid{display:flex;flex-direction:column;gap:14px;width:100%;margin:8px 0 18px;text-align:left}
@@ -445,6 +473,13 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .reload-note{position:absolute;bottom:90px;right:30px;font-family:'Orbitron';font-weight:700;
   letter-spacing:.2em;color:var(--gold);font-size:.95rem;opacity:0;transition:opacity .2s}
 .reload-note.show{opacity:1;animation:blink .6s steps(2) infinite}
+/* stealth state pill (crouched) */
+.stealth-tag{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);
+  font-family:'Orbitron';font-weight:700;letter-spacing:.18em;font-size:.82rem;
+  padding:5px 14px;border-radius:14px;border:1px solid rgba(120,200,90,.5);
+  color:#bff29a;background:rgba(8,22,6,.55);text-shadow:0 1px 3px #000}
+.stealth-tag.detected{color:#ffb0a6;border-color:rgba(224,80,60,.6);background:rgba(28,8,6,.6);
+  animation:blink .5s steps(2) infinite}
 
 /* ===== Overlays ===== */
 .overlay{position:absolute;inset:0;z-index:30;display:grid;place-items:center;

@@ -25,6 +25,14 @@ export class Player {
     this.jumpStrength = 7.2;
     this.gravity = 22;
 
+    // crouch / stealth + ladder climbing
+    this.crouching = false;
+    this.standEye = 1.7;
+    this.crouchEye = 1.0;
+    this.climbing = false;
+    this.onLadder = false;
+    this.climbSpeed = 4.2;
+
     // survivability (COD-style)
     this.maxHp = 100; this.hp = 100;
     this.maxArmor = 100; this.armor = 0;
@@ -99,9 +107,15 @@ export class Player {
       move.add(right.clone().multiplyScalar(this.touchVec.x));
     }
 
+    // crouch (hold C): lower stance, slower, no sprint — the basis of stealth
+    this.crouching = !!this.keys['KeyC'] && this.onGround && !this.climbing;
+    const targetEye = this.crouching ? this.crouchEye : this.standEye;
+    this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 10);
+
     let spd = this.speed;
-    this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'];
+    this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'] && !this.crouching;
     if (this.sprinting) spd *= this.sprintMul;
+    if (this.crouching) spd *= 0.5;
     // wading through water slows you down
     this.wading = this.world.waterAt(this.position.x, this.position.z);
     if (this.wading) spd *= 0.5;
@@ -113,15 +127,27 @@ export class Player {
       if (this.onGround) this._bob += dt * spd * 1.3;
     }
 
-    // vertical (jump + gravity) over the ground height
-    const ground = Math.max(0, this.world.heightAt ? this.world.heightAt(this.position.x, this.position.z) : 0);
-    if (!this.onGround || this.position.y > ground + 0.001) {
-      this.vy -= this.gravity * dt;
-      this.position.y += this.vy * dt;
-      if (this.position.y <= ground) { this.position.y = ground; this.vy = 0; this.onGround = true; }
-      else this.onGround = false;
+    // vertical: ladder climbing overrides gravity; otherwise jump + gravity over
+    // the ground height (which includes climbable-tower platforms)
+    const climb = this.world.climbAt ? this.world.climbAt(this.position.x, this.position.z) : null;
+    this.onLadder = !!climb;
+    const ground = this.world.groundHeight
+      ? this.world.groundHeight(this.position.x, this.position.z, this.position.y)
+      : Math.max(0, this.world.heightAt ? this.world.heightAt(this.position.x, this.position.z) : 0);
+    if (climb && (this.keys['Space'] || this.keys['KeyW']) && this.position.y < climb.top - 0.01) {
+      this.climbing = true;
+      this.position.y = Math.min(climb.top, this.position.y + this.climbSpeed * dt);
+      this.vy = 0; this.onGround = false;
     } else {
-      this.position.y = ground; this.vy = 0; this.onGround = true;
+      this.climbing = false;
+      if (!this.onGround || this.position.y > ground + 0.001) {
+        this.vy -= this.gravity * dt;
+        this.position.y += this.vy * dt;
+        if (this.position.y <= ground) { this.position.y = ground; this.vy = 0; this.onGround = true; }
+        else this.onGround = false;
+      } else {
+        this.position.y = ground; this.vy = 0; this.onGround = true;
+      }
     }
 
     this._updateCamera();
@@ -152,6 +178,8 @@ export class Player {
     this.hp = this.maxHp; this.armor = 0;
     this.hurtCd = 0; this.recoilPitch = 0; this._bob = 0;
     this.vy = 0; this.onGround = true;
+    this.crouching = false; this.climbing = false; this.onLadder = false;
+    this.eyeHeight = this.standEye;
     this._updateCamera();
   }
 }
