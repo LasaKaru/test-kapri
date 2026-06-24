@@ -201,6 +201,7 @@ class Game {
       this.player.onKey(e.code, true);
       if (e.code === 'KeyE') this.vehicles.toggleMount();
       if (this.vehicles.isMounted()) return; // driving — gun keys disabled
+      if (e.code === 'Space') { e.preventDefault(); if (this.player.jump()) this.audio.jump(); }
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
       if (e.code === 'KeyG') this._throwGrenade();
       if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
@@ -942,7 +943,11 @@ class Game {
 
       if (this._meleeCd > 0) this._meleeCd -= dt;
       if (mounted) { this.player.regenOnly ? this.player.regenOnly(dt) : null; }
-      else this.player.update(dt);
+      else {
+        this.player.update(dt);
+        if (this._wasAir && this.player.onGround) this.audio.land();
+        this._wasAir = !this.player.onGround;
+      }
       this.weapons.update(dt);
       if (this.cheatArsenal) this.weapons.refill();
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;
@@ -1008,14 +1013,22 @@ class Game {
       const enemySrc = clientCoop ? [...this.coop.ghosts.values()] : this.waves.enemies;
       this.minimap.update(this.player, enemySrc, this.pickups.items, this.world.lakes);
 
-      // compass (player heading + threat pips)
+      // compass (player heading + threat pips) + High-Alert threat indicator
       const items = [];
+      const fwx = -Math.sin(this.player.yaw), fwz = -Math.cos(this.player.yaw);
+      let threat = 0;
       for (const e of enemySrc) {
         if (e.dead) continue;
         const dx = e.group.position.x - this.player.position.x, dz = e.group.position.z - this.player.position.z;
         items.push({ bearing: Math.atan2(dx, -dz), boss: e.isBoss });
+        const d = Math.hypot(dx, dz);
+        if (d < 18) {
+          const dot = (dx * fwx + dz * fwz) / (d || 1); // 1 = dead ahead, <0.34 = outside ±70°
+          if (dot < 0.34) threat = Math.max(threat, 1 - d / 18);
+        }
       }
       this.hud.drawCompass(-this.player.yaw, items);
+      this.hud.setThreat(mounted ? 0 : threat);
 
       // camera shake
       if (this.shake > 0) {

@@ -1,6 +1,6 @@
 // Player-facing settings: persisted to localStorage and applied to the game.
 const KEY = 'verdant_settings';
-const DEFAULTS = { volume: 70, music: 50, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true };
+const DEFAULTS = { volume: 70, music: 32, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true };
 
 export class Settings {
   constructor(game) {

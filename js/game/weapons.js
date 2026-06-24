@@ -409,18 +409,30 @@ export class WeaponManager {
     let pz = THREE.MathUtils.lerp(hip.z, aimZ, this.adsT);
 
     if (this._kick > 0) { pz += this._kick; this._kick *= Math.max(0, 1 - dt * 9); if (this._kick < 0.001) this._kick = 0; }
-    if (this.reloading) py -= 0.12 * Math.sin((1 - this.reloadTimer / (w.reload * this.reloadMul)) * Math.PI);
+
+    // COD-style reload animation: drop & tilt the gun to swap the mag, then a
+    // quick "charging handle" snap at the end (no progress bar — read the gun).
+    let rollZ = 0, pitchX = 0, yawY = 0;
+    if (this.reloading) {
+      const p = 1 - this.reloadTimer / (w.reload * this.reloadMul); // 0..1
+      const dip = Math.sin(Math.min(1, p / 0.85) * Math.PI);        // down then back up
+      py -= 0.16 * dip;
+      pz += 0.05 * dip;
+      rollZ += 0.5 * dip;       // cant the weapon toward the mag well
+      yawY += 0.18 * dip;
+      pitchX += 0.22 * dip;
+      if (p > 0.82) { const s = Math.sin(((p - 0.82) / 0.18) * Math.PI); py += 0.06 * s; pitchX -= 0.18 * s; } // chamber snap
+    }
     if (this._swapAnim > 0) { this._swapAnim -= dt; py -= 0.3 * (this._swapAnim / 0.25); }
 
     // melee swing animation
-    let rollZ = 0;
     if (this._meleeAnim > 0) {
       this._meleeAnim -= dt;
       const k = 1 - this._meleeAnim / 0.3;
       pz += -0.25 * Math.sin(k * Math.PI);
-      rollZ = 0.5 * Math.sin(k * Math.PI);
+      rollZ += 0.5 * Math.sin(k * Math.PI);
     }
     this.rig.position.set(px, py, pz);
-    this.rig.rotation.z = rollZ;
+    this.rig.rotation.set(pitchX, yawY, rollZ);
   }
 }

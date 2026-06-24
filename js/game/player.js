@@ -19,6 +19,12 @@ export class Player {
     this.sprinting = false;
     this.touchVec = new THREE.Vector2(0, 0); // analog move from a touch joystick (x=strafe, y=forward)
 
+    // vertical movement (jump)
+    this.vy = 0;
+    this.onGround = true;
+    this.jumpStrength = 7.2;
+    this.gravity = 22;
+
     // survivability (COD-style)
     this.maxHp = 100; this.hp = 100;
     this.maxArmor = 100; this.armor = 0;
@@ -35,6 +41,11 @@ export class Player {
   }
 
   onKey(code, down) { this.keys[code] = down; }
+
+  jump() {
+    if (this.onGround) { this.vy = this.jumpStrength; this.onGround = false; return true; }
+    return false;
+  }
 
   addLook(dx, dy) {
     const sens = 0.0022 * this.lookSensMul * this.sensitivity;
@@ -99,7 +110,18 @@ export class Player {
       move.normalize().multiplyScalar(spd * dt);
       const r = this.world.resolve(this.position.x + move.x, this.position.z + move.z, this.radius);
       this.position.x = r.x; this.position.z = r.z;
-      this._bob += dt * spd * 1.3;
+      if (this.onGround) this._bob += dt * spd * 1.3;
+    }
+
+    // vertical (jump + gravity) over the ground height
+    const ground = Math.max(0, this.world.heightAt ? this.world.heightAt(this.position.x, this.position.z) : 0);
+    if (!this.onGround || this.position.y > ground + 0.001) {
+      this.vy -= this.gravity * dt;
+      this.position.y += this.vy * dt;
+      if (this.position.y <= ground) { this.position.y = ground; this.vy = 0; this.onGround = true; }
+      else this.onGround = false;
+    } else {
+      this.position.y = ground; this.vy = 0; this.onGround = true;
     }
 
     this._updateCamera();
@@ -128,6 +150,7 @@ export class Player {
     this.regenRate = 14; this.regenDelay = 4.0;
     this.hp = this.maxHp; this.armor = 0;
     this.hurtCd = 0; this.recoilPitch = 0; this._bob = 0;
+    this.vy = 0; this.onGround = true;
     this._updateCamera();
   }
 }

@@ -379,6 +379,12 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .lowhp-vignette.show{opacity:1;animation:hppulse 1.4s ease-in-out infinite}
 @keyframes hppulse{0%,100%{opacity:.55}50%{opacity:.9}}
 
+/* High-Alert threat indicator — edges pulse when an unseen enemy is close */
+.threat-vignette{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .12s;
+  box-shadow:inset 0 0 140px 40px rgba(255,196,40,.5)}
+.threat-vignette.show{animation:threatpulse .7s ease-in-out infinite}
+@keyframes threatpulse{0%,100%{filter:brightness(.8)}50%{filter:brightness(1.3)}}
+
 /* sniper scope */
 .scope{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .12s;
   background:radial-gradient(circle at 50% 50%,transparent 0,transparent 30vh,rgba(0,0,0,.97) 31vh)}

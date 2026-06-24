@@ -218,6 +218,7 @@ works offline.
 | `1 – 9` / `Wheel` | Switch weapons |
 | `G` | Throw frag grenade |
 | `R` | Reload |
+| `Space` | Jump |
 | `E` | Ride / exit a nearby vehicle |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |

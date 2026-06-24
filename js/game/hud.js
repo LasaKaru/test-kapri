@@ -108,6 +108,12 @@ export class HUD {
       ctx.beginPath(); ctx.arc(x, 6, Math.abs(d) > halfFov ? 2 : 3.5, 0, 7); ctx.fill();
     }
   }
+  // High-Alert: level 0..1 of the nearest unseen (behind/flank) threat
+  setThreat(level) {
+    const el = document.getElementById('threat-vignette'); if (!el) return;
+    el.style.opacity = level > 0.02 ? Math.min(0.9, level) : 0;
+    el.classList.toggle('show', level > 0.02);
+  }
   showBoss(on) { const w = document.getElementById('boss-bar-wrap'); if (w) w.classList.toggle('hidden', !on); }
   setBoss(hp, max) { const f = document.getElementById('boss-fill'); if (f) f.style.width = Math.max(0, hp / max) * 100 + '%'; }
   setScope(on) {

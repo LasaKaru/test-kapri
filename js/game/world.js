@@ -338,7 +338,8 @@ export class World {
     // keyframe palettes
     const goldT = { top: C(0x2a4a6e), mid: C(0xb59428), bot: C(0xe8951f), fog: C(0xc09a3a), light: C(0xffe39a), li: 2.0, hemi: 0.8 };
     const dayK = { top: C(0x3f7fd0), mid: C(0xbfe0ff), bot: C(0xeaf4ff), fog: C(0xc6d8e6), light: C(0xfff4d8), li: 2.5, hemi: 0.95 };
-    const nightK = { top: C(0x081024), mid: C(0x141f3a), bot: C(0x1f2d46), fog: C(0x121a30), light: C(0x9fb6ff), li: 0.55, hemi: 0.32 };
+    // Night keeps a visible blue moonlight floor so you can still see & fight.
+    const nightK = { top: C(0x0e1a3a), mid: C(0x24365e), bot: C(0x35507a), fog: C(0x1b2a4a), light: C(0xaecbff), li: 1.05, hemi: 0.62 };
 
     let k;
     if (e >= 0) { const t = e * e; k = this._blendK(goldT, dayK, t); }
