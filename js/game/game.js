@@ -1021,7 +1021,7 @@ class Game {
     const best = scores.reduce((m, r) => Math.max(m, r.score), 0);
     // co-op clients don't own the run, so they don't write/submit a score
     if (!coopClient) {
-      const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, date: Date.now() };
+      const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, name: this.net.name, country: this.net.country || '', date: Date.now() };
       scores.push(run);
       scores.sort((a, b) => b.score - a.score);
       scores = scores.slice(0, 25);

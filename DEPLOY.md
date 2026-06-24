@@ -123,7 +123,9 @@ server {
 | `CLUSTER` | *(off)* | `auto` (one HTTP worker per core) or a number |
 
 > **Leaderboard storage:** scores are stored in a Supabase `leaderboard` table
-> over REST (columns: `name, score, wave, kills, map, diff, ts`). Set
+> over REST (columns: `name, score, wave, kills, map, diff, country, ts`). The
+> `country` column is a 2-letter ISO code (text, nullable) used for the flag
+> icon — add it to your table if upgrading. Set
 > `SUPABASE_URL` + `SUPABASE_KEY` to enable it. **Without them the leaderboard is
 > simply disabled** (returns empty) and the client falls back to local scores —
 > no persistent disk/volume is needed.

@@ -122,6 +122,7 @@ async function handleApi(req, res, parsed) {
         wave: Math.max(1, Math.min(9999, parseInt(e.wave, 10) || 1)),
         kills: Math.max(0, Math.min(99999, parseInt(e.kills, 10) || 0)),
         map: clean(e.map, 16), diff: clean(e.diff, 16),
+        country: clean(e.country, 2).toUpperCase(),
         ts: Date.now(),
       };
       appendScore(entry);
@@ -159,6 +160,7 @@ function handleChat(conn) {
     let m; try { m = JSON.parse(raw); } catch (_) { return; }
     if (m.type === 'join') {
       conn.data.name = clean(m.name, 12) || 'GHOST';
+      conn.data.country = clean(m.country, 2).toUpperCase();
       conn.data.room = clean(m.room, 24) || 'global';
       const r = room(conn.data.room);
       r.clients.add(conn);
@@ -167,7 +169,7 @@ function handleChat(conn) {
     } else if (m.type === 'chat' && conn.data.room) {
       const text = String(m.text == null ? '' : m.text).slice(0, 240).replace(/[\u0000-\u001f]/g, '');
       if (!text.trim()) return;
-      const msg = { type: 'chat', name: conn.data.name || 'GHOST', text, ts: Date.now() };
+      const msg = { type: 'chat', name: conn.data.name || 'GHOST', country: conn.data.country || '', text, ts: Date.now() };
       const r = room(conn.data.room);
       r.history.push(msg); if (r.history.length > 80) r.history.shift();
       broadcast(r, msg);
@@ -210,10 +212,11 @@ function handleCoop(conn) {
       const id = r.seq++;
       const taken = new Set([...r.clients.values()].map((c) => c.data.name));
       conn.data.id = id; conn.data.room = r; conn.data.name = uniqueCoopName(m.name, taken);
-      const peers = [...r.clients.values()].map((c) => ({ id: c.data.id, name: c.data.name }));
+      conn.data.country = clean(m.country, 2).toUpperCase();
+      const peers = [...r.clients.values()].map((c) => ({ id: c.data.id, name: c.data.name, country: c.data.country || '' }));
       r.clients.set(id, conn);
-      conn.sendJSON({ type: 'welcome', id, room: r.code, name: conn.data.name, peers });
-      coopBroadcast(r, { type: 'peer-join', id, name: conn.data.name }, id);
+      conn.sendJSON({ type: 'welcome', id, room: r.code, name: conn.data.name, country: conn.data.country, peers });
+      coopBroadcast(r, { type: 'peer-join', id, name: conn.data.name, country: conn.data.country }, id);
     } else if (m.type === 'state' && conn.data.room) {
       m.id = conn.data.id;
       coopBroadcast(conn.data.room, m, conn.data.id);

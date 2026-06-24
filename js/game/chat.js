@@ -1,5 +1,15 @@
 // Live chat panel. Connects lazily on first open; degrades cleanly when the
 // server is unreachable (greyed input + "reconnecting"). Never blocks the game.
+
+// 2-letter ISO country code -> regional-indicator flag emoji (''=unknown)
+export function flagEmoji(cc) {
+  if (!cc || typeof cc !== 'string') return '';
+  cc = cc.toUpperCase().replace(/[^A-Z]/g, '');
+  if (cc.length !== 2) return '';
+  const A = 0x1f1e6;
+  return String.fromCodePoint(A + cc.charCodeAt(0) - 65, A + cc.charCodeAt(1) - 65);
+}
+
 export class Chat {
   constructor(game) {
     this.game = game;
@@ -41,7 +51,8 @@ export class Chat {
     const li = document.createElement('div');
     li.className = 'chat-msg' + (m.name === this.game.net.name ? ' me' : '');
     const t = new Date(m.ts || Date.now());
-    li.innerHTML = `<span class="cm-name">${this._esc(m.name)}</span><span class="cm-text">${this._esc(m.text)}</span>`;
+    const flag = flagEmoji(m.country);
+    li.innerHTML = `<span class="cm-name">${flag ? flag + ' ' : ''}${this._esc(m.name)}</span><span class="cm-text">${this._esc(m.text)}</span>`;
     this.list.appendChild(li);
     while (this.list.children.length > 100) this.list.firstChild.remove();
     this.list.scrollTop = this.list.scrollHeight;

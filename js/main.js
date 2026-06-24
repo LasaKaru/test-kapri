@@ -82,14 +82,22 @@
     const base = (/^https?:$/.test(location.protocol)) ? location.origin + '/api' : null;
     let tab = 'global';
 
+    const flagEmoji = (cc) => {
+      if (!cc || typeof cc !== 'string') return '';
+      cc = cc.toUpperCase().replace(/[^A-Z]/g, '');
+      if (cc.length !== 2) return '';
+      const A = 0x1f1e6;
+      return String.fromCodePoint(A + cc.charCodeAt(0) - 65, A + cc.charCodeAt(1) - 65);
+    };
     const render = (scores, online) => {
       if (!scores || !scores.length) { list.innerHTML = '<li class="lb-empty">No runs yet — be the first to survive.</li>'; return; }
       list.innerHTML = '';
       scores.slice(0, 8).forEach((r, i) => {
         const li = document.createElement('li');
+        const flag = flagEmoji(r.country);
         li.innerHTML =
           `<span class="lb-rank">#${i + 1}</span>` +
-          `<span class="lb-name">${(r.name || (online ? 'GHOST' : 'YOU')).replace(/[<>]/g, '')}</span>` +
+          `<span class="lb-name">${flag ? flag + ' ' : ''}${(r.name || (online ? 'GHOST' : 'YOU')).replace(/[<>]/g, '')}</span>` +
           `<span class="lb-score">${String(r.score).padStart(5, '0')}</span>` +
           `<span class="lb-map">W${r.wave} · ${MAP_NAMES[r.map] || ''}</span>`;
         list.appendChild(li);
