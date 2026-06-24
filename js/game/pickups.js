@@ -3,8 +3,13 @@ import * as THREE from 'three';
 const KINDS = {
   health: { color: 0x35e06a, emissive: 0x0d6b28, symbol: 'cross' },
   armor:  { color: 0x4aa3ff, emissive: 0x0d3a6b, symbol: 'shield' },
-  ammo:   { color: 0xffcf4a, emissive: 0x6b4f0d, symbol: 'box' },
+  ammo:    { color: 0xffcf4a, emissive: 0x6b4f0d, symbol: 'box' },
+  meat:    { color: 0xb5532a, emissive: 0x5a1e0d, symbol: 'box' },  // dropped by hunted animals
+  hide:    { color: 0x8a6a3a, emissive: 0x3a2a14, symbol: 'box' },  // trade material
+  feather: { color: 0xe8e2d0, emissive: 0x6b6450, symbol: 'box' },
+  fang:    { color: 0xd8d2c0, emissive: 0x5a564a, symbol: 'shield' },
 };
+const LOOT_KINDS = ['meat', 'hide', 'feather', 'fang'];
 
 export class Pickups {
   constructor(scene) {
@@ -44,7 +49,7 @@ export class Pickups {
 
     g.position.set(pos.x, 0.9, pos.z);
     this.scene.add(g);
-    this.items.push({ group: g, kind, spin: Math.random() * Math.PI, ttl: 18 });
+    this.items.push({ group: g, kind, spin: Math.random() * Math.PI, ttl: LOOT_KINDS.includes(kind) ? 60 : 18 });
   }
 
   // maybe drop something where an enemy died

@@ -66,6 +66,7 @@
           <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
         </div>
         <div class="grenade-line"><span class="nade-icon">✸</span> <span id="nade-num">3</span> <span class="nade-lbl">FRAG · G</span></div>
+        <div class="inv-meat hidden" id="inv-meat">🍖 <span class="inv-n">0</span> <span class="nade-lbl">MEAL · C</span></div>
       </div>
 
       <!-- Bottom-left: weapon slots -->
@@ -115,6 +116,7 @@
       <!-- hit / damage flash + low health vignette -->
       <div class="dmg-flash" id="dmg-flash"></div>
       <div class="lowhp-vignette" id="lowhp-vignette"></div>
+      <div class="threat-vignette" id="threat-vignette"></div>
       <div class="reload-note" id="reload-note">RELOADING…</div>
 
       <!-- sniper scope overlay -->
@@ -150,15 +152,15 @@
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
         <button class="btn btn-ghost" id="leaderboard-btn">🏅 Leaderboard</button>
-        <button class="btn btn-ghost" id="coop-btn">👥 Co-op</button>
+        <button class="btn btn-ghost" id="coop-btn">👥 Multiplayer</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
         <div class="controls-hint">
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
           <span><b>R-Click</b> Aim Down Sights</span><span><b>R</b> Reload</span>
           <span><b>1-9 / Wheel</b> Weapons</span><span><b>G</b> Grenade</span>
-          <span><b>V</b> Melee</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+          <span><b>V</b> Melee</span><span><b>Space</b> Jump</span><span><b>T</b> 3rd Person</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
         </div>
-        <div class="secret-hint">Psst… try typing secret codes in-game: <b>TANK</b>, <b>BIKE</b>, <b>JET</b>, <b>ARSENAL</b>, <b>GODMODE</b></div>
+        <div class="secret-hint">Psst… try typing secret codes in-game: <b>TANK</b>, <b>BIKE</b>, <b>JET</b>, <b>ARSENAL</b>, <b>GODMODE</b>, <b>SPEED</b></div>
         <a class="back-link" href="index.html">← Back to site</a>
       </div>
     </div>
@@ -194,18 +196,21 @@
     <!-- Co-op lobby -->
     <div id="coop" class="overlay hidden">
       <div class="overlay-inner">
-        <h2 class="pause-word">CO-OP</h2>
-        <p class="shop-sub">Squad up over the network — host a room or join with a code.</p>
+        <h2 class="pause-word">MULTIPLAYER</h2>
+        <p class="shop-sub">Squad up over the network — Quick Match, host a room, or join with a code. Everyone gets a unique callsign shown above their character.</p>
         <label class="olb-namewrap">CALLSIGN <input id="coop-name" maxlength="12" value="GHOST" /></label>
         <div class="coop-controls">
-          <button class="btn btn-primary" id="coop-host">Host Room</button>
+          <button class="btn btn-primary" id="coop-quick">⚡ Quick Match</button>
+          <button class="btn btn-ghost" id="coop-host">Host Room</button>
           <input id="coop-code" class="coop-code" maxlength="8" placeholder="ROOM CODE" />
           <button class="btn btn-ghost" id="coop-join">Join</button>
         </div>
         <div class="coop-status offline" id="coop-status">● Not connected</div>
         <ol class="coop-roster" id="coop-roster"></ol>
         <div class="coop-actions">
+          <button class="btn btn-ghost" id="coop-ready">Ready Up</button>
           <button class="btn btn-primary btn-lg" id="coop-deploy" disabled>Deploy Together</button>
+          <button class="btn btn-ghost" id="coop-pvp">⚔ PvP Arena</button>
           <button class="btn btn-ghost" id="coop-leave">Leave</button>
         </div>
         <a class="back-link" id="coop-close">← Back</a>

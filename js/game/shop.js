@@ -25,6 +25,18 @@ const PERKS = [
     apply: (g) => { g.creditMul += 0.5; } },
 ];
 
+// loot -> credits when you Sell, and craft recipes that consume loot
+const SELL = { hide: 40, feather: 15, fang: 60 };
+const CRAFT = [
+  { id: 'plate', name: 'Reinforced Plate', icon: '🛡', desc: '+30 Max Armor', req: { hide: 3 },
+    apply: (g) => { g.player.maxArmor += 30; g.player.addArmor(30); } },
+  { id: 'boots', name: 'Swift Boots', icon: '🥾', desc: '+10% Move Speed', req: { feather: 4 },
+    apply: (g) => { g.player.speed *= 1.1; } },
+  { id: 'charm', name: 'Bone Charm', icon: '🦴', desc: '+3 HP per kill', req: { fang: 2 },
+    apply: (g) => { g.lifesteal += 3; } },
+];
+const reqText = (req) => Object.entries(req).map(([k, n]) => `${n} ${k}`).join(' · ');
+
 export class Shop {
   constructor(game) {
     this.game = game;
@@ -68,6 +80,61 @@ export class Shop {
     CONSUMABLES.forEach((c) => card(c, false));
     section('PERKS · permanent this run');
     PERKS.forEach((p) => card(p, true));
+
+    // ---- trade & craft (uses hunted-animal loot) ----
+    section('TRADE & CRAFT · from hunting');
+    this.lootBar = document.createElement('div');
+    this.lootBar.className = 'shop-loot';
+    this.grid.appendChild(this.lootBar);
+
+    this.tradeCards = [];
+    const sell = document.createElement('button');
+    sell.className = 'shop-card';
+    sell.innerHTML = '<span class="sc-icon">◈</span><span class="sc-name">Sell All Loot</span>' +
+      '<span class="sc-desc">Hides, feathers &amp; fangs → credits</span><span class="sc-cost sc-sell">—</span>';
+    sell.addEventListener('click', () => this._sell(sell));
+    this.grid.appendChild(sell);
+    this.sellCard = sell;
+
+    CRAFT.forEach((r) => {
+      const el = document.createElement('button');
+      el.className = 'shop-card';
+      el.innerHTML = `<span class="sc-icon">${r.icon}</span><span class="sc-name">${r.name}</span>` +
+        `<span class="sc-desc">${r.desc}</span><span class="sc-cost">${reqText(r.req)}</span>`;
+      el.addEventListener('click', () => this._craft(r, el));
+      this.grid.appendChild(el);
+      this.tradeCards.push({ r, el });
+    });
+  }
+
+  _lootValue() {
+    const inv = this.game.inventory || {};
+    return (inv.hide || 0) * SELL.hide + (inv.feather || 0) * SELL.feather + (inv.fang || 0) * SELL.fang;
+  }
+  _sell(el) {
+    const val = this._lootValue();
+    if (val <= 0) { el.classList.add('shake'); setTimeout(() => el.classList.remove('shake'), 300); return; }
+    const inv = this.game.inventory;
+    inv.hide = 0; inv.feather = 0; inv.fang = 0;
+    this.game._saveInventory();
+    this.game.credits += val;
+    this.game.audio.pickup();
+    this.game.hud.setCredits(this.game.credits);
+    this.game.hud.killFeed(`SOLD LOOT  +${val}◈`);
+    this.refresh();
+  }
+  _craft(r, el) {
+    const inv = this.game.inventory || {};
+    const ok = Object.entries(r.req).every(([k, n]) => (inv[k] || 0) >= n);
+    if (!ok) { el.classList.add('shake'); setTimeout(() => el.classList.remove('shake'), 300); return; }
+    Object.entries(r.req).forEach(([k, n]) => { inv[k] -= n; });
+    this.game._saveInventory();
+    r.apply(this.game);
+    this.game.audio.pickup();
+    this.game.hud.setHealth(this.game.player.hp, this.game.player.maxHp);
+    this.game.hud.setArmor(this.game.player.armor, this.game.player.maxArmor);
+    this.game.hud.killFeed(`CRAFTED ${r.name.toUpperCase()}`);
+    this.refresh();
   }
 
   _buy(item, isPerk, el) {
@@ -98,6 +165,18 @@ export class Shop {
       if (c.isPerk) {
         const lvlEl = c.el.querySelector('.sc-lvl');
         lvlEl.textContent = maxed ? 'MAX' : `LV ${lvl}/${c.item.max}`;
+      }
+    }
+    // trade & craft
+    if (this.lootBar) {
+      const inv = g.inventory || {};
+      this.lootBar.innerHTML = `🍖 ${inv.meat || 0} &nbsp; 🟫 ${inv.hide || 0} hide &nbsp; 🪶 ${inv.feather || 0} &nbsp; 🦴 ${inv.fang || 0}`;
+      const val = this._lootValue();
+      this.sellCard.querySelector('.sc-sell').textContent = val > 0 ? `+${val}◈` : '—';
+      this.sellCard.classList.toggle('disabled', val <= 0);
+      for (const t of this.tradeCards) {
+        const can = Object.entries(t.r.req).every(([k, n]) => (inv[k] || 0) >= n);
+        t.el.classList.toggle('disabled', !can);
       }
     }
   }

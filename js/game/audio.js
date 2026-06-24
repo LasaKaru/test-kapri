@@ -166,6 +166,8 @@ export class Audio {
   swap() { this._mech(2000, 0.04, 0.12); }
   melee() { this._burst({ dur: 0.14, vol: 0.22, cut: 3200, slideCut: 600, type: 'bandpass', q: 0.8, verb: 0.1 }); this._thump(170, 70, 0.12, 0.2); }
   empty() { this._click(0.12, 3200); setTimeout(() => this._click(0.07, 3200), 55); }
+  jump() { this._burst({ dur: 0.16, vol: 0.12, cut: 1600, slideCut: 600, type: 'bandpass', q: 0.7 }); }
+  land() { this._thump(120, 55, 0.12, 0.18); this._burst({ dur: 0.08, vol: 0.12, cut: 1400 }); }
   kill() { this._thump(240, 120, 0.12, 0.18); this._burst({ dur: 0.05, vol: 0.1, cut: 1800 }); }
   hurt() { this._burst({ dur: 0.18, vol: 0.26, cut: 900, slideCut: 300 }); this._thump(150, 70, 0.18, 0.24); }
   reload() {
@@ -257,13 +259,13 @@ export class Audio {
     this._musicGain.gain.value = this.musicVol;
     this._musicGain.connect(ctx.destination);
     // gentle reverb send so the music sits in the same space as the SFX
-    this._musicVerb = ctx.createGain(); this._musicVerb.gain.value = 0.22;
+    this._musicVerb = ctx.createGain(); this._musicVerb.gain.value = 0.16;
     if (this._verb) this._musicVerb.connect(this._verb);
 
     // warm pad: three detuned saws through a resonant low-pass swept by an LFO
     this._droneFilter = ctx.createBiquadFilter();
-    this._droneFilter.type = 'lowpass'; this._droneFilter.frequency.value = 480; this._droneFilter.Q.value = 3;
-    const padGain = ctx.createGain(); padGain.gain.value = 0.085;
+    this._droneFilter.type = 'lowpass'; this._droneFilter.frequency.value = 460; this._droneFilter.Q.value = 3;
+    const padGain = ctx.createGain(); padGain.gain.value = 0.065;
     this._droneFilter.connect(padGain); padGain.connect(this._musicGain); padGain.connect(this._musicVerb);
     this._drones = [];
     [55, 82.5, 110].forEach((f, i) => {
@@ -283,7 +285,7 @@ export class Audio {
     for (let i = 0; i < wd.length; i++) wd[i] = Math.random() * 2 - 1;
     this._wind = ctx.createBufferSource(); this._wind.buffer = wbuf; this._wind.loop = true;
     const wf = ctx.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 600; wf.Q.value = 0.5;
-    const wg = ctx.createGain(); wg.gain.value = 0.04;
+    const wg = ctx.createGain(); wg.gain.value = 0.022;
     this._wind.connect(wf); wf.connect(wg); wg.connect(this._musicGain); this._wind.start();
 
     this._scheduleBeat();
@@ -336,22 +338,22 @@ export class Audio {
 
   // 16-step groove: pad + sub bass + kick/hat/snare and a lead, all building
   // with the wave intensity for a cinematic escalation.
+  // Calm by default (just the pad + an occasional sub bass); percussion and
+  // the lead only build in as the wave intensity climbs, so it never feels busy.
   _scheduleBeat() {
     if (!this._musicOn || !this.ctx) return;
     const i = this._intensity, step = this._beat % 16;
     const root = 55; // A1
-    const scale = [0, 3, 5, 7, 10, 12]; // minor pentatonic
-    if ([0, 3, 6, 8, 11, 14].includes(step)) this._bass(root * (step === 8 ? 1.5 : 1), 0.26, 0.2 + i * 0.06);
-    if (step % 4 === 0) this._kick(0.5 + i * 0.2);
-    if (i > 0.2 && step % 2 === 1) this._perc(0.05 + i * 0.06, 8000, 0.03, true);     // hat
-    if (i > 0.35 && (step === 4 || step === 12)) this._perc(0.18 + i * 0.1, 1900, 0.13, false); // snare
-    if (i > 0.45 && step % 2 === 0) {                                                 // lead motif
-      const motif = [0, 3, 7, 5, 3, 0, 5, 10];
-      const n = scale[motif[(step / 2) % motif.length] % scale.length] || 0;
-      this._mnote(220 * Math.pow(2, motif[(step / 2) % motif.length] / 12), 0.32, 'triangle', 0.05 + i * 0.06, 2400, true);
+    if ([0, 6, 8, 14].includes(step)) this._bass(root * (step === 8 ? 1.5 : 1), 0.32, 0.14 + i * 0.05);
+    if (i > 0.15 && step % 4 === 0) this._kick(0.38 + i * 0.18);
+    if (i > 0.4 && step % 4 === 2) this._perc(0.04 + i * 0.05, 8200, 0.03, true);          // hat (sparse)
+    if (i > 0.5 && (step === 4 || step === 12)) this._perc(0.1 + i * 0.07, 1900, 0.12, false); // snare
+    if (i > 0.6 && step % 4 === 0) {                                                       // lead (only when intense)
+      const motif = [0, 3, 7, 10];
+      this._mnote(220 * Math.pow(2, motif[(step / 4) % motif.length] / 12), 0.34, 'triangle', 0.04 + i * 0.05, 2200, true);
     }
     this._beat++;
-    const bpm = 86 + i * 44;
+    const bpm = 78 + i * 36;
     this._musicTimer = setTimeout(() => this._scheduleBeat(), (60 / bpm / 2) * 1000);
   }
 

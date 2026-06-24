@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540">
+  <defs>
+    <linearGradient id="sky9" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a4a6e"/><stop offset="0.55" stop-color="#c79a3a"/><stop offset="1" stop-color="#e8951f"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#sky9)"/>
+  <polygon points="0,320 240,230 470,310 700,220 960,310 960,340 0,340" fill="#6b5a2a" opacity="0.5"/>
+  <rect y="340" width="960" height="200" fill="#46591f"/>
+  <!-- three squadmates with name tags -->
+  <g font-family="Orbitron, Arial, sans-serif" font-size="18" font-weight="700" text-anchor="middle">
+    <g transform="translate(250,300)">
+      <rect x="-58" y="-92" width="116" height="30" rx="6" fill="rgba(8,16,4,0.7)"/><text x="0" y="-71" fill="#4aa3ff">VIPER</text>
+      <rect x="-26" y="-44" width="52" height="74" rx="6" fill="#4aa3ff"/><rect x="-16" y="-78" width="32" height="32" rx="5" fill="#4aa3ff"/>
+      <rect x="-22" y="30" width="16" height="46" fill="#222a18"/><rect x="6" y="30" width="16" height="46" fill="#222a18"/>
+    </g>
+    <g transform="translate(480,316)">
+      <rect x="-62" y="-96" width="124" height="30" rx="6" fill="rgba(8,16,4,0.7)"/><text x="0" y="-75" fill="#ffcf4a">RAVEN</text>
+      <rect x="-28" y="-46" width="56" height="80" rx="6" fill="#ffcf4a"/><rect x="-17" y="-84" width="34" height="34" rx="5" fill="#ffcf4a"/>
+      <rect x="-24" y="34" width="17" height="50" fill="#222a18"/><rect x="7" y="34" width="17" height="50" fill="#222a18"/>
+    </g>
+    <g transform="translate(710,300)">
+      <rect x="-66" y="-92" width="132" height="30" rx="6" fill="rgba(8,16,4,0.7)"/><text x="0" y="-71" fill="#ff6ad5">ONYX-2</text>
+      <rect x="-26" y="-44" width="52" height="74" rx="6" fill="#ff6ad5"/><rect x="-16" y="-78" width="32" height="32" rx="5" fill="#ff6ad5"/>
+      <rect x="-22" y="30" width="16" height="46" fill="#222a18"/><rect x="6" y="30" width="16" height="46" fill="#222a18"/>
+    </g>
+  </g>
+  <text x="40" y="500" font-family="Orbitron, Arial, sans-serif" font-size="32" font-weight="700" fill="#d8ff5e" letter-spacing="5">SQUAD UP · SHARED WAVES</text>
+</svg>

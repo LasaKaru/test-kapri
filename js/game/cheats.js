@@ -12,6 +12,7 @@ export class Cheats {
       BIKE:    { label: 'BIKE DEPLOYED', run: () => this.game.vehicles.spawnNear('bike') },
       JET:     { label: 'JET DEPLOYED', run: () => this.game.vehicles.spawnNear('jet') },
       GODMODE: { label: () => 'GODMODE ' + (this.game.godmode ? 'OFF' : 'ON'), run: () => { this.game.godmode = !this.game.godmode; } },
+      SPEED: { label: () => 'SPEED RUN ' + (this.game.speedRun ? 'OFF' : 'ON'), run: () => this._speed() },
     };
     this._maxLen = Math.max(...Object.keys(this.codes).map((c) => c.length));
     window.addEventListener('keydown', (e) => this._onKey(e));
@@ -42,6 +43,13 @@ export class Cheats {
     if (this.game.audio) this.game.audio.pickup();
   }
 
+  _speed() {
+    this.game.speedRun = !this.game.speedRun;
+    const p = this.game.player;
+    p.speed = this.game.speedRun ? 12 : 7;
+    p.sprintMul = this.game.speedRun ? 1.9 : 1.6;
+    p.jumpStrength = this.game.speedRun ? 9 : 7.2;
+  }
   _rocket() {
     this.game.weapons.unlockSecret('rocket');
     this.game._rebuildWeaponSlots();

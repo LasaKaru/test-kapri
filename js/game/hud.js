@@ -48,6 +48,7 @@ export class HUD {
   }
   setReloading(on) { this.el.reload.classList.toggle('show', on); }
   setGrenades(n) { if (this.el.nade) this.el.nade.textContent = n; }
+  setMeat(n) { const el = document.getElementById('inv-meat'); if (el) { el.querySelector('.inv-n').textContent = n; el.classList.toggle('hidden', !(n > 0)); } }
 
   // ---- floating damage numbers (pooled DOM) ----
   damageNumber(sx, sy, amount, crit) {
@@ -107,6 +108,12 @@ export class HUD {
       ctx.fillStyle = it.boss ? '#ffd54a' : '#ff3b2f';
       ctx.beginPath(); ctx.arc(x, 6, Math.abs(d) > halfFov ? 2 : 3.5, 0, 7); ctx.fill();
     }
+  }
+  // High-Alert: level 0..1 of the nearest unseen (behind/flank) threat
+  setThreat(level) {
+    const el = document.getElementById('threat-vignette'); if (!el) return;
+    el.style.opacity = level > 0.02 ? Math.min(0.9, level) : 0;
+    el.classList.toggle('show', level > 0.02);
   }
   showBoss(on) { const w = document.getElementById('boss-bar-wrap'); if (w) w.classList.toggle('hidden', !on); }
   setBoss(hp, max) { const f = document.getElementById('boss-fill'); if (f) f.style.width = Math.max(0, hp / max) * 100 + '%'; }

@@ -31,6 +31,8 @@ export class Coop {
   }
 
   host() { const code = this._code(); this.join(code); return code; }
+  // Quick Match: auto-join the first public room with a free slot (no code).
+  quickPlay() { this._quick = true; this._quickN = 1; this.join('QUICKPLAY-1'); }
   join(room) {
     this.room = (room || 'LOBBY').toUpperCase();
     this.active = true;
@@ -48,7 +50,14 @@ export class Coop {
 
   _onMsg(m) {
     if (m.type === 'welcome') {
+      this._quick = false; // joined successfully
       this.myId = m.id; this.room = m.room;
+      // adopt the unique handle the server assigned us
+      if (m.name) {
+        this.game.net.name = m.name;
+        const el = document.getElementById('coop-name'); if (el) el.value = m.name;
+        const ol = document.getElementById('olb-name'); if (ol) ol.value = m.name;
+      }
       (m.peers || []).forEach((p) => this._add(p.id, p.name));
       this._notifyRoster();
     } else if (m.type === 'peer-join') { this._add(m.id, m.name); this._notifyRoster(); }
@@ -59,6 +68,8 @@ export class Coop {
     } else if (m.type === 'event') {
       this._onEvent(m);
     } else if (m.type === 'full') {
+      // quick match: a room was full, roll to the next public room
+      if (this._quick && this._quickN < 12) { this._quickN++; this.join('QUICKPLAY-' + this._quickN); return; }
       this.full = true; this._notifyRoster();
     }
   }
@@ -71,7 +82,28 @@ export class Coop {
     else if (m.ev === 'hit' && host) this._applyClientHit(m);
     else if (m.ev === 'dmg' && !host && m.to === this.myId) this.game._onPlayerHit(m.a);
     else if (m.ev === 'over' && !host) this.game._coopRemoteOver();
+    else if (m.ev === 'ready') { const a = this.peers.get(m.id); if (a) { a.ready = !!m.v; this._notifyRoster(); } }
+    else if (m.ev === 'pvpstart' && !host) this.game._pvpClientStart(m);
+    else if (m.ev === 'pvphit' && m.to === this.myId) this.game._onPvpHit(m.d, m.id);
+    else if (m.ev === 'pvpfrag') this.game._onPvpFrag(m.by, m.victim);
   }
+
+  // ---- lobby: ready-up ----
+  setReady(v) { this.ready = !!v; if (this.active) this.game.net.sendCoopEvent({ ev: 'ready', v: this.ready }); this._notifyRoster(); }
+
+  // ---- PvP: shoot other players' avatars ----
+  raycastPeers(raycaster, origin, dir, far) {
+    raycaster.set(origin, dir); raycaster.far = far;
+    let best = null, bd = Infinity;
+    for (const [id, a] of this.peers) {
+      if (!a.group.visible) continue;
+      const hits = raycaster.intersectObject(a.group, true);
+      if (hits.length && hits[0].distance < bd) { bd = hits[0].distance; best = { id, point: hits[0].point }; }
+    }
+    return best;
+  }
+  sendPvpHit(id, d) { this.game.net.sendCoopEvent({ ev: 'pvphit', to: id, d }); }
+  broadcastFrag(by) { this.game.net.sendCoopEvent({ ev: 'pvpfrag', by, victim: this.myId }); }
 
   // HOST: live positions of the OTHER players so enemies can target the nearest
   coopTargets() {
@@ -174,8 +206,8 @@ export class Coop {
 
   _notifyRoster() {
     if (this.onRoster) {
-      const list = [...this.peers.values()].map((a) => a.name);
-      this.onRoster({ state: this.state, room: this.room, peers: list, me: this.game.net.name, full: this.full });
+      const peers = [...this.peers.values()].map((a) => ({ name: a.name, ready: !!a.ready }));
+      this.onRoster({ state: this.state, room: this.room, peers, me: this.game.net.name, meReady: !!this.ready, full: this.full });
     }
   }
 
@@ -185,7 +217,7 @@ export class Coop {
     const group = this._buildAvatar(color, name);
     group.visible = false;
     this.game.scene.add(group);
-    this.peers.set(id, { group, target: new THREE.Vector3(0, 0, 30), tyaw: 0, name, hp: 100, color });
+    this.peers.set(id, { group, target: new THREE.Vector3(0, 0, 30), tyaw: 0, name, hp: 100, color, ready: false });
   }
   _remove(id) {
     const a = this.peers.get(id); if (!a) return;

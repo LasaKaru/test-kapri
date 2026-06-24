@@ -189,6 +189,18 @@ function coopRoom(code) {
 }
 function coopBroadcast(r, obj, exceptId) { const s = JSON.stringify(obj); for (const c of r.clients.values()) if (c.data.id !== exceptId) c.send(s); }
 
+// pool of callsigns for players who join without a name
+const CALLSIGNS = ['VIPER', 'RAVEN', 'WOLF', 'HAWK', 'NOVA', 'ECHO', 'FOX', 'ACE', 'KILO', 'ZERO', 'DELTA', 'RECON', 'BLADE', 'STORM', 'ONYX', 'GHOST'];
+// give every player a name that is unique within their room
+function uniqueCoopName(requested, taken) {
+  let base = clean(requested, 12).trim().toUpperCase();
+  if (!base) base = CALLSIGNS.find((c) => !taken.has(c)) || 'PLAYER';
+  if (!taken.has(base)) return base;
+  const stem = base.slice(0, 10);
+  for (let n = 2; n < 99; n++) { const cand = `${stem}-${n}`; if (!taken.has(cand)) return cand; }
+  return base + Math.floor(Math.random() * 999);
+}
+
 function handleCoop(conn) {
   conn.onmessage = (raw) => {
     let m; try { m = JSON.parse(raw); } catch (_) { return; }
@@ -196,10 +208,11 @@ function handleCoop(conn) {
       const r = coopRoom(m.room);
       if (r.clients.size >= 4) { conn.sendJSON({ type: 'full' }); conn.close(); return; }
       const id = r.seq++;
-      conn.data.id = id; conn.data.room = r; conn.data.name = clean(m.name, 12) || 'GHOST';
+      const taken = new Set([...r.clients.values()].map((c) => c.data.name));
+      conn.data.id = id; conn.data.room = r; conn.data.name = uniqueCoopName(m.name, taken);
       const peers = [...r.clients.values()].map((c) => ({ id: c.data.id, name: c.data.name }));
       r.clients.set(id, conn);
-      conn.sendJSON({ type: 'welcome', id, room: r.code, peers });
+      conn.sendJSON({ type: 'welcome', id, room: r.code, name: conn.data.name, peers });
       coopBroadcast(r, { type: 'peer-join', id, name: conn.data.name }, id);
     } else if (m.type === 'state' && conn.data.room) {
       m.id = conn.data.id;

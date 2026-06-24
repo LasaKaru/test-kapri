@@ -34,8 +34,13 @@ flowers, ferns, mushrooms, berry bushes and water's-edge cattails, all
 GPU-instanced and re-tinted with a **per-biome palette** (summer plains, autumn
 highlands, lush lowlands, snow-dusted mountains). Density is tunable with a
 **Foliage Density** slider. Add flocks of **birds** wheeling overhead, **animals**
-that roam and flee the player, and **enterable buildings** — hollow structures
-with a doorway you can walk through and fight inside.
+that roam the field — **deer, boar, roosters** and predatory **wolves** that
+hunt you. You can **hunt** them: shots make them bolt, and a kill drops **meat**
+plus a trade material (**hide / feather / fang**). Loot goes into a persistent
+inventory — **eat meat with `C`** to heal, or **sell &amp; craft** it at the
+between-wave shop (sell loot for credits, or craft armor/speed/lifesteal
+upgrades). There are also **enterable buildings** — hollow structures with a
+doorway you can walk through and fight inside.
 
 A **"HelaO2 Studio presents"** intro plays on load, a looping **cinematic
 camera flythrough** tours the map behind the title menu, and pressing **Start**
@@ -171,7 +176,12 @@ exactly as before and shows an **OFFLINE** status — nothing is blocked or brok
 - **Live chat** (press **Y**) — global room with presence count; connects lazily
   and greys out with "reconnecting…" when offline. Available from the title and
   in-match (typing releases the cursor so movement isn't triggered).
-- **Co-op — shared waves** — host or join a room by code (up to 4). Press
+- **Third-person camera** — toggle with **`T`** (or in Settings); a chase cam
+  with a visible soldier body, switchable any time mid-match.
+- **Multiplayer** — **Quick Match** (auto-join a public room), host/join by code,
+  or a **PvP Arena** mode where the squad frags each other. A lobby **ready-up**
+  gates the shared deploy, and every player gets a **unique callsign shown above
+  their character**. In co-op, press
   **Deploy Together** and the whole squad drops into **one shared battle**: the
   host runs the wave simulation authoritatively and streams enemy snapshots, so
   everyone sees and shoots the *same* enemies, with a **shared score**. Enemies
@@ -218,6 +228,9 @@ works offline.
 | `1 – 9` / `Wheel` | Switch weapons |
 | `G` | Throw frag grenade |
 | `R` | Reload |
+| `Space` | Jump |
+| `C` | Eat a meal (heal from hunted meat) |
+| `T` | Toggle third-person camera |
 | `E` | Ride / exit a nearby vehicle |
 | `Shift` | Sprint |
 | `Esc` | Pause / release cursor |
