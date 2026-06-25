@@ -13,10 +13,11 @@ const GradeShader = {
     tDiffuse: { value: null },
     time: { value: 0 },
     amount: { value: 1.0 },
+    kc: { value: 0 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
   fragmentShader: `
-    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time; uniform float amount;
+    varying vec2 vUv; uniform sampler2D tDiffuse; uniform float time; uniform float amount; uniform float kc;
     void main(){
       vec2 uv = vUv;
       vec2 d = uv - 0.5;
@@ -39,7 +40,15 @@ const GradeShader = {
       float g = fract(sin(dot(uv*(time*60.0+1.0), vec2(12.9898,78.233))) * 43758.5453);
       col += (g - 0.5) * 0.05 * amount;
       // blend back toward the raw image by (1-amount) for a clean natural look
-      gl_FragColor = vec4(mix(raw, col, 1.0), 1.0);
+      col = mix(raw, col, 1.0);
+      // kill-cam: cold desaturated slow-mo with a heavy edge darken
+      if (kc > 0.001) {
+        float lum = dot(col, vec3(0.299,0.587,0.114));
+        vec3 kcCol = mix(col, vec3(lum)*vec3(0.86,0.94,1.12), 0.72);
+        kcCol *= mix(1.0, 0.62, smoothstep(0.18,0.72,length(d)));
+        col = mix(col, kcCol, kc);
+      }
+      gl_FragColor = vec4(col, 1.0);
     }`,
 };
 
@@ -81,6 +90,10 @@ export class PostFX {
     this.composer.setSize(w, h);
     this.bloom.setSize(w, h);
   }
+  // keep the composer's internal render targets in sync with the renderer DPR
+  setPixelRatio(r) { if (this.composer.setPixelRatio) this.composer.setPixelRatio(r); }
+
+  setKillcam(v) { this.grade.uniforms.kc.value = Math.max(0, Math.min(1, v)); }
 
   pulseBloom(amount) {
     if (this.bloom.enabled) this.bloom.strength = Math.min(1.8, this.bloom.strength + amount * (0.4 + this.realism));

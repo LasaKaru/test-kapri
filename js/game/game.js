@@ -5,6 +5,10 @@ import { Missions } from './missions.js';
 import { TacMap } from './tacmap.js';
 import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
+import { Meta } from './meta.js';
+import { PerksUI } from './perks.js';
+import { Models } from './models.js';
+import { setEnemyModelFactory, setEnemyModelsEnabled } from './enemy.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -31,10 +35,21 @@ const BASE_FOV = 75;
 class Game {
   constructor() {
     this.canvas = document.getElementById('scene');
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // "touch device" = has touch AND no fine pointer (phones/tablets). A touch
+    // laptop with a mouse reports a fine pointer, so it keeps Pointer Lock.
+    const hasTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const finePointer = !!(window.matchMedia && window.matchMedia('(pointer:fine)').matches);
+    this.isTouch = hasTouch && !finePointer;
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: !this.isTouch, powerPreference: 'high-performance' });
+    // cap device pixel ratio (retina screens render 4x the pixels at DPR 2 — the
+    // single biggest GPU cost). 1.5 is visually near-identical but much faster;
+    // phones/tablets cap at 1.0 since mobile GPUs are far weaker.
+    this._maxDPR = Math.min(window.devicePixelRatio || 1, this.isTouch ? 1.0 : 1.5);
+    this._dpr = this._maxDPR;
+    this.renderer.setPixelRatio(this._dpr);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;   // cheaper than PCFSoft
+    this._perfMs = 16; this._dprT = 0;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 600);
@@ -98,6 +113,8 @@ class Game {
     this.tacmap = new TacMap(this);
     this.ach = new Achievements();
     this.loadout = new Loadout(this);
+    this.meta = new Meta();          // account-level XP / perks (persistent)
+    this.perksUI = new PerksUI(this);
     // optional online layer — single-player never depends on it
     this.net = new Net();
     this.net.onState((s) => this._updateNetPill(s));
@@ -117,6 +134,17 @@ class Game {
     this._tpBody = this._buildPlayerBody();
     this._tpBody.visible = false;
     this.scene.add(this._tpBody);
+    // optional: swap the boxy third-person body for the rigged soldier model
+    // when it loads (graceful fallback to the box body if it can't).
+    this.models = new Models();
+    this.models.load('soldier', 'assets/models/soldier.glb').then((m) => {
+      if (!m) return;
+      this._setupSoldierBody();
+      // let the (humanoid) enemies wear the soldier model too
+      const h = this.models.height('soldier') || 1.8;
+      setEnemyModelFactory((targetH) => this.models.cloneGroup('soldier', targetH / h));
+      if (this.settings) setEnemyModelsEnabled(this.settings.v.detailedEnemies !== false);
+    });
     // persistent loot inventory (meat eaten to heal; hides/feathers/fangs traded)
     const INV0 = { meat: 0, hide: 0, feather: 0, fang: 0 };
     try { this.inventory = { ...INV0, ...JSON.parse(localStorage.getItem('verdant_inventory') || '{}') }; } catch (_) { this.inventory = { ...INV0 }; }
@@ -177,6 +205,7 @@ class Game {
     document.getElementById('resume-btn').addEventListener('click', () => this._requestLock());
     document.getElementById('mapselect-btn').addEventListener('click', () => this.mapSelect.open());
     document.getElementById('loadout-btn').addEventListener('click', () => this.loadout.open());
+    document.getElementById('perks-btn').addEventListener('click', () => this.perksUI.open());
     document.getElementById('leaderboard-btn').addEventListener('click', () => this.board.open());
     document.getElementById('coop-btn').addEventListener('click', () => this.coopLobby.open());
     document.getElementById('open-map').addEventListener('click', () => this._toggleMap());
@@ -216,7 +245,7 @@ class Game {
       if (e.code === 'KeyR' && this.weapons.reload()) this.audio.reload();
       if (e.code === 'KeyG') this._throwGrenade();
       if (e.code === 'KeyV' || e.code === 'KeyF') this._melee();
-      if (e.code === 'KeyC') this._eatMeat();
+      if (e.code === 'KeyB') this._eatMeat();   // (C is now crouch)
       // weapon switch via number keys (0 = secret slot, e.g. the rocket)
       const m = /^Digit([0-9])$/.exec(e.code);
       if (m) {
@@ -232,6 +261,8 @@ class Game {
     document.addEventListener('mousemove', (e) => {
       if (this.state === 'playing' && document.pointerLockElement) {
         this.player.addLook(e.movementX, e.movementY);
+        const fl = this._frameLook || (this._frameLook = { x: 0, y: 0 });
+        fl.x += e.movementX; fl.y += e.movementY;
       }
     });
 
@@ -259,17 +290,36 @@ class Game {
           this.state = 'playing';
           this._hideOverlays();
           this.hud.show();
+          this.audio.setMuffle(false);     // un-muffle on resume
         }
       } else if (this.state === 'playing') {
         this.state = 'paused';
         this.firing = false;
         this.weapons.setAds(false);
+        this.audio.setMuffle(true);        // low-pass "muffle" the whole mix while paused
         document.getElementById('pause').classList.remove('hidden');
       }
     });
   }
 
-  _requestLock() { this.canvas.requestPointerLock(); }
+  _requestLock() {
+    // touch devices have no Pointer Lock — resume/continue the run directly
+    if (this.isTouch) { this._resumeFromOverlay(); return; }
+    if (this.canvas.requestPointerLock) this.canvas.requestPointerLock();
+  }
+  _resumeFromOverlay() {
+    if (this.state === 'paused' || this.state === 'title' || this.state === 'over') {
+      this.state = 'playing'; this._hideOverlays(); this.hud.show();
+      try { this.audio.setMuffle(false); } catch (_) {}
+    }
+  }
+  // touch pause (no keyboard Esc): mirrors the desktop pointer-unlock pause
+  pauseTouch() {
+    if (this.state !== 'playing') return;
+    this.state = 'paused'; this.firing = false;
+    try { this.weapons.setAds(false); this.audio.setMuffle(true); } catch (_) {}
+    document.getElementById('pause').classList.remove('hidden');
+  }
 
   // simple low-poly soldier body for the third-person camera
   _buildPlayerBody() {
@@ -286,18 +336,39 @@ class Game {
     [-1, 1].forEach((s) => add(new THREE.BoxGeometry(0.22, 0.85, 0.24), dark, s * 0.18, 0.5, 0));   // legs
     return g;
   }
+  // build the rigged soldier as the third-person avatar (replaces the box body)
+  _setupSoldierBody() {
+    try {
+      const h = this.models.height('soldier') || 1.8;
+      const inst = this.models.instance('soldier', 1.8 / h);   // scale to ~1.8m tall
+      if (!inst) return;
+      inst.group.visible = false;
+      this.scene.add(inst.group);
+      this._tpModel = inst;
+      try { inst.play('Armature|Standing', 0); } catch (_) {}
+      // retire the placeholder box body
+      if (this._tpBody) { this._tpBody.visible = false; this.scene.remove(this._tpBody); }
+    } catch (e) { console.warn('[soldier] setup failed, keeping box body:', e); this._tpModel = null; }
+  }
+  _activeBody() { return this._tpModel ? this._tpModel.group : this._tpBody; }
+
   _toggleThirdPerson() {
     this.thirdPerson = !this.thirdPerson;
     try { this.settings.v.thirdPerson = this.thirdPerson; this.settings.save(); } catch (_) {}
     this.hud.killFeed(this.thirdPerson ? 'THIRD-PERSON' : 'FIRST-PERSON');
   }
-  // chase cam: keep the camera's look direction, pull it back behind the body
-  _applyThirdPerson() {
+  // chase cam: keep the camera's look direction, pull it back behind the body.
+  // `blend` (0..1) eases the pull-back so the toggle is a smooth dolly, not a cut.
+  _applyThirdPerson(blend = 1) {
     const p = this.player, cam = this.camera;
-    this._tpBody.position.set(p.position.x, p.position.y, p.position.z);
-    this._tpBody.rotation.y = p.yaw;
+    const body = this._activeBody();
+    if (body) {
+      body.position.set(p.position.x, p.position.y, p.position.z);
+      body.rotation.y = p.yaw + (this._tpModel ? Math.PI : 0); // model faces +Z; flip to look forward
+    }
+    if (this._tpModel) this._tpModel.update(this._lastDt || 0.016);
     const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
-    cam.position.addScaledVector(fwd, -4.6); cam.position.y += 0.7;
+    cam.position.addScaledVector(fwd, -4.6 * blend); cam.position.y += 0.7 * blend;
   }
 
   _updateNetPill(s) {
@@ -382,7 +453,7 @@ class Game {
     try { localStorage.setItem('verdant_diff', id); } catch (_) {}
     this._updateLoadoutLabel();
   }
-  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'missions', 'loadout', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
+  _hideOverlays() { ['title', 'pause', 'gameover', 'shop', 'settings', 'mapselect', 'missions', 'loadout', 'perks', 'online-lb', 'coop'].forEach((id) => document.getElementById(id).classList.add('hidden')); }
 
   // ---- cinematic studio intro (plays once on load) ----
   _startIntro() {
@@ -462,8 +533,11 @@ class Game {
     this._meleeCd = 0;
     this.headMul = 2.5; this.medicHealMul = 1;
     this.credits = 0; this.creditMul = 1; this.lifesteal = 0;
+    this.xpMul = 1; this.stealthPerk = 0; this._runXp = 0;
     // class-level bonuses (player/game)
     if (this.classMods && this.classMods.apply) this.classMods.apply(this);
+    // account-level perks stack on top of the class
+    if (this.meta && !this.coopMode && !this.pvpMode) this.meta.apply(this);
     this.shop.reset();
     // resuming mid-campaign from a checkpoint: hand out a credit head-start so
     // the player can rearm to match the wave they're dropping into.
@@ -597,14 +671,31 @@ class Game {
     this.hud.setWave(n);
     this.hud.popWave(n, this.waves.isBossWave ? '☠ BOSS WAVE ☠' : sub);
     this.audio.wave();
+    this.audio.announce('wave');
     this.audio.setIntensity(Math.min(1, 0.2 + n * 0.06 + (this.waves.isBossWave ? 0.35 : 0)));
+    this.audio.setMusicState(this.waves.isBossWave ? 'boss' : 'combat');
     if (n >= 5) this.ach.unlock('wave5');
     if (n >= 10) this.ach.unlock('wave10');
     this._syncWeaponHud();
   }
 
   // wave cleared -> open the between-wave shop
+  // last enemy of a wave fell: a beat of slow-mo before the shop opens
+  _onWaveCleared(w) {
+    if (this._pendingShopWave != null) return;   // already handling this clear
+    this._triggerKillCam();
+    this._awardXp(w * 15);                        // wave-clear XP bonus
+    this.audio.setMusicState('calm');
+    this._pendingShopWave = w;
+    setTimeout(() => {
+      if (this.state === 'playing' && this._pendingShopWave != null) {
+        const ww = this._pendingShopWave; this._pendingShopWave = null; this._openShop(ww);
+      }
+    }, 950);
+  }
+
   _openShop(clearedWave) {
+    this.audio.setMusicState('calm');
     // co-op: no shop (it would desync the squad) — free resupply and roll on
     if (this.coopMode) {
       this.credits += 100 + clearedWave * 50;
@@ -650,6 +741,8 @@ class Game {
     this.audio.shoot(this.weapons.def.key);
     this.player.addRecoil(shot.recoilPitch, shot.recoilYaw);
     this.shake = Math.min(0.5, this.shake + shot.def.kick * 1.2);
+    // gunfire is loud: it alerts nearby enemies (ends stealth)
+    if (!this.pvpMode && this.waves.alertNear) this.waves.alertNear(this.player.position, 34);
 
     const origin = new THREE.Vector3();
     this.camera.getWorldPosition(origin);
@@ -703,7 +796,9 @@ class Game {
           if (enemyHit.zone === 'shield') this.effects.impact(endPoint, 0xcfe6ff, false);
           else this.effects.bloodBurst(endPoint);
         } else {
-          const base = shot.dmg * (head ? this.headMul : 1);
+          // stealth bonus: an unaware enemy takes a heavy opening-shot multiplier
+          const sneak = (!enemyHit.enemy.alerted && !enemyHit.enemy.isBoss) ? 2.5 : 1;
+          const base = shot.dmg * (head ? this.headMul : 1) * sneak;
           enemyHit.enemy.hit(base, enemyHit.zone);
           const shown = base * (enemyHit.zone === 'shield' ? 0.15 : 1);
           const rec = dmgMap.get(enemyHit.enemy) || { dmg: 0, head: false, point: endPoint };
@@ -883,7 +978,7 @@ class Game {
       const hitGround = p.y <= 0.2;
       const hitWorld = (() => { const r = this.world.resolve(p.x, p.z, 0.2); return r.x !== p.x || r.z !== p.z; })();
       if (hitPlayer || hitGround || hitWorld || s.life <= 0) {
-        if (hitPlayer) { this._onPlayerHit(s.dmg); }
+        if (hitPlayer) { this._onPlayerHit(s.dmg, p); }
         this.effects.impact(p.clone(), s.boss ? 0xff5030 : 0xd86bff, false);
         this._releaseShot(s, i);
       }
@@ -895,12 +990,46 @@ class Game {
     this.enemyShots = [];
   }
 
-  _onPlayerHit(dmg) {
+  _onPlayerHit(dmg, srcPos) {
     if (this.godmode) return;
     this.player.takeDamage(dmg);
     this.hud.damageFlash();
+    // directional "screen-space damage" indicator pointing at the source
+    let src = srcPos;
+    if (!src) {                       // melee / unknown -> nearest live enemy
+      let best = 1e9;
+      for (const e of this.waves.enemies) {
+        if (e.dead) continue;
+        const dx = e.group.position.x - this.player.position.x, dz = e.group.position.z - this.player.position.z;
+        const d2 = dx * dx + dz * dz; if (d2 < best) { best = d2; src = e.group.position; }
+      }
+    }
+    if (src) {
+      const dx = src.x - this.player.position.x, dz = src.z - this.player.position.z;
+      this.hud.hitDirection(Math.atan2(dx, -dz) + this.player.yaw);
+    }
     this.audio.hurt();
     this._afterPlayerDamage();
+  }
+
+  // brief slow-mo + cold cinematic grade on a climactic kill (boss / wave clear)
+  _triggerKillCam() {
+    this._kcDur = 1.0;
+    this._kcT = this._kcDur;
+    try { this.audio.duck(0.3, 0.9); } catch (_) {}
+  }
+
+  // award meta-progression XP (single-player only); announces level-ups
+  _awardXp(amount) {
+    if (!this.meta || this.coopMode || this.pvpMode) return;
+    amount = Math.round(amount * (this.xpMul || 1));
+    if (amount <= 0) return;
+    this._runXp = (this._runXp || 0) + amount;
+    const r = this.meta.addXp(amount);
+    if (r.leveledUp) {
+      this.hud.killFeed(`★ LEVEL UP — LV ${r.level} · perk point earned`);
+      try { this.audio.announce('streak', 5); } catch (_) {}
+    }
   }
 
   _afterPlayerDamage() {
@@ -909,6 +1038,24 @@ class Game {
     this.hud.setHealth(this.player.hp, this.player.maxHp);
     this.hud.setArmor(this.player.armor, this.player.maxArmor);
     if (this.player.hp <= 0 && this.state === 'playing') this._gameOver();
+  }
+
+  // named-boss ground-slam shockwave: radial blast that hits the player in range
+  _enemyShockwave(sw) {
+    const center = new THREE.Vector3(sw.x, 0.4, sw.z);
+    try { this.effects.explosionFX(center); } catch (_) {}
+    this.shake = Math.max(this.shake, 0.9);
+    this.audio.explosion();
+    if (this.godmode || this.vehicles.isMounted()) return;
+    const dx = this.player.position.x - sw.x, dz = this.player.position.z - sw.z;
+    const d = Math.hypot(dx, dz);
+    if (d < sw.radius) this._onPlayerHit(sw.dmg * (1 - d / sw.radius), center);
+  }
+
+  // named-boss phase escalation feedback
+  _onBossPhase(enemy, phase) {
+    const msg = phase === 3 ? 'ENRAGED' : phase === 2 ? 'SUMMONING' : '';
+    if (msg) { this.hud.killFeed(`⚠ ${enemy.named || 'BOSS'} — ${msg}`); this.audio.voice('boss'); this.postfx.pulseBloom(0.8); this.shake = Math.max(this.shake, 0.5); }
   }
 
   // throttled enemy voice barks as they close in (bosses roar)
@@ -935,6 +1082,9 @@ class Game {
     this.score += pts;
     this.hud.setScore(this.score);
     this.hud.setStreak(this.streak);
+    if ([3, 5, 7, 10, 15, 20].includes(this.streak)) this.audio.announce('streak', this.streak);
+    this._awardXp(enemy.score / 10);             // meta XP per kill (scaled by enemy worth)
+    if (enemy.isBoss) this._triggerKillCam();   // climactic boss kill -> slow-mo
     if (!head) this.hud.popKill();
     this.hud.killFeed(`▸ ${enemy.type.toUpperCase()}${head ? ' ☠' : ''}  +${pts}`);
     this.audio.kill();
@@ -1006,6 +1156,9 @@ class Game {
     this.hud.hide();
     document.exitPointerLock();
     this.audio.over();
+    this.audio.setMusicState('calm');
+    this.postfx.setKillcam(0); this._kcT = 0;
+    this._awardXp(this.score / 25);   // run-end XP from final score
 
     // co-op: host tells the squad the run is over; tidy up the shared state
     const coopClient = this.coopMode && !this.coopHost;
@@ -1021,7 +1174,7 @@ class Game {
     const best = scores.reduce((m, r) => Math.max(m, r.score), 0);
     // co-op clients don't own the run, so they don't write/submit a score
     if (!coopClient) {
-      const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, date: Date.now() };
+      const run = { score: this.score, wave: this.waves.wave, kills: this.kills, map: this.world.mapId, diff: this.difficultyId, name: this.net.name, country: this.net.country || '', date: Date.now() };
       scores.push(run);
       scores.sort((a, b) => b.score - a.score);
       scores = scores.slice(0, 25);
@@ -1036,7 +1189,7 @@ class Game {
     document.getElementById('gameover').classList.remove('hidden');
 
     this.vehicles.reset();
-    if (this._tpBody) this._tpBody.visible = false;
+    { const b = this._activeBody(); if (b) b.visible = false; }
     this.world._combatActive = false;
     this.pvpMode = false;
     if (this.coopMode) { this.coopMode = false; this.coopHost = false; this.coop.clearGhosts(); }
@@ -1056,6 +1209,8 @@ class Game {
     this.hud.setScore(this.score);
     this.hud.popKill();
     this.hud.killFeed('☠ ENEMY BASE DESTROYED  +5000');
+    this.audio.announce('base');
+    this._triggerKillCam();
     this.ach.unlock('basebuster');
     this._detonate(this.world.base.x, this.world.base.z, 12, 0, 0);
     this.postfx.pulseBloom(1.0);
@@ -1063,7 +1218,36 @@ class Game {
 
   loop() {
     requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = Math.min(0.05, this.clock.getDelta());
+
+    // adaptive resolution: ease the pixel ratio down when frames run long and
+    // back up when there's headroom, so weak GPUs stay smooth automatically.
+    this._perfMs += (rawDt * 1000 - this._perfMs) * 0.06;
+    this._dprT += rawDt;
+    if (this._dprT > 1.5 && this._allowAdaptive !== false) {
+      this._dprT = 0;
+      let want = this._dpr;
+      if (this._perfMs > 26 && this._dpr > 0.8) want = Math.max(0.8, this._dpr - 0.2);          // < ~38fps: downscale
+      else if (this._perfMs < 18.5 && this._dpr < this._maxDPR) want = Math.min(this._maxDPR, this._dpr + 0.1); // > ~54fps: upscale
+      if (Math.abs(want - this._dpr) > 0.001) {
+        this._dpr = want;
+        this.renderer.setPixelRatio(this._dpr);
+        if (this.postfx) { this.postfx.setPixelRatio(this._dpr); this.postfx.setSize(window.innerWidth, window.innerHeight); }
+      }
+    }
+    // kill-cam slow-mo: scales the sim while real time drives the recovery, so
+    // it always returns to normal speed even if a frame is dropped.
+    let scale = 1;
+    if (this.state === 'playing' && this._kcT > 0) {
+      this._kcT -= rawDt;
+      const f = Math.max(0, this._kcT / (this._kcDur || 1)); // 1 -> 0
+      scale = 0.3 + 0.7 * (1 - f);                           // 0.3x at impact, easing back to 1x
+      this.postfx.setKillcam(f);
+      if (this._kcT <= 0) { this._kcT = 0; this.postfx.setKillcam(0); }
+    }
+    this.timeScale = scale;
+    const dt = rawDt * scale;
+    this._lastDt = dt;
 
     if (this.state === 'playing') {
       this._pollGamepad();
@@ -1081,16 +1265,23 @@ class Game {
       const clientCoop = this.coopMode && !this.coopHost;
 
       if (this._meleeCd > 0) this._meleeCd -= dt;
-      const tp = this.thirdPerson && !mounted;
+      const wantTp = this.thirdPerson && !mounted;
+      // smooth first<->third person blend
+      this._tpBlend = (this._tpBlend || 0) + ((wantTp ? 1 : 0) - (this._tpBlend || 0)) * Math.min(1, dt * 8);
+      if (this._tpBlend < 0.0015) this._tpBlend = 0;
       if (mounted) { this.player.regenOnly ? this.player.regenOnly(dt) : null; }
       else {
         this.player.update(dt);
         if (this._wasAir && this.player.onGround) this.audio.land();
         this._wasAir = !this.player.onGround;
-        if (tp) this._applyThirdPerson();
+        if (this._tpBlend > 0) this._applyThirdPerson(this._tpBlend);
       }
-      this.weapons.rig.visible = !mounted && !this.thirdPerson;
-      if (this._tpBody) this._tpBody.visible = tp;
+      this.weapons.rig.visible = !mounted && this._tpBlend < 0.5;
+      { const b = this._activeBody(); if (b) b.visible = this._tpBlend > 0.05; }
+      // feed look-sway + walk-bob to the weapon rig, then reset the frame's look delta
+      const fl = this._frameLook || (this._frameLook = { x: 0, y: 0 });
+      this.weapons.setMotion({ lookX: fl.x, lookY: fl.y, moving: !mounted && this.player.moving, spd: this.player.sprinting ? 11 : 7 });
+      fl.x = 0; fl.y = 0;
       this.weapons.update(dt);
       if (this.cheatArsenal) this.weapons.refill();
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;
@@ -1107,20 +1298,32 @@ class Game {
         // co-op host: enemies also target connected squadmates; damage to them
         // is routed over the relay so single-player keeps a single target.
         const extra = (this.coopMode && this.coopHost) ? this.coop.coopTargets() : null;
+        // stealth: crouching (plus the Ghost perk) shrinks how close enemies detect you
+        this.waves.stealth = Math.min(0.85, (this.player.crouching ? 0.62 : 0) + (this.stealthPerk || 0) * (this.player.crouching ? 1 : 0.4));
         this.waves.update(dt, this.player, this.camera, {
           onPlayerHit: (d, tid) => { if (tid) this.coop.sendDmg(tid, d); else this._onPlayerHit(d); },
-          onWaveCleared: (w) => this._openShop(w),
+          onWaveCleared: (w) => this._onWaveCleared(w),
           onEnemyShoot: (s) => this._spawnEnemyShot(s),
           onSummon: (e) => { this.effects.smoke(e.group.position.clone().setY(1.2), { color: 0xc080ff, size: 1.0, life: 0.6, rise: 0.8, opacity: 0.6 }); this.audio.swap(); },
           onBark: (e) => this._enemyBark(e),
+          onShockwave: (sw) => this._enemyShockwave(sw),
+          onBossPhase: (e, p) => this._onBossPhase(e, p),
         }, extra);
         this.waves.removeDead((e) => this._onKill(e));
         this.hud.setEnemies(this.waves.remaining);
 
-        // boss health bar
+        // boss health bar (+ named-boss arrival announcement)
         const boss = this.waves.boss;
-        if (boss && !boss.dead) { this.hud.showBoss(true); this.hud.setBoss(boss.hp, boss.maxHp); }
-        else this.hud.showBoss(false);
+        if (boss && !boss.dead) {
+          this.hud.showBoss(true); this.hud.setBoss(boss.hp, boss.maxHp);
+          this.hud.setBossName(boss.named || 'EMBER COLOSSUS');
+          if (boss.named && this._announcedBoss !== boss) {
+            this._announcedBoss = boss;
+            this.hud.popWave(this.waves.wave, '☠ ' + boss.named + ' ☠');
+            this.hud.killFeed(`⚠ ${boss.named} HAS ARRIVED`);
+            this.audio.voice('boss'); this.audio.announce('base'); this.audio.setMusicState('boss');
+          }
+        } else this.hud.showBoss(false);
 
         this._updateEnemyShots(dt);
 
@@ -1162,12 +1365,13 @@ class Game {
       // compass (player heading + threat pips) + High-Alert threat indicator
       const items = [];
       const fwx = -Math.sin(this.player.yaw), fwz = -Math.cos(this.player.yaw);
-      let threat = 0;
+      let threat = 0, detected = false;
       for (const e of enemySrc) {
         if (e.dead) continue;
         const dx = e.group.position.x - this.player.position.x, dz = e.group.position.z - this.player.position.z;
         items.push({ bearing: Math.atan2(dx, -dz), boss: e.isBoss });
         const d = Math.hypot(dx, dz);
+        if (e.alerted && d < 30) detected = true;
         if (d < 18) {
           const dot = (dx * fwx + dz * fwz) / (d || 1); // 1 = dead ahead, <0.34 = outside ±70°
           if (dot < 0.34) threat = Math.max(threat, 1 - d / 18);
@@ -1175,6 +1379,7 @@ class Game {
       }
       this.hud.drawCompass(-this.player.yaw, items);
       this.hud.setThreat(mounted ? 0 : threat);
+      this.hud.setStealth(this.player.crouching && !mounted, detected);
 
       // camera shake
       if (this.shake > 0) {

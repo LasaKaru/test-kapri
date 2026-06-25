@@ -432,7 +432,26 @@ export class WeaponManager {
       pz += -0.25 * Math.sin(k * Math.PI);
       rollZ += 0.5 * Math.sin(k * Math.PI);
     }
+    // ---- look sway + walk bob (eased, reduced while aiming) ----
+    const mo = this._motion || {};
+    const ease = Math.min(1, dt * 10);
+    this._swayX = (this._swayX || 0) + ((-(mo.lookX || 0) * 0.00055) - (this._swayX || 0)) * ease;
+    this._swayY = (this._swayY || 0) + (((mo.lookY || 0) * 0.00055) - (this._swayY || 0)) * ease;
+    const sMul = 1 - this.adsT * 0.75;
+    px += this._swayX * sMul; py += this._swayY * sMul;
+    yawY += this._swayX * 0.9 * sMul; pitchX += -this._swayY * 0.9 * sMul;
+    // walk bob
+    const moving = !!mo.moving;
+    this._bobAmp = (this._bobAmp || 0) + ((moving ? 1 : 0) - (this._bobAmp || 0)) * Math.min(1, dt * 6);
+    if (moving) this._bobPhase = (this._bobPhase || 0) + dt * (mo.spd || 7) * 1.05;
+    const ba = this._bobAmp * (1 - this.adsT * 0.7);
+    px += Math.sin(this._bobPhase || 0) * 0.012 * ba;
+    py += (Math.abs(Math.sin((this._bobPhase || 0))) * 0.012 - 0.005) * ba;
+
     this.rig.position.set(px, py, pz);
     this.rig.rotation.set(pitchX, yawY, rollZ);
   }
+
+  // per-frame motion input for sway/bob: { lookX, lookY, moving, spd }
+  setMotion(m) { this._motion = m; }
 }

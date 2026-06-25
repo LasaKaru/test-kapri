@@ -1,4 +1,5 @@
 import { MAPS } from './world.js';
+import { flagEmoji } from './chat.js';
 
 // Online leaderboard view. Falls back to the local scores when the server is
 // unavailable, with a clear banner — single-player is never blocked.
@@ -71,9 +72,11 @@ export class OnlineBoard {
     scores.forEach((s, i) => {
       const li = document.createElement('li');
       const mapName = MAPS[s.map] ? MAPS[s.map].name : (s.map || '—');
+      const flag = flagEmoji(s.country);
+      const nm = String(s.name || (online ? 'GHOST' : 'YOU')).replace(/[<>]/g, '');
       li.innerHTML =
         `<span class="olb-rank">#${i + 1}</span>` +
-        `<span class="olb-name">${(s.name || (online ? 'GHOST' : 'YOU'))}</span>` +
+        `<span class="olb-name">${flag ? flag + ' ' : ''}${nm}</span>` +
         `<span class="olb-score">${String(s.score).padStart(5, '0')}</span>` +
         `<span class="olb-meta">W${s.wave} · ${mapName}</span>`;
       this.list.appendChild(li);

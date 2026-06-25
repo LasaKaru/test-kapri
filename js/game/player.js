@@ -25,6 +25,16 @@ export class Player {
     this.jumpStrength = 7.2;
     this.gravity = 22;
 
+    // crouch / stealth + ladder climbing
+    this.crouching = false;
+    this.standEye = 1.7;
+    this.crouchEye = 1.0;
+    this.climbing = false;
+    this.onLadder = false;
+    this.climbSpeed = 4.2;
+    this.moving = false;
+    this.leanAmt = 0;       // -1 left .. +1 right (Q / E), eased
+
     // survivability (COD-style)
     this.maxHp = 100; this.hp = 100;
     this.maxArmor = 100; this.armor = 0;
@@ -99,9 +109,20 @@ export class Player {
       move.add(right.clone().multiplyScalar(this.touchVec.x));
     }
 
+    // crouch (hold C, or the touch crouch toggle): lower stance, slower, no sprint
+    this.crouching = (!!this.keys['KeyC'] || !!this.touchCrouch) && this.onGround && !this.climbing;
+    const targetEye = this.crouching ? this.crouchEye : this.standEye;
+    this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 10);
+
+    // lean / peek (hold Q left, E right) — eased camera roll + lateral offset
+    const wantLean = ((this.keys['KeyQ'] ? -1 : 0) + (this.keys['KeyE'] ? 1 : 0)) * (this.crouching ? 0.7 : 1);
+    this.leanAmt += (wantLean - this.leanAmt) * Math.min(1, dt * 9);
+    this.moving = move.lengthSq() > 0 && this.onGround;
+
     let spd = this.speed;
-    this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'];
+    this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'] && !this.crouching;
     if (this.sprinting) spd *= this.sprintMul;
+    if (this.crouching) spd *= 0.5;
     // wading through water slows you down
     this.wading = this.world.waterAt(this.position.x, this.position.z);
     if (this.wading) spd *= 0.5;
@@ -113,15 +134,27 @@ export class Player {
       if (this.onGround) this._bob += dt * spd * 1.3;
     }
 
-    // vertical (jump + gravity) over the ground height
-    const ground = Math.max(0, this.world.heightAt ? this.world.heightAt(this.position.x, this.position.z) : 0);
-    if (!this.onGround || this.position.y > ground + 0.001) {
-      this.vy -= this.gravity * dt;
-      this.position.y += this.vy * dt;
-      if (this.position.y <= ground) { this.position.y = ground; this.vy = 0; this.onGround = true; }
-      else this.onGround = false;
+    // vertical: ladder climbing overrides gravity; otherwise jump + gravity over
+    // the ground height (which includes climbable-tower platforms)
+    const climb = this.world.climbAt ? this.world.climbAt(this.position.x, this.position.z) : null;
+    this.onLadder = !!climb;
+    const ground = this.world.groundHeight
+      ? this.world.groundHeight(this.position.x, this.position.z, this.position.y)
+      : Math.max(0, this.world.heightAt ? this.world.heightAt(this.position.x, this.position.z) : 0);
+    if (climb && (this.keys['Space'] || this.keys['KeyW']) && this.position.y < climb.top - 0.01) {
+      this.climbing = true;
+      this.position.y = Math.min(climb.top, this.position.y + this.climbSpeed * dt);
+      this.vy = 0; this.onGround = false;
     } else {
-      this.position.y = ground; this.vy = 0; this.onGround = true;
+      this.climbing = false;
+      if (!this.onGround || this.position.y > ground + 0.001) {
+        this.vy -= this.gravity * dt;
+        this.position.y += this.vy * dt;
+        if (this.position.y <= ground) { this.position.y = ground; this.vy = 0; this.onGround = true; }
+        else this.onGround = false;
+      } else {
+        this.position.y = ground; this.vy = 0; this.onGround = true;
+      }
     }
 
     this._updateCamera();
@@ -138,7 +171,14 @@ export class Player {
   _updateCamera() {
     const bob = Math.sin(this._bob) * 0.05;
     this.camera.position.set(this.position.x, this.position.y + this.eyeHeight + bob, this.position.z);
-    const euler = new THREE.Euler(this.pitch - this.recoilPitch, this.yaw, 0, 'YXZ');
+    // lean: roll the view and slide the eye sideways to peek around cover
+    const lean = this.leanAmt || 0;
+    if (lean) {
+      const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw); // camera-right in world
+      this.camera.position.x += rx * lean * 0.5;
+      this.camera.position.z += rz * lean * 0.5;
+    }
+    const euler = new THREE.Euler(this.pitch - this.recoilPitch, this.yaw, -lean * 0.16, 'YXZ');
     this.camera.quaternion.setFromEuler(euler);
   }
 
@@ -152,6 +192,9 @@ export class Player {
     this.hp = this.maxHp; this.armor = 0;
     this.hurtCd = 0; this.recoilPitch = 0; this._bob = 0;
     this.vy = 0; this.onGround = true;
+    this.crouching = false; this.climbing = false; this.onLadder = false;
+    this.leanAmt = 0; this.moving = false;
+    this.eyeHeight = this.standEye;
     this._updateCamera();
   }
 }

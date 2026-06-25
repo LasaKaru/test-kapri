@@ -21,9 +21,12 @@
   letter-spacing:.2em;color:var(--muted);opacity:.6;text-transform:uppercase}
 
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',system-ui,sans-serif;color:var(--text)}
+html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',system-ui,sans-serif;color:var(--text);
+  overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 #app{position:fixed;inset:0}
-#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+/* allow text selection/editing where it matters (inputs + chat log) */
+input,textarea,.chat-list{-webkit-user-select:text;user-select:text}
 .hidden{display:none !important}
 .btn{cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:700;letter-spacing:.08em;
   padding:12px 26px;border-radius:10px;border:2px solid transparent;text-transform:uppercase;
@@ -88,8 +91,36 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   background:rgba(8,16,4,.5)}
 #minimap{width:170px;height:170px;display:block}
 
+/* Perks / meta-progression */
+.perks-head{display:flex;align-items:center;gap:16px;margin:6px 0 10px;flex-wrap:wrap;justify-content:center}
+.perks-level{font-family:'Orbitron';font-weight:800;color:var(--lime-bright);font-size:1.1rem;letter-spacing:.08em}
+.perks-points{font-family:'Rajdhani';font-weight:700;color:var(--gold);letter-spacing:.05em}
+.perks-xp{position:relative;flex:1;min-width:200px;height:16px;border:1px solid rgba(188,224,74,.3);
+  border-radius:9px;background:rgba(8,16,4,.7);overflow:hidden}
+.perks-xp-fill{position:absolute;inset:0;width:0;background:linear-gradient(90deg,#5a8a1c,var(--lime-bright));transition:width .3s}
+.perks-xp-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:'Orbitron';font-size:.62rem;color:#eaf6d0;text-shadow:0 1px 2px #000;letter-spacing:.04em}
+.perks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;width:100%;margin:6px 0 16px}
+.perk-card{display:flex;align-items:center;gap:12px;text-align:left;padding:11px 13px;cursor:pointer;
+  background:rgba(10,18,6,.6);border:1px solid rgba(188,224,74,.16);border-radius:11px;transition:border-color .15s,transform .1s}
+.perk-card.buyable{border-color:rgba(188,224,74,.6);box-shadow:0 0 12px rgba(140,200,40,.2)}
+.perk-card.buyable:hover{transform:translateY(-2px)}
+.perk-card.locked{opacity:.5;cursor:not-allowed;filter:grayscale(.6)}
+.perk-card.maxed{border-color:var(--gold)}
+.perk-ico{font-size:1.7rem;width:34px;text-align:center;flex:none}
+.perk-body{flex:1;min-width:0}
+.perk-name{font-family:'Orbitron';font-weight:700;color:var(--text);font-size:.92rem}
+.perk-desc{font-family:'Rajdhani';color:#a9bd86;font-size:.82rem;line-height:1.15}
+.perk-pips{display:flex;gap:4px;margin-top:5px;align-items:center}
+.perk-pips i{width:13px;height:8px;border-radius:2px;background:rgba(188,224,74,.18);display:inline-block}
+.perk-pips i.on{background:var(--lime-bright);box-shadow:0 0 6px rgba(188,224,74,.6)}
+.perk-lock{font-family:'Rajdhani';font-size:.74rem;color:#caa84a}
+.perk-minus{flex:none;width:26px;height:26px;border-radius:6px;border:1px solid rgba(224,80,60,.4);
+  background:rgba(40,10,8,.6);color:#e0584a;font-weight:800;cursor:pointer;font-size:1rem;line-height:1}
+.perk-minus:hover{background:rgba(60,14,10,.8)}
+
 /* Settings */
-.settings-inner{min-width:min(440px,92vw)}
+.settings-inner{min-width:min(440px,92vw);max-height:90vh;overflow-y:auto}
 .settings-grid{display:flex;flex-direction:column;gap:14px;width:100%;margin:8px 0 18px;text-align:left}
 .set-row{display:flex;align-items:center;justify-content:space-between;gap:16px;
   background:rgba(10,18,6,.6);border:1px solid rgba(188,224,74,.16);border-radius:10px;padding:12px 16px}
@@ -311,8 +342,9 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   100%{opacity:0;transform:translate(-50%,-170%) scale(1)}}
 
 /* Mobile / touch controls */
-.touch{position:absolute;inset:0;z-index:15;pointer-events:none}
-.touch-joy{position:absolute;left:5%;bottom:9%;width:130px;height:130px;border-radius:50%;
+.touch{position:absolute;inset:0;z-index:15;pointer-events:none;
+  --sab:env(safe-area-inset-bottom);--sar:env(safe-area-inset-right);--sal:env(safe-area-inset-left);--sat:env(safe-area-inset-top)}
+.touch-joy{position:absolute;left:calc(5% + var(--sal));bottom:calc(9% + var(--sab));width:130px;height:130px;border-radius:50%;
   background:rgba(188,224,74,.08);border:2px solid rgba(188,224,74,.3);pointer-events:auto;touch-action:none}
 .touch-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;
   transform:translate(-50%,-50%);background:rgba(188,224,74,.5);border:2px solid var(--lime)}
@@ -320,13 +352,29 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .touch-btn{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;
   font-family:'Orbitron';font-weight:700;font-size:.8rem;color:#10210a;border:none;
   background:linear-gradient(135deg,var(--lime),var(--gold));box-shadow:0 4px 12px rgba(0,0,0,.4);
-  display:grid;place-items:center;user-select:none}
-.touch-fire{right:6%;bottom:11%;width:96px;height:96px;font-size:1rem}
-.touch-ads{right:24%;bottom:24%;width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
-.touch-reload{right:6%;bottom:33%;width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
-.touch-nade{right:24%;bottom:9%;width:60px;height:60px;font-size:1.3rem}
-.touch-melee{right:40%;bottom:9%;width:56px;height:56px;font-size:1.2rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
-.touch-swap{left:5%;bottom:34%;width:56px;height:56px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime);pointer-events:auto}
+  display:grid;place-items:center;user-select:none;transition:transform .08s,filter .08s}
+.touch-btn:active{transform:scale(.92);filter:brightness(1.2)}
+.touch-alt{background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-fire{right:calc(6% + var(--sar));bottom:calc(12% + var(--sab));width:96px;height:96px;font-size:1rem}
+.touch-ads{right:calc(24% + var(--sar));bottom:calc(26% + var(--sab));width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-reload{right:calc(6% + var(--sar));bottom:calc(34% + var(--sab));width:62px;height:62px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-nade{right:calc(24% + var(--sar));bottom:calc(10% + var(--sab));width:60px;height:60px;font-size:1.3rem}
+.touch-melee{right:calc(40% + var(--sar));bottom:calc(10% + var(--sab));width:56px;height:56px;font-size:1.2rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-jump{right:calc(40% + var(--sar));bottom:calc(25% + var(--sab));width:60px;height:60px;font-size:1.5rem}
+.touch-crouch{right:calc(6% + var(--sar));bottom:calc(50% + var(--sab));width:56px;height:56px;font-size:1.4rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-swap{left:calc(5% + var(--sal));bottom:calc(34% + var(--sab));width:56px;height:56px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-pause{top:calc(10px + var(--sat));right:calc(12px + var(--sar));width:46px;height:46px;border-radius:12px;
+  background:rgba(20,43,12,.8);color:var(--lime-bright);border:2px solid var(--lime);font-size:.8rem;letter-spacing:1px}
+.touch-crouch.active{filter:brightness(1.4);box-shadow:0 0 12px rgba(188,224,74,.7)}
+
+/* Rotate-to-landscape hint (phones held in portrait) */
+#rotate-hint{display:none}
+.rotate-inner{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:18px;text-align:center;padding:30px;background:#06100a;color:var(--lime-bright)}
+.rotate-icon{font-size:3rem;animation:rotnudge 1.6s ease-in-out infinite}
+.rotate-inner p{font-family:'Rajdhani';font-size:1.2rem;max-width:340px;color:var(--text)}
+@keyframes rotnudge{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg)}}
+@media (orientation:portrait) and (max-width:900px) and (pointer:coarse){ #rotate-hint{display:block} }
 
 /* Boss health bar */
 .boss-bar-wrap{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(560px,70vw);text-align:center}
@@ -429,6 +477,15 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   80%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(.95)}}
 .center-pop .sub{display:block;font-size:.3em;letter-spacing:.3em;color:var(--gold);margin-top:8px}
 
+/* directional hit indicators — a red wedge points toward the damage source */
+.hit-dirs{position:absolute;inset:0;pointer-events:none}
+.hit-dir{position:absolute;inset:0;opacity:0;transform-origin:50% 50%}
+.hit-dir i{position:absolute;left:50%;top:6%;width:170px;height:96px;margin-left:-85px;display:block;
+  background:radial-gradient(ellipse at 50% 100%, rgba(230,46,36,.92), rgba(230,46,36,0) 72%);
+  clip-path:polygon(50% 100%, 8% 0, 92% 0)}
+.hit-dir{animation:hitdir .9s ease-out}
+@keyframes hitdir{0%{opacity:0}8%{opacity:1}100%{opacity:0}}
+
 /* damage flash + reload */
 .dmg-flash{position:absolute;inset:0;pointer-events:none;opacity:0;
   box-shadow:inset 0 0 160px 40px rgba(224,58,47,.7);transition:opacity .1s}
@@ -436,12 +493,28 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .reload-note{position:absolute;bottom:90px;right:30px;font-family:'Orbitron';font-weight:700;
   letter-spacing:.2em;color:var(--gold);font-size:.95rem;opacity:0;transition:opacity .2s}
 .reload-note.show{opacity:1;animation:blink .6s steps(2) infinite}
+/* stealth state pill (crouched) */
+.stealth-tag{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);
+  font-family:'Orbitron';font-weight:700;letter-spacing:.18em;font-size:.82rem;
+  padding:5px 14px;border-radius:14px;border:1px solid rgba(120,200,90,.5);
+  color:#bff29a;background:rgba(8,22,6,.55);text-shadow:0 1px 3px #000}
+.stealth-tag.detected{color:#ffb0a6;border-color:rgba(224,80,60,.6);background:rgba(28,8,6,.6);
+  animation:blink .5s steps(2) infinite}
 
 /* ===== Overlays ===== */
-.overlay{position:absolute;inset:0;z-index:30;display:grid;place-items:center;
+.overlay{position:absolute;inset:0;z-index:30;display:flex;overflow-y:auto;
+  padding:max(20px,env(safe-area-inset-top)) max(0px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(0px,env(safe-area-inset-left));
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;
   background:radial-gradient(ellipse at 50% 40%,rgba(20,40,10,.55),rgba(5,10,3,.92));
   backdrop-filter:blur(3px)}
-.overlay-inner{text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;padding:30px}
+/* margin:auto centres the panel but, unlike place-items:center, still lets the
+   overlay scroll to reach the top/bottom when the panel is taller than the screen */
+.overlay-inner{text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;padding:30px;margin:auto}
+/* visible themed scrollbars so the scroll affordance is obvious */
+.overlay,.settings-inner,.mapselect-inner,.perks-grid{scrollbar-width:thin;scrollbar-color:rgba(188,224,74,.55) rgba(8,16,4,.4)}
+.overlay::-webkit-scrollbar,.settings-inner::-webkit-scrollbar,.mapselect-inner::-webkit-scrollbar{width:10px}
+.overlay::-webkit-scrollbar-thumb,.settings-inner::-webkit-scrollbar-thumb,.mapselect-inner::-webkit-scrollbar-thumb{background:rgba(188,224,74,.5);border-radius:6px}
+.overlay::-webkit-scrollbar-track,.settings-inner::-webkit-scrollbar-track,.mapselect-inner::-webkit-scrollbar-track{background:rgba(8,16,4,.4)}
 .emblem{color:var(--lime);filter:drop-shadow(0 0 18px rgba(188,224,74,.7))}
 .emblem.pulse{animation:epulse 1.2s ease-in-out infinite}
 @keyframes epulse{0%,100%{opacity:.5;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
@@ -468,8 +541,34 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .os-lbl{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .over-best{color:var(--gold);font-family:'Orbitron';letter-spacing:.1em;font-size:.95rem;min-height:1em}
 
+/* keep HUD corners clear of notches / rounded corners on every device */
+.hud-tl{left:calc(24px + env(safe-area-inset-left))}
+.hud-tr{right:calc(26px + env(safe-area-inset-right))}
+
 @media (max-width:640px){
   .health-bar{width:150px}
   .ammo-mag{font-size:2rem}
-  .hud-tl{top:14px;left:14px}.hud-tr{top:12px;right:14px}
+  .hud-tl{top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left))}
+  .hud-tr{top:calc(10px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right))}
+  .chat-toggle{left:auto;right:calc(12px + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom))}
+  /* compact overlays/menus so they fit small screens */
+  .overlay-inner{padding:18px}
+  .pause-word,.over-word{font-size:clamp(1.6rem,9vw,2.6rem)}
+  .title-word{font-size:clamp(2.4rem,14vw,4rem)}
+  .btn{padding:11px 20px;font-size:.82rem}.btn-lg{padding:13px 26px;font-size:.95rem}
+  .controls-hint{font-size:.62rem}
+  #hud-weapons{display:none}            /* weapon list is touch-swap on mobile */
 }
+
+/* landscape phones: short viewport — shrink touch + HUD so it isn't cramped */
+@media (pointer:coarse) and (max-height:480px){
+  .touch-joy{width:108px;height:108px}.touch-knob{width:46px;height:46px}
+  .touch-fire{width:84px;height:84px}
+  .touch-btn{font-size:.74rem}
+  .hud-tl,.hud-tr{transform:scale(.85);transform-origin:top}
+  .boss-bar-wrap{top:8px}
+  .controls-hint{display:none}
+}
+
+/* hide the desktop chat toggle hotkey label on touch */
+@media (pointer:coarse){ .chat-toggle b{display:none} .controls-hint{display:none} }

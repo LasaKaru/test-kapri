@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1404" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>VERDANT — Play</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -66,7 +70,7 @@
           <span class="ammo-mag" id="ammo-mag">30</span><span class="ammo-sep">/</span><span class="ammo-reserve" id="ammo-reserve">120</span>
         </div>
         <div class="grenade-line"><span class="nade-icon">✸</span> <span id="nade-num">3</span> <span class="nade-lbl">FRAG · G</span></div>
-        <div class="inv-meat hidden" id="inv-meat">🍖 <span class="inv-n">0</span> <span class="nade-lbl">MEAL · C</span></div>
+        <div class="inv-meat hidden" id="inv-meat">🍖 <span class="inv-n">0</span> <span class="nade-lbl">MEAL · B</span></div>
       </div>
 
       <!-- Bottom-left: weapon slots -->
@@ -114,10 +118,12 @@
       <div class="center-pop" id="center-pop"></div>
 
       <!-- hit / damage flash + low health vignette -->
+      <div class="hit-dirs" id="hit-dirs"></div>
       <div class="dmg-flash" id="dmg-flash"></div>
       <div class="lowhp-vignette" id="lowhp-vignette"></div>
       <div class="threat-vignette" id="threat-vignette"></div>
       <div class="reload-note" id="reload-note">RELOADING…</div>
+      <div class="stealth-tag hidden" id="stealth-tag">◈ HIDDEN</div>
 
       <!-- sniper scope overlay -->
       <div class="scope" id="scope">
@@ -134,8 +140,14 @@
         <button class="touch-btn touch-nade" id="touch-nade">✸</button>
         <button class="touch-btn touch-melee" id="touch-melee">🗡</button>
         <button class="touch-btn touch-swap" id="touch-swap">⇄</button>
+        <button class="touch-btn touch-jump" id="touch-jump">⤒</button>
+        <button class="touch-btn touch-crouch" id="touch-crouch">⤓</button>
+        <button class="touch-btn touch-pause" id="touch-pause">II</button>
       </div>
     </div>
+
+    <!-- Rotate-to-landscape hint (phones in portrait) -->
+    <div id="rotate-hint"><div class="rotate-inner"><div class="rotate-icon">📱⟳</div><p>Rotate your device to landscape for the best experience.</p></div></div>
 
     <!-- Title / start screen -->
     <div id="title" class="overlay">
@@ -151,6 +163,7 @@
         <button class="btn btn-ghost" id="missions-btn">🎯 Missions</button>
         <button class="btn btn-ghost" id="mapselect-btn">🗺 Select Location</button>
         <button class="btn btn-ghost" id="loadout-btn">🎖 Loadout</button>
+        <button class="btn btn-ghost" id="perks-btn">⭐ Perks</button>
         <button class="btn btn-ghost" id="leaderboard-btn">🏅 Leaderboard</button>
         <button class="btn btn-ghost" id="coop-btn">👥 Multiplayer</button>
         <button class="btn btn-ghost" id="settings-btn-title">Settings</button>
@@ -158,7 +171,7 @@
           <span><b>WASD</b> Move</span><span><b>Mouse</b> Aim</span><span><b>L-Click</b> Fire</span>
           <span><b>R-Click</b> Aim Down Sights</span><span><b>R</b> Reload</span>
           <span><b>1-9 / Wheel</b> Weapons</span><span><b>G</b> Grenade</span>
-          <span><b>V</b> Melee</span><span><b>Space</b> Jump</span><span><b>T</b> 3rd Person</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
+          <span><b>V</b> Melee</span><span><b>Space</b> Jump</span><span><b>C</b> Crouch / Stealth</span><span><b>Q / E</b> Lean</span><span><b>W / Space</b> Climb ladders</span><span><b>B</b> Eat Meal</span><span><b>T</b> 3rd Person</span><span><b>E</b> Ride Vehicle</span><span><b>Shift</b> Sprint</span><span><b>Esc</b> Pause</span>
         </div>
         <div class="secret-hint">Psst… try typing secret codes in-game: <b>TANK</b>, <b>BIKE</b>, <b>JET</b>, <b>ARSENAL</b>, <b>GODMODE</b>, <b>SPEED</b></div>
         <a class="back-link" href="index.html">← Back to site</a>
@@ -198,7 +211,7 @@
       <div class="overlay-inner">
         <h2 class="pause-word">MULTIPLAYER</h2>
         <p class="shop-sub">Squad up over the network — Quick Match, host a room, or join with a code. Everyone gets a unique callsign shown above their character.</p>
-        <label class="olb-namewrap">CALLSIGN <input id="coop-name" maxlength="12" value="GHOST" /></label>
+        <label class="olb-namewrap">CALLSIGN <input id="coop-name" maxlength="12" placeholder="Your callsign" /></label>
         <div class="coop-controls">
           <button class="btn btn-primary" id="coop-quick">⚡ Quick Match</button>
           <button class="btn btn-ghost" id="coop-host">Host Room</button>
@@ -222,7 +235,7 @@
       <div class="overlay-inner mapselect-inner">
         <h2 class="pause-word">LEADERBOARD</h2>
         <div class="olb-bar">
-          <label class="olb-namewrap">CALLSIGN <input id="olb-name" maxlength="12" value="GHOST" /></label>
+          <label class="olb-namewrap">CALLSIGN <input id="olb-name" maxlength="12" placeholder="Your callsign" /></label>
           <div class="olb-filters">
             <button class="olb-filter active" id="olb-f-map">This Location</button>
             <button class="olb-filter" id="olb-f-all">Global</button>
@@ -244,6 +257,21 @@
         <div class="diff-label">WEAPON ATTACHMENTS · max 2 each</div>
         <div class="loadout-grid" id="loadout-grid"></div>
         <button class="btn btn-primary btn-lg" id="loadout-close">Confirm</button>
+      </div>
+    </div>
+
+    <!-- Perks / meta-progression -->
+    <div id="perks" class="overlay hidden">
+      <div class="overlay-inner mapselect-inner">
+        <h2 class="pause-word">PERKS</h2>
+        <div class="perks-head">
+          <span id="perks-level" class="perks-level">LV 1</span>
+          <div class="perks-xp"><div class="perks-xp-fill" id="perks-xp-fill"></div><span class="perks-xp-text" id="perks-xp-text">0 / 0 XP</span></div>
+          <span id="perks-points" class="perks-points">0 points</span>
+        </div>
+        <p class="shop-sub">Earn XP every run. Spend perk points to permanently boost your soldier — perks stack with your class &amp; attachments. Click a perk to rank it up, − to refund.</p>
+        <div class="perks-grid" id="perks-grid"></div>
+        <button class="btn btn-primary btn-lg" id="perks-close">Done</button>
       </div>
     </div>
 

@@ -9,8 +9,46 @@ export class Net {
     this.listeners = [];
     this._backoff = 2000;
     this._queue = this._load('verdant_score_queue', []);
-    this.name = (this._loadRaw('verdant_name') || 'GHOST').slice(0, 12);
+    // Every player gets a stable, unique handle. If they never set one we mint a
+    // callsign+id (e.g. RAVEN4821) and persist it — so chat/leaderboard show a
+    // real identity instead of a wall of "GHOST".
+    this.name = this._ensureName();
+    this.country = (this._loadRaw('verdant_country') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+    this._detectCountry();
     if (this.enabled) this._connect();
+  }
+
+  // pull a saved name, sanitising it; mint+persist a unique one if absent
+  _ensureName() {
+    const saved = (this._loadRaw('verdant_name') || '').toUpperCase().replace(/[^A-Z0-9_ -]/g, '').slice(0, 12).trim();
+    if (saved && saved !== 'GHOST') return saved;
+    const n = this._genName();
+    try { localStorage.setItem('verdant_name', n); } catch (_) {}
+    return n;
+  }
+  _genName() {
+    const cs = ['VIPER', 'RAVEN', 'WOLF', 'HAWK', 'NOVA', 'ECHO', 'FOX', 'ACE', 'KILO', 'DELTA', 'RECON', 'BLADE', 'STORM', 'ONYX', 'COBRA', 'LYNX'];
+    return (cs[Math.floor(Math.random() * cs.length)] + Math.floor(1000 + Math.random() * 9000)).slice(0, 12);
+  }
+
+  // best-effort country lookup (2-letter ISO) for the flag icon; fully optional
+  // and failure-safe — single-player and chat work fine without it.
+  async _detectCountry() {
+    if (this.country) return;                       // already known/cached
+    if (typeof fetch === 'undefined') return;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 3500);
+      const r = await fetch('https://ipapi.co/country/', { signal: ctrl.signal });
+      clearTimeout(t);
+      const cc = (await r.text()).trim().toUpperCase().replace(/[^A-Z]/g, '');
+      if (cc.length === 2) {
+        this.country = cc;
+        try { localStorage.setItem('verdant_country', cc); } catch (_) {}
+        // refresh our identity on any open chat connection
+        if (this._ws && this._ws.readyState === 1) { try { this._ws.send(JSON.stringify({ type: 'join', name: this.name, country: this.country, room: this.chatRoom })); } catch (_) {} }
+      }
+    } catch (_) { /* offline / blocked — flag simply omitted */ }
   }
 
   // server base URL: explicit override, else same-origin /api (works when the
@@ -26,9 +64,11 @@ export class Net {
   _setState(s) { if (s !== this.state) { this.state = s; this.listeners.forEach((f) => { try { f(s); } catch (_) {} }); } }
 
   setName(n) {
-    this.name = (n || 'GHOST').toUpperCase().replace(/[^A-Z0-9_ -]/g, '').slice(0, 12) || 'GHOST';
+    const clean = (n || '').toUpperCase().replace(/[^A-Z0-9_ -]/g, '').slice(0, 12).trim();
+    // empty/cleared keeps the existing unique handle rather than reverting to GHOST
+    this.name = clean || this.name || this._genName();
     try { localStorage.setItem('verdant_name', this.name); } catch (_) {}
-    if (this._ws && this._ws.readyState === 1) { try { this._ws.send(JSON.stringify({ type: 'join', name: this.name, room: this.chatRoom })); } catch (_) {} }
+    if (this._ws && this._ws.readyState === 1) { try { this._ws.send(JSON.stringify({ type: 'join', name: this.name, country: this.country, room: this.chatRoom })); } catch (_) {} }
   }
 
   async _fetch(path, opts = {}, timeout = 4000) {
@@ -72,7 +112,7 @@ export class Net {
 
   // best-effort, queued, never throws into the game
   submitScore(entry) {
-    const e = { ...entry, name: this.name, ts: Date.now() };
+    const e = { ...entry, name: this.name, country: this.country || '', ts: Date.now() };
     this._queue.push(e); this._save('verdant_score_queue', this._queue);
     this._flushQueue();
   }
@@ -102,7 +142,7 @@ export class Net {
     let ws;
     try { ws = new WebSocket(this._chatUrl()); } catch (_) { this.chatState = 'offline'; this._emitChatState(); this._scheduleChatReconnect(); return; }
     this._ws = ws;
-    ws.onopen = () => { this.chatState = 'online'; this._emitChatState(); this._chatBackoff = 2000; ws.send(JSON.stringify({ type: 'join', name: this.name, room: this.chatRoom })); };
+    ws.onopen = () => { this.chatState = 'online'; this._emitChatState(); this._chatBackoff = 2000; ws.send(JSON.stringify({ type: 'join', name: this.name, country: this.country, room: this.chatRoom })); };
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
       if (m.type === 'history') { for (const msg of (m.messages || [])) this._emit(this._chatMsg, msg); }
@@ -136,7 +176,7 @@ export class Net {
     this.coopState = 'connecting'; this._emitCoopState();
     let ws; try { ws = new WebSocket(this._coopUrl()); } catch (_) { this.coopState = 'offline'; this._emitCoopState(); return false; }
     this._coopWs = ws;
-    ws.onopen = () => { this.coopState = 'online'; this._emitCoopState(); ws.send(JSON.stringify({ type: 'join', room: this.coopRoom, name: this.name })); };
+    ws.onopen = () => { this.coopState = 'online'; this._emitCoopState(); ws.send(JSON.stringify({ type: 'join', room: this.coopRoom, name: this.name, country: this.country })); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (_) { return; } this._emit(this._coopCb, m); };
     ws.onclose = () => { this.coopState = 'offline'; this._emitCoopState(); };
     ws.onerror = () => { try { ws.close(); } catch (_) {} };

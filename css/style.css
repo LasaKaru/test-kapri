@@ -158,7 +158,12 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
 #how .btn-lg{margin-top:10px}
 
 /* Leaderboard */
-.leaderboard{list-style:none;max-width:560px;margin:0 auto 30px;text-align:center}
+.leaderboard{list-style:none;max-width:560px;margin:0 auto 30px;text-align:center;
+  max-height:460px;overflow-y:auto;padding-right:6px;
+  scrollbar-width:thin;scrollbar-color:rgba(140,200,40,.55) rgba(8,16,4,.3)}
+.leaderboard::-webkit-scrollbar{width:9px}
+.leaderboard::-webkit-scrollbar-thumb{background:rgba(140,200,40,.5);border-radius:6px}
+.leaderboard::-webkit-scrollbar-track{background:rgba(8,16,4,.3)}
 .leaderboard li{display:flex;justify-content:space-between;align-items:center;gap:16px;
   background:rgba(10,18,6,.6);border:1px solid rgba(188,224,74,.14);border-radius:10px;
   padding:14px 20px;margin-bottom:10px;font-size:1.1rem}
