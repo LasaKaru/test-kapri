@@ -83,7 +83,7 @@ export class PostFX {
     if (this.realism <= 0.02) this._baseBloom = 0;
     this.bloom.enabled = this.realism > 0.02;
     // soften tone mapping toward neutral when natural
-    this.renderer.toneMappingExposure = 1.0 + this.realism * 0.05;
+    this.renderer.toneMappingExposure = 1.12 + this.realism * 0.04;   // brighter, airier base
   }
 
   setSize(w, h) {

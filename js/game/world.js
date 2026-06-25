@@ -28,7 +28,7 @@ export const MAPS = {
     name: 'Verdant Plains', topo: 'Plains',
     desc: 'Gentle golden grassland. Open sightlines and light cover — a fair fight.',
     ground: 0x4f7d1e, amp: 1.8, freq: 0.05, ridge: 0, lift: 0,
-    treeDensity: 150, rockDensity: 44, grass: 700, fogFar: 240,
+    treeDensity: 170, rockDensity: 44, grass: 1000, fogFar: 205,
     lakes: [{ x: -58, z: 38, r: 18 }, { x: 60, z: -10, r: 16 }],
     preview: ['#1b2c08', '#7d7a1c', '#4f7d1e'],
   },
@@ -282,7 +282,7 @@ export class World {
     this.root.add(sky);
     this._skyU = uniforms;
 
-    scene.fog = new THREE.Fog(0xc09a3a, 55, 230);
+    scene.fog = new THREE.Fog(0xdccaa2, 40, 205);   // pale warm haze, brought in for depth
     this._fog = scene.fog;
 
     // sun disc + glow
@@ -337,7 +337,7 @@ export class World {
   // ---------- Lights ----------
   _buildLights() {
     const scene = this.scene;
-    const hemi = new THREE.HemisphereLight(0xfff0b0, 0x1f3a10, 0.8);
+    const hemi = new THREE.HemisphereLight(0xfff3c8, 0x3a5520, 0.8);  // warm sky + brighter green bounce
     this.root.add(hemi);
     this._hemi = hemi;
     const sun = new THREE.DirectionalLight(0xffe39a, 2.2);
@@ -395,9 +395,10 @@ export class World {
     const lerp = (a, b, t) => a + (b - a) * t;
     const C = (hex) => new THREE.Color(hex);
 
-    // keyframe palettes
-    const goldT = { top: C(0x2a4a6e), mid: C(0xb59428), bot: C(0xe8951f), fog: C(0xc09a3a), light: C(0xffe39a), li: 2.0, hemi: 0.8 };
-    const dayK = { top: C(0x3f7fd0), mid: C(0xbfe0ff), bot: C(0xeaf4ff), fog: C(0xc6d8e6), light: C(0xfff4d8), li: 2.5, hemi: 0.95 };
+    // keyframe palettes — tuned for a bright, hazy, warm-morning forest look:
+    // pale warm haze on the horizon, luminous fill light, soft bright shadows.
+    const goldT = { top: C(0x6f8db0), mid: C(0xd9c293), bot: C(0xf2dcad), fog: C(0xdccaa2), light: C(0xffe9bb), li: 2.15, hemi: 1.2 };
+    const dayK = { top: C(0x6fa6dd), mid: C(0xd2e7f4), bot: C(0xeff7ff), fog: C(0xdde8ec), light: C(0xfff5e6), li: 2.5, hemi: 1.25 };
     // Night keeps a bright blue moonlight floor so you can still see & fight.
     const nightK = { top: C(0x16264f), mid: C(0x33507f), bot: C(0x5a7aa8), fog: C(0x33486f), light: C(0xbcd4ff), li: 1.85, hemi: 1.05 };
 
@@ -970,7 +971,7 @@ export class World {
   }
 
   _scatterGrass() {
-    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x86b32a, roughness: 1, flatShading: true, side: THREE.DoubleSide });
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x8cba36, roughness: 1, flatShading: true, side: THREE.DoubleSide });
     // real-time wind: sway each blade's top by world position + time
     bladeMat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this._windTime = (this._windTime || { value: 0 });
@@ -982,8 +983,8 @@ export class World {
          transformed.x += sway * max(0.0, position.y);`
       );
     };
-    const blade = new THREE.ConeGeometry(0.16, 1.0, 3);
-    blade.translate(0, 0.5, 0); // pivot at base so the top sways
+    const blade = new THREE.ConeGeometry(0.2, 1.5, 3);   // taller, lusher blades
+    blade.translate(0, 0.75, 0); // pivot at base so the top sways
     const mesh = new THREE.InstancedMesh(blade, bladeMat, this.map.grass);
     const dummy = new THREE.Object3D();
     for (let i = 0; i < this.map.grass; i++) {
@@ -991,7 +992,7 @@ export class World {
       const gx = Math.cos(ang) * dist, gz = Math.sin(ang) * dist;
       dummy.position.set(gx, 0, gz);
       dummy.rotation.y = Math.random() * Math.PI;
-      dummy.scale.setScalar(this.waterAt(gx, gz) ? 0 : 0.6 + Math.random());
+      dummy.scale.set(0.8 + Math.random() * 0.6, this.waterAt(gx, gz) ? 0 : 0.75 + Math.random() * 1.25, 0.8 + Math.random() * 0.6);
       dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     }
     mesh.frustumCulled = false;
