@@ -109,8 +109,8 @@ export class Player {
       move.add(right.clone().multiplyScalar(this.touchVec.x));
     }
 
-    // crouch (hold C): lower stance, slower, no sprint — the basis of stealth
-    this.crouching = !!this.keys['KeyC'] && this.onGround && !this.climbing;
+    // crouch (hold C, or the touch crouch toggle): lower stance, slower, no sprint
+    this.crouching = (!!this.keys['KeyC'] || !!this.touchCrouch) && this.onGround && !this.climbing;
     const targetEye = this.crouching ? this.crouchEye : this.standEye;
     this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 10);
 

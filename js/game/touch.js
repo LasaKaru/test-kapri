@@ -5,8 +5,17 @@ export class TouchControls {
     this.game = game;
     this.enabled = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     if (!this.enabled) return;
-    document.getElementById('touch').classList.remove('hidden');
+    this.root = document.getElementById('touch');
+    // unlock WebAudio on the very first touch (required on iOS/Safari)
+    const unlock = () => { try { this.game.audio._ensure(); } catch (_) {} };
+    window.addEventListener('touchstart', unlock, { once: true, passive: true });
+    window.addEventListener('pointerdown', unlock, { once: true });
     this._bind();
+    // show the pad only while actually playing
+    this._vis = setInterval(() => {
+      const show = this._playing();
+      this.root.classList.toggle('hidden', !show);
+    }, 200);
   }
 
   _playing() { return this.game.state === 'playing'; }
@@ -65,5 +74,16 @@ export class TouchControls {
     hold('touch-nade', () => g._throwGrenade());
     hold('touch-melee', () => g._melee());
     hold('touch-swap', () => { g.weapons.cycle(1); g.audio.swap(); g._syncWeaponHud(); });
+    hold('touch-jump', () => { if (g.player.jump()) g.audio.jump(); });
+    // crouch is a toggle on touch (no hold needed); button reflects state
+    const crouchBtn = document.getElementById('touch-crouch');
+    if (crouchBtn) crouchBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); if (!this._playing()) return;
+      g.player.touchCrouch = !g.player.touchCrouch;
+      crouchBtn.classList.toggle('active', !!g.player.touchCrouch);
+    });
+    // pause works without a keyboard/Esc
+    const pauseBtn = document.getElementById('touch-pause');
+    if (pauseBtn) pauseBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); if (this._playing()) g.pauseTouch(); });
   }
 }

@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1404" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>VERDANT — Play</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -136,8 +140,14 @@
         <button class="touch-btn touch-nade" id="touch-nade">✸</button>
         <button class="touch-btn touch-melee" id="touch-melee">🗡</button>
         <button class="touch-btn touch-swap" id="touch-swap">⇄</button>
+        <button class="touch-btn touch-jump" id="touch-jump">⤒</button>
+        <button class="touch-btn touch-crouch" id="touch-crouch">⤓</button>
+        <button class="touch-btn touch-pause" id="touch-pause">II</button>
       </div>
     </div>
+
+    <!-- Rotate-to-landscape hint (phones in portrait) -->
+    <div id="rotate-hint"><div class="rotate-inner"><div class="rotate-icon">📱⟳</div><p>Rotate your device to landscape for the best experience.</p></div></div>
 
     <!-- Title / start screen -->
     <div id="title" class="overlay">

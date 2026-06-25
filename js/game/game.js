@@ -35,10 +35,16 @@ const BASE_FOV = 75;
 class Game {
   constructor() {
     this.canvas = document.getElementById('scene');
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+    // "touch device" = has touch AND no fine pointer (phones/tablets). A touch
+    // laptop with a mouse reports a fine pointer, so it keeps Pointer Lock.
+    const hasTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const finePointer = !!(window.matchMedia && window.matchMedia('(pointer:fine)').matches);
+    this.isTouch = hasTouch && !finePointer;
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: !this.isTouch, powerPreference: 'high-performance' });
     // cap device pixel ratio (retina screens render 4x the pixels at DPR 2 — the
-    // single biggest GPU cost). 1.5 is visually near-identical but much faster.
-    this._maxDPR = Math.min(window.devicePixelRatio || 1, 1.5);
+    // single biggest GPU cost). 1.5 is visually near-identical but much faster;
+    // phones/tablets cap at 1.0 since mobile GPUs are far weaker.
+    this._maxDPR = Math.min(window.devicePixelRatio || 1, this.isTouch ? 1.0 : 1.5);
     this._dpr = this._maxDPR;
     this.renderer.setPixelRatio(this._dpr);
     this.renderer.shadowMap.enabled = true;
@@ -296,7 +302,24 @@ class Game {
     });
   }
 
-  _requestLock() { this.canvas.requestPointerLock(); }
+  _requestLock() {
+    // touch devices have no Pointer Lock — resume/continue the run directly
+    if (this.isTouch) { this._resumeFromOverlay(); return; }
+    if (this.canvas.requestPointerLock) this.canvas.requestPointerLock();
+  }
+  _resumeFromOverlay() {
+    if (this.state === 'paused' || this.state === 'title' || this.state === 'over') {
+      this.state = 'playing'; this._hideOverlays(); this.hud.show();
+      try { this.audio.setMuffle(false); } catch (_) {}
+    }
+  }
+  // touch pause (no keyboard Esc): mirrors the desktop pointer-unlock pause
+  pauseTouch() {
+    if (this.state !== 'playing') return;
+    this.state = 'paused'; this.firing = false;
+    try { this.weapons.setAds(false); this.audio.setMuffle(true); } catch (_) {}
+    document.getElementById('pause').classList.remove('hidden');
+  }
 
   // simple low-poly soldier body for the third-person camera
   _buildPlayerBody() {

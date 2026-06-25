@@ -21,9 +21,12 @@
   letter-spacing:.2em;color:var(--muted);opacity:.6;text-transform:uppercase}
 
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',system-ui,sans-serif;color:var(--text)}
+html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',system-ui,sans-serif;color:var(--text);
+  overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 #app{position:fixed;inset:0}
-#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+/* allow text selection/editing where it matters (inputs + chat log) */
+input,textarea,.chat-list{-webkit-user-select:text;user-select:text}
 .hidden{display:none !important}
 .btn{cursor:pointer;font-family:'Orbitron',sans-serif;font-weight:700;letter-spacing:.08em;
   padding:12px 26px;border-radius:10px;border:2px solid transparent;text-transform:uppercase;
@@ -339,8 +342,9 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   100%{opacity:0;transform:translate(-50%,-170%) scale(1)}}
 
 /* Mobile / touch controls */
-.touch{position:absolute;inset:0;z-index:15;pointer-events:none}
-.touch-joy{position:absolute;left:5%;bottom:9%;width:130px;height:130px;border-radius:50%;
+.touch{position:absolute;inset:0;z-index:15;pointer-events:none;
+  --sab:env(safe-area-inset-bottom);--sar:env(safe-area-inset-right);--sal:env(safe-area-inset-left);--sat:env(safe-area-inset-top)}
+.touch-joy{position:absolute;left:calc(5% + var(--sal));bottom:calc(9% + var(--sab));width:130px;height:130px;border-radius:50%;
   background:rgba(188,224,74,.08);border:2px solid rgba(188,224,74,.3);pointer-events:auto;touch-action:none}
 .touch-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;border-radius:50%;
   transform:translate(-50%,-50%);background:rgba(188,224,74,.5);border:2px solid var(--lime)}
@@ -348,13 +352,29 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .touch-btn{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;
   font-family:'Orbitron';font-weight:700;font-size:.8rem;color:#10210a;border:none;
   background:linear-gradient(135deg,var(--lime),var(--gold));box-shadow:0 4px 12px rgba(0,0,0,.4);
-  display:grid;place-items:center;user-select:none}
-.touch-fire{right:6%;bottom:11%;width:96px;height:96px;font-size:1rem}
-.touch-ads{right:24%;bottom:24%;width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
-.touch-reload{right:6%;bottom:33%;width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
-.touch-nade{right:24%;bottom:9%;width:60px;height:60px;font-size:1.3rem}
-.touch-melee{right:40%;bottom:9%;width:56px;height:56px;font-size:1.2rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
-.touch-swap{left:5%;bottom:34%;width:56px;height:56px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime);pointer-events:auto}
+  display:grid;place-items:center;user-select:none;transition:transform .08s,filter .08s}
+.touch-btn:active{transform:scale(.92);filter:brightness(1.2)}
+.touch-alt{background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-fire{right:calc(6% + var(--sar));bottom:calc(12% + var(--sab));width:96px;height:96px;font-size:1rem}
+.touch-ads{right:calc(24% + var(--sar));bottom:calc(26% + var(--sab));width:64px;height:64px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-reload{right:calc(6% + var(--sar));bottom:calc(34% + var(--sab));width:62px;height:62px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-nade{right:calc(24% + var(--sar));bottom:calc(10% + var(--sab));width:60px;height:60px;font-size:1.3rem}
+.touch-melee{right:calc(40% + var(--sar));bottom:calc(10% + var(--sab));width:56px;height:56px;font-size:1.2rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-jump{right:calc(40% + var(--sar));bottom:calc(25% + var(--sab));width:60px;height:60px;font-size:1.5rem}
+.touch-crouch{right:calc(6% + var(--sar));bottom:calc(50% + var(--sab));width:56px;height:56px;font-size:1.4rem;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-swap{left:calc(5% + var(--sal));bottom:calc(34% + var(--sab));width:56px;height:56px;background:rgba(20,43,12,.7);color:var(--lime-bright);border:2px solid var(--lime)}
+.touch-pause{top:calc(10px + var(--sat));right:calc(12px + var(--sar));width:46px;height:46px;border-radius:12px;
+  background:rgba(20,43,12,.8);color:var(--lime-bright);border:2px solid var(--lime);font-size:.8rem;letter-spacing:1px}
+.touch-crouch.active{filter:brightness(1.4);box-shadow:0 0 12px rgba(188,224,74,.7)}
+
+/* Rotate-to-landscape hint (phones held in portrait) */
+#rotate-hint{display:none}
+.rotate-inner{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:18px;text-align:center;padding:30px;background:#06100a;color:var(--lime-bright)}
+.rotate-icon{font-size:3rem;animation:rotnudge 1.6s ease-in-out infinite}
+.rotate-inner p{font-family:'Rajdhani';font-size:1.2rem;max-width:340px;color:var(--text)}
+@keyframes rotnudge{0%,100%{transform:rotate(-12deg)}50%{transform:rotate(12deg)}}
+@media (orientation:portrait) and (max-width:900px) and (pointer:coarse){ #rotate-hint{display:block} }
 
 /* Boss health bar */
 .boss-bar-wrap{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(560px,70vw);text-align:center}
@@ -482,7 +502,9 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
   animation:blink .5s steps(2) infinite}
 
 /* ===== Overlays ===== */
-.overlay{position:absolute;inset:0;z-index:30;display:flex;overflow-y:auto;padding:20px 0;
+.overlay{position:absolute;inset:0;z-index:30;display:flex;overflow-y:auto;
+  padding:max(20px,env(safe-area-inset-top)) max(0px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(0px,env(safe-area-inset-left));
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;
   background:radial-gradient(ellipse at 50% 40%,rgba(20,40,10,.55),rgba(5,10,3,.92));
   backdrop-filter:blur(3px)}
 /* margin:auto centres the panel but, unlike place-items:center, still lets the
@@ -519,8 +541,34 @@ html,body{height:100%;overflow:hidden;background:#0a1404;font-family:'Rajdhani',
 .os-lbl{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .over-best{color:var(--gold);font-family:'Orbitron';letter-spacing:.1em;font-size:.95rem;min-height:1em}
 
+/* keep HUD corners clear of notches / rounded corners on every device */
+.hud-tl{left:calc(24px + env(safe-area-inset-left))}
+.hud-tr{right:calc(26px + env(safe-area-inset-right))}
+
 @media (max-width:640px){
   .health-bar{width:150px}
   .ammo-mag{font-size:2rem}
-  .hud-tl{top:14px;left:14px}.hud-tr{top:12px;right:14px}
+  .hud-tl{top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left))}
+  .hud-tr{top:calc(10px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right))}
+  .chat-toggle{left:auto;right:calc(12px + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom))}
+  /* compact overlays/menus so they fit small screens */
+  .overlay-inner{padding:18px}
+  .pause-word,.over-word{font-size:clamp(1.6rem,9vw,2.6rem)}
+  .title-word{font-size:clamp(2.4rem,14vw,4rem)}
+  .btn{padding:11px 20px;font-size:.82rem}.btn-lg{padding:13px 26px;font-size:.95rem}
+  .controls-hint{font-size:.62rem}
+  #hud-weapons{display:none}            /* weapon list is touch-swap on mobile */
 }
+
+/* landscape phones: short viewport — shrink touch + HUD so it isn't cramped */
+@media (pointer:coarse) and (max-height:480px){
+  .touch-joy{width:108px;height:108px}.touch-knob{width:46px;height:46px}
+  .touch-fire{width:84px;height:84px}
+  .touch-btn{font-size:.74rem}
+  .hud-tl,.hud-tr{transform:scale(.85);transform-origin:top}
+  .boss-bar-wrap{top:8px}
+  .controls-hint{display:none}
+}
+
+/* hide the desktop chat toggle hotkey label on touch */
+@media (pointer:coarse){ .chat-toggle b{display:none} .controls-hint{display:none} }
