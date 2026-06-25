@@ -92,7 +92,7 @@
     const render = (scores, online) => {
       if (!scores || !scores.length) { list.innerHTML = '<li class="lb-empty">No runs yet — be the first to survive.</li>'; return; }
       list.innerHTML = '';
-      scores.slice(0, 8).forEach((r, i) => {
+      scores.slice(0, 100).forEach((r, i) => {
         const li = document.createElement('li');
         const flag = flagEmoji(r.country);
         li.innerHTML =

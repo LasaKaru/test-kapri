@@ -255,6 +255,8 @@ class Game {
     document.addEventListener('mousemove', (e) => {
       if (this.state === 'playing' && document.pointerLockElement) {
         this.player.addLook(e.movementX, e.movementY);
+        const fl = this._frameLook || (this._frameLook = { x: 0, y: 0 });
+        fl.x += e.movementX; fl.y += e.movementY;
       }
     });
 
@@ -332,15 +334,18 @@ class Game {
     try { this.settings.v.thirdPerson = this.thirdPerson; this.settings.save(); } catch (_) {}
     this.hud.killFeed(this.thirdPerson ? 'THIRD-PERSON' : 'FIRST-PERSON');
   }
-  // chase cam: keep the camera's look direction, pull it back behind the body
-  _applyThirdPerson() {
+  // chase cam: keep the camera's look direction, pull it back behind the body.
+  // `blend` (0..1) eases the pull-back so the toggle is a smooth dolly, not a cut.
+  _applyThirdPerson(blend = 1) {
     const p = this.player, cam = this.camera;
     const body = this._activeBody();
-    body.position.set(p.position.x, p.position.y, p.position.z);
-    body.rotation.y = p.yaw + (this._tpModel ? Math.PI : 0); // model faces +Z; flip to look forward
-    if (this._tpModel) this._tpModel.update(this.thirdPerson ? (this._lastDt || 0.016) : 0);
+    if (body) {
+      body.position.set(p.position.x, p.position.y, p.position.z);
+      body.rotation.y = p.yaw + (this._tpModel ? Math.PI : 0); // model faces +Z; flip to look forward
+    }
+    if (this._tpModel) this._tpModel.update(this._lastDt || 0.016);
     const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
-    cam.position.addScaledVector(fwd, -4.6); cam.position.y += 0.7;
+    cam.position.addScaledVector(fwd, -4.6 * blend); cam.position.y += 0.7 * blend;
   }
 
   _updateNetPill(s) {
@@ -1237,16 +1242,23 @@ class Game {
       const clientCoop = this.coopMode && !this.coopHost;
 
       if (this._meleeCd > 0) this._meleeCd -= dt;
-      const tp = this.thirdPerson && !mounted;
+      const wantTp = this.thirdPerson && !mounted;
+      // smooth first<->third person blend
+      this._tpBlend = (this._tpBlend || 0) + ((wantTp ? 1 : 0) - (this._tpBlend || 0)) * Math.min(1, dt * 8);
+      if (this._tpBlend < 0.0015) this._tpBlend = 0;
       if (mounted) { this.player.regenOnly ? this.player.regenOnly(dt) : null; }
       else {
         this.player.update(dt);
         if (this._wasAir && this.player.onGround) this.audio.land();
         this._wasAir = !this.player.onGround;
-        if (tp) this._applyThirdPerson();
+        if (this._tpBlend > 0) this._applyThirdPerson(this._tpBlend);
       }
-      this.weapons.rig.visible = !mounted && !this.thirdPerson;
-      { const b = this._activeBody(); if (b) b.visible = tp; }
+      this.weapons.rig.visible = !mounted && this._tpBlend < 0.5;
+      { const b = this._activeBody(); if (b) b.visible = this._tpBlend > 0.05; }
+      // feed look-sway + walk-bob to the weapon rig, then reset the frame's look delta
+      const fl = this._frameLook || (this._frameLook = { x: 0, y: 0 });
+      this.weapons.setMotion({ lookX: fl.x, lookY: fl.y, moving: !mounted && this.player.moving, spd: this.player.sprinting ? 11 : 7 });
+      fl.x = 0; fl.y = 0;
       this.weapons.update(dt);
       if (this.cheatArsenal) this.weapons.refill();
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;

@@ -56,7 +56,7 @@ async function appendScore(entry) {
 async function topScores(map, diff) {
   if (!SUPABASE_URL) return [];
   try {
-    let query = `${SUPABASE_URL}/rest/v1/leaderboard?select=*&order=score.desc&limit=20`;
+    let query = `${SUPABASE_URL}/rest/v1/leaderboard?select=*&order=score.desc&limit=100`;
     
     if (map) query += `&map=eq.${map}`;
     if (diff) query += `&diff=eq.${diff}`;

@@ -32,6 +32,8 @@ export class Player {
     this.climbing = false;
     this.onLadder = false;
     this.climbSpeed = 4.2;
+    this.moving = false;
+    this.leanAmt = 0;       // -1 left .. +1 right (Q / E), eased
 
     // survivability (COD-style)
     this.maxHp = 100; this.hp = 100;
@@ -112,6 +114,11 @@ export class Player {
     const targetEye = this.crouching ? this.crouchEye : this.standEye;
     this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 10);
 
+    // lean / peek (hold Q left, E right) — eased camera roll + lateral offset
+    const wantLean = ((this.keys['KeyQ'] ? -1 : 0) + (this.keys['KeyE'] ? 1 : 0)) * (this.crouching ? 0.7 : 1);
+    this.leanAmt += (wantLean - this.leanAmt) * Math.min(1, dt * 9);
+    this.moving = move.lengthSq() > 0 && this.onGround;
+
     let spd = this.speed;
     this.sprinting = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && move.lengthSq() > 0 && this.keys['KeyW'] && !this.crouching;
     if (this.sprinting) spd *= this.sprintMul;
@@ -164,7 +171,14 @@ export class Player {
   _updateCamera() {
     const bob = Math.sin(this._bob) * 0.05;
     this.camera.position.set(this.position.x, this.position.y + this.eyeHeight + bob, this.position.z);
-    const euler = new THREE.Euler(this.pitch - this.recoilPitch, this.yaw, 0, 'YXZ');
+    // lean: roll the view and slide the eye sideways to peek around cover
+    const lean = this.leanAmt || 0;
+    if (lean) {
+      const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw); // camera-right in world
+      this.camera.position.x += rx * lean * 0.5;
+      this.camera.position.z += rz * lean * 0.5;
+    }
+    const euler = new THREE.Euler(this.pitch - this.recoilPitch, this.yaw, -lean * 0.16, 'YXZ');
     this.camera.quaternion.setFromEuler(euler);
   }
 
@@ -179,6 +193,7 @@ export class Player {
     this.hurtCd = 0; this.recoilPitch = 0; this._bob = 0;
     this.vy = 0; this.onGround = true;
     this.crouching = false; this.climbing = false; this.onLadder = false;
+    this.leanAmt = 0; this.moving = false;
     this.eyeHeight = this.standEye;
     this._updateCamera();
   }
