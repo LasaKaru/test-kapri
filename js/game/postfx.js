@@ -90,6 +90,8 @@ export class PostFX {
     this.composer.setSize(w, h);
     this.bloom.setSize(w, h);
   }
+  // keep the composer's internal render targets in sync with the renderer DPR
+  setPixelRatio(r) { if (this.composer.setPixelRatio) this.composer.setPixelRatio(r); }
 
   setKillcam(v) { this.grade.uniforms.kc.value = Math.max(0, Math.min(1, v)); }
 

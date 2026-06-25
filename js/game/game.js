@@ -7,6 +7,7 @@ import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
 import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
+import { Models } from './models.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -33,10 +34,15 @@ const BASE_FOV = 75;
 class Game {
   constructor() {
     this.canvas = document.getElementById('scene');
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+    // cap device pixel ratio (retina screens render 4x the pixels at DPR 2 — the
+    // single biggest GPU cost). 1.5 is visually near-identical but much faster.
+    this._maxDPR = Math.min(window.devicePixelRatio || 1, 1.5);
+    this._dpr = this._maxDPR;
+    this.renderer.setPixelRatio(this._dpr);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;   // cheaper than PCFSoft
+    this._perfMs = 16; this._dprT = 0;
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 600);
@@ -121,6 +127,10 @@ class Game {
     this._tpBody = this._buildPlayerBody();
     this._tpBody.visible = false;
     this.scene.add(this._tpBody);
+    // optional: swap the boxy third-person body for the rigged soldier model
+    // when it loads (graceful fallback to the box body if it can't).
+    this.models = new Models();
+    this.models.load('soldier', 'assets/models/soldier.glb').then((m) => { if (m) this._setupSoldierBody(); });
     // persistent loot inventory (meat eaten to heal; hides/feathers/fangs traded)
     const INV0 = { meat: 0, hide: 0, feather: 0, fang: 0 };
     try { this.inventory = { ...INV0, ...JSON.parse(localStorage.getItem('verdant_inventory') || '{}') }; } catch (_) { this.inventory = { ...INV0 }; }
@@ -293,6 +303,22 @@ class Game {
     [-1, 1].forEach((s) => add(new THREE.BoxGeometry(0.22, 0.85, 0.24), dark, s * 0.18, 0.5, 0));   // legs
     return g;
   }
+  // build the rigged soldier as the third-person avatar (replaces the box body)
+  _setupSoldierBody() {
+    try {
+      const h = this.models.height('soldier') || 1.8;
+      const inst = this.models.instance('soldier', 1.8 / h);   // scale to ~1.8m tall
+      if (!inst) return;
+      inst.group.visible = false;
+      this.scene.add(inst.group);
+      this._tpModel = inst;
+      try { inst.play('Armature|Standing', 0); } catch (_) {}
+      // retire the placeholder box body
+      if (this._tpBody) { this._tpBody.visible = false; this.scene.remove(this._tpBody); }
+    } catch (e) { console.warn('[soldier] setup failed, keeping box body:', e); this._tpModel = null; }
+  }
+  _activeBody() { return this._tpModel ? this._tpModel.group : this._tpBody; }
+
   _toggleThirdPerson() {
     this.thirdPerson = !this.thirdPerson;
     try { this.settings.v.thirdPerson = this.thirdPerson; this.settings.save(); } catch (_) {}
@@ -301,8 +327,10 @@ class Game {
   // chase cam: keep the camera's look direction, pull it back behind the body
   _applyThirdPerson() {
     const p = this.player, cam = this.camera;
-    this._tpBody.position.set(p.position.x, p.position.y, p.position.z);
-    this._tpBody.rotation.y = p.yaw;
+    const body = this._activeBody();
+    body.position.set(p.position.x, p.position.y, p.position.z);
+    body.rotation.y = p.yaw + (this._tpModel ? Math.PI : 0); // model faces +Z; flip to look forward
+    if (this._tpModel) this._tpModel.update(this.thirdPerson ? (this._lastDt || 0.016) : 0);
     const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
     cam.position.addScaledVector(fwd, -4.6); cam.position.y += 0.7;
   }
@@ -1125,7 +1153,7 @@ class Game {
     document.getElementById('gameover').classList.remove('hidden');
 
     this.vehicles.reset();
-    if (this._tpBody) this._tpBody.visible = false;
+    { const b = this._activeBody(); if (b) b.visible = false; }
     this.world._combatActive = false;
     this.pvpMode = false;
     if (this.coopMode) { this.coopMode = false; this.coopHost = false; this.coop.clearGhosts(); }
@@ -1155,6 +1183,22 @@ class Game {
   loop() {
     requestAnimationFrame(this.loop);
     const rawDt = Math.min(0.05, this.clock.getDelta());
+
+    // adaptive resolution: ease the pixel ratio down when frames run long and
+    // back up when there's headroom, so weak GPUs stay smooth automatically.
+    this._perfMs += (rawDt * 1000 - this._perfMs) * 0.06;
+    this._dprT += rawDt;
+    if (this._dprT > 1.5 && this._allowAdaptive !== false) {
+      this._dprT = 0;
+      let want = this._dpr;
+      if (this._perfMs > 26 && this._dpr > 0.8) want = Math.max(0.8, this._dpr - 0.2);          // < ~38fps: downscale
+      else if (this._perfMs < 18.5 && this._dpr < this._maxDPR) want = Math.min(this._maxDPR, this._dpr + 0.1); // > ~54fps: upscale
+      if (Math.abs(want - this._dpr) > 0.001) {
+        this._dpr = want;
+        this.renderer.setPixelRatio(this._dpr);
+        if (this.postfx) { this.postfx.setPixelRatio(this._dpr); this.postfx.setSize(window.innerWidth, window.innerHeight); }
+      }
+    }
     // kill-cam slow-mo: scales the sim while real time drives the recovery, so
     // it always returns to normal speed even if a frame is dropped.
     let scale = 1;
@@ -1167,6 +1211,7 @@ class Game {
     }
     this.timeScale = scale;
     const dt = rawDt * scale;
+    this._lastDt = dt;
 
     if (this.state === 'playing') {
       this._pollGamepad();
@@ -1193,7 +1238,7 @@ class Game {
         if (tp) this._applyThirdPerson();
       }
       this.weapons.rig.visible = !mounted && !this.thirdPerson;
-      if (this._tpBody) this._tpBody.visible = tp;
+      { const b = this._activeBody(); if (b) b.visible = tp; }
       this.weapons.update(dt);
       if (this.cheatArsenal) this.weapons.refill();
       this.player.lookSensMul = this.weapons.ads ? 0.5 : 1;

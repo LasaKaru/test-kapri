@@ -1,5 +1,16 @@
 import * as THREE from 'three';
 
+// Shared box-geometry cache. Enemies are built from ~20 boxes each; without this
+// every spawn allocated fresh geometries (heavy GC + GPU upload, the main cause
+// of wave-spawn hitches). Cached geometries are reused and never disposed.
+const _boxGeoCache = new Map();
+function boxGeo(w, h, d) {
+  const k = w.toFixed(3) + ',' + h.toFixed(3) + ',' + d.toFixed(3);
+  let g = _boxGeoCache.get(k);
+  if (!g) { g = new THREE.BoxGeometry(w, h, d); g.userData.shared = true; _boxGeoCache.set(k, g); }
+  return g;
+}
+
 // Enemy archetypes.
 const TYPES = {
   grunt:   { hp: 2,   speed: 3.2, scale: 1.0,  color: 0xe03a2f, score: 100,  dmg: 8 },
@@ -81,7 +92,7 @@ export class Enemy {
     const darkMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x2a0608 : 0x5a0d08, roughness: 0.9, flatShading: true });
     const gearMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x140305 : 0x3a3026, roughness: 0.85, flatShading: true, metalness: 0.2 });
     const s = def.scale;
-    const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w * s, h * s, d * s), m);
+    const box = (w, h, d, m) => new THREE.Mesh(boxGeo(w * s, h * s, d * s), m);
 
     // ---- torso: pelvis + chest + a strapped vest, with a slight forward hunch
     const upper = new THREE.Group();
@@ -91,7 +102,7 @@ export class Enemy {
     this._upper = upper;
     this._upperBaseY = 0.98 * s;
 
-    const pelvis = box(0.6, 0.42, 0.42, darkMat); pelvis.position.y = 0.02 * s; pelvis.castShadow = true; upper.add(pelvis);
+    const pelvis = box(0.6, 0.42, 0.42, darkMat); pelvis.position.y = 0.02 * s; upper.add(pelvis);
     const torso = box(0.8, 0.86, 0.48, mat); torso.position.y = 0.5 * s; torso.castShadow = true; upper.add(torso);
     const vest = box(0.7, 0.5, 0.16, gearMat); vest.position.set(0, 0.52 * s, 0.27 * s); upper.add(vest); // chest plate
     const shoulders = box(1.0, 0.26, 0.42, mat); shoulders.position.y = 0.86 * s; shoulders.castShadow = true; upper.add(shoulders);
@@ -115,9 +126,9 @@ export class Enemy {
     [-1, 1].forEach((side) => {
       const arm = new THREE.Group();
       arm.position.set(side * 0.55 * s, 0.84 * s, 0);
-      const up = box(0.2, 0.5, 0.22, darkMat); up.position.y = -0.25 * s; up.castShadow = true; arm.add(up);
+      const up = box(0.2, 0.5, 0.22, darkMat); up.position.y = -0.25 * s; arm.add(up);
       const elbow = new THREE.Group(); elbow.position.y = -0.5 * s; arm.add(elbow);
-      const fore = box(0.17, 0.46, 0.19, mat); fore.position.set(0, -0.23 * s, 0.04 * s); fore.castShadow = true; elbow.add(fore);
+      const fore = box(0.17, 0.46, 0.19, mat); fore.position.set(0, -0.23 * s, 0.04 * s); elbow.add(fore);
       const hand = box(0.18, 0.18, 0.18, gearMat); hand.position.set(0, -0.48 * s, 0.06 * s); elbow.add(hand);
       upper.add(arm);
       this.arms.push(arm); this.elbows.push(elbow);
@@ -128,9 +139,9 @@ export class Enemy {
     [-1, 1].forEach((side) => {
       const leg = new THREE.Group();
       leg.position.set(side * 0.2 * s, 0, 0); // hip ~= upper origin (y 0.98s)
-      const thigh = box(0.28, 0.5, 0.3, darkMat); thigh.position.y = -0.27 * s; thigh.castShadow = true; leg.add(thigh);
+      const thigh = box(0.28, 0.5, 0.3, darkMat); thigh.position.y = -0.27 * s; leg.add(thigh);
       const knee = new THREE.Group(); knee.position.y = -0.52 * s; leg.add(knee);
-      const shin = box(0.22, 0.48, 0.24, darkMat); shin.position.y = -0.22 * s; shin.castShadow = true; knee.add(shin);
+      const shin = box(0.22, 0.48, 0.24, darkMat); shin.position.y = -0.22 * s; knee.add(shin);
       const boot = box(0.26, 0.16, 0.44, gearMat); boot.position.set(0, -0.48 * s, 0.1 * s); knee.add(boot);
       upper.add(leg);
       this.legs.push(leg); this.knees.push(knee);
@@ -460,7 +471,7 @@ export class Enemy {
   remove() {
     this.scene.remove(this.group);
     this.group.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
+      if (o.geometry && !(o.geometry.userData && o.geometry.userData.shared)) o.geometry.dispose();
       if (o.material) o.material.dispose && o.material.dispose();
     });
   }

@@ -12,6 +12,17 @@ export class Settings {
 
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.v)); } catch (_) {} }
 
+  // High Detail ON: adaptive resolution up to 1.5x DPR.
+  // OFF: lock to 1x and stop the auto-scaler (best for weak devices).
+  _applyDetail(high) {
+    const g = this.game;
+    g._maxDPR = high ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+    g._allowAdaptive = high;
+    g._dpr = high ? g._maxDPR : 1;
+    g.renderer.setPixelRatio(g._dpr);
+    if (g.postfx) { g.postfx.setPixelRatio(g._dpr); g.postfx.setSize(window.innerWidth, window.innerHeight); }
+  }
+
   applyAll() {
     const g = this.game;
     g.audio.master = this.v.volume / 100;
@@ -24,7 +35,7 @@ export class Settings {
     g.world.setWeatherEnabled(this.v.weather);
     g.renderer.shadowMap.enabled = this.v.shadows;
     g.renderer.shadowMap.needsUpdate = true;
-    g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1);
+    this._applyDetail(this.v.highDetail);
     g.world.setFloraDensity(this.v.flora / 100);
     g.cinematicEnabled = this.v.cinematic;
     g.thirdPerson = this.v.thirdPerson;
@@ -63,7 +74,7 @@ export class Settings {
     toggle('Day / Night Cycle', 'daynight', () => { g.world.setDayNight(this.v.daynight); });
     toggle('Weather', 'weather', () => { g.world.setWeatherEnabled(this.v.weather); });
     toggle('Shadows', 'shadows', () => { g.renderer.shadowMap.enabled = this.v.shadows; g.renderer.shadowMap.needsUpdate = true; });
-    toggle('High Detail', 'highDetail', () => { g.renderer.setPixelRatio(this.v.highDetail ? Math.min(window.devicePixelRatio, 2) : 1); });
+    toggle('High Detail', 'highDetail', () => { this._applyDetail(this.v.highDetail); });
     slider('Foliage Density', 'flora', 0, 150, '%', () => { g.world.setFloraDensity(this.v.flora / 100); });
     toggle('Cinematic Menu', 'cinematic', () => { g.cinematicEnabled = this.v.cinematic; });
     toggle('Third-Person Camera', 'thirdPerson', () => { g.thirdPerson = this.v.thirdPerson; });

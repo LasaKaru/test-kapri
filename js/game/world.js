@@ -343,8 +343,8 @@ export class World {
     const sun = new THREE.DirectionalLight(0xffe39a, 2.2);
     sun.position.set(-40, 34, -90);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    const d = 90;
+    sun.shadow.mapSize.set(1024, 1024);   // 1/4 the shadow texels of 2048 — big GPU saving
+    const d = 70;                          // tighter shadow frustum = sharper + cheaper
     sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
     sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 260;
