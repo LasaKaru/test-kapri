@@ -11,6 +11,14 @@ function boxGeo(w, h, d) {
   return g;
 }
 
+// Optional rigged-model skin for the (humanoid) enemies. The game injects a
+// factory once the glTF soldier loads; until then — or if disabled — enemies
+// use their built-in procedural box bodies. Bosses keep their unique look.
+let _modelFactory = null;   // (targetHeightMeters) => THREE.Group | null
+let _modelsEnabled = true;
+export function setEnemyModelFactory(fn) { _modelFactory = fn; }
+export function setEnemyModelsEnabled(on) { _modelsEnabled = on; }
+
 // Enemy archetypes.
 const TYPES = {
   grunt:   { hp: 2,   speed: 3.2, scale: 1.0,  color: 0xe03a2f, score: 100,  dmg: 8 },
@@ -85,6 +93,27 @@ export class Enemy {
     scene.add(this.group);
 
     this._buildHealthBar();
+    if (!this.isBoss) this._tryModel();
+  }
+
+  // Swap in the rigged soldier model as the visual. The box body stays in the
+  // scene graph with its materials hidden — three still raycasts hidden-material
+  // meshes, so headshot/body/shield hit zones keep working unchanged.
+  _tryModel() {
+    if (!_modelFactory || !_modelsEnabled) return;
+    let g; try { g = _modelFactory(2.4 * this.def.scale); } catch (_) { g = null; }
+    if (!g) return;
+    this.group.add(g);
+    this._model = g;
+    this._upper.traverse((o) => {
+      if (o.isMesh) o.castShadow = false;   // the model casts the shadow now, not the hidden box
+      if (!o.material) return;
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.visible = false; });
+    });
+    // resolve the bones we pose for a procedural walk + cache their rest angle
+    const names = { uL: 'upleg.L_02', uR: 'upleg.R_038', lL: 'leg.L_03', lR: 'leg.R_039', aL: 'arm.L_011', aR: 'arm.R_025' };
+    this._mb = {};
+    for (const k in names) { const b = g.getObjectByName(names[k]); if (b) { b.userData.rest = b.rotation.x; this._mb[k] = b; } }
   }
 
   _buildBody(def) {
@@ -425,6 +454,16 @@ export class Enemy {
       }
     }
     if (this._upper) this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * 0.06 * sc;
+    // procedural walk on the rigged model (legs/arms swing + a stride bob)
+    if (this._mb) {
+      const sw = Math.sin(w) * 0.55;
+      const set = (b, v) => { if (b) b.rotation.x = (b.userData.rest || 0) + v; };
+      set(this._mb.uL, sw); set(this._mb.uR, -sw);
+      set(this._mb.lL, Math.max(0, Math.sin(w + Math.PI / 2)) * 0.6);
+      set(this._mb.lR, Math.max(0, Math.sin(w - Math.PI / 2)) * 0.6);
+      set(this._mb.aL, -sw * 0.5); set(this._mb.aR, sw * 0.5);
+    }
+    if (this._model) { this._model.position.y = Math.abs(Math.sin(w)) * 0.05; this._model.rotation.z = Math.sin(w) * 0.03; }
   }
 
   // standing idle — gentle breathing bob and limbs easing back to rest
@@ -439,6 +478,9 @@ export class Enemy {
       ease(this.arms[0], 0); ease(this.arms[1], 0);
       if (this.elbows) { ease(this.elbows[0], 0.3); ease(this.elbows[1], 0.3); }
     }
+    // ease the rigged model back to its rest pose while standing
+    if (this._mb) { for (const key in this._mb) { const b = this._mb[key]; const r = b.userData.rest || 0; b.rotation.x += (r - b.rotation.x) * k; } }
+    if (this._model) { this._model.position.y += (0 - this._model.position.y) * k; this._model.rotation.z += (0 - this._model.rotation.z) * k; }
   }
 
   // effective move speed including stalker lunge bursts and boss enrage

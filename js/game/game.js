@@ -8,6 +8,7 @@ import { CLASSES, Loadout } from './loadout.js';
 import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
 import { Models } from './models.js';
+import { setEnemyModelFactory, setEnemyModelsEnabled } from './enemy.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -130,7 +131,14 @@ class Game {
     // optional: swap the boxy third-person body for the rigged soldier model
     // when it loads (graceful fallback to the box body if it can't).
     this.models = new Models();
-    this.models.load('soldier', 'assets/models/soldier.glb').then((m) => { if (m) this._setupSoldierBody(); });
+    this.models.load('soldier', 'assets/models/soldier.glb').then((m) => {
+      if (!m) return;
+      this._setupSoldierBody();
+      // let the (humanoid) enemies wear the soldier model too
+      const h = this.models.height('soldier') || 1.8;
+      setEnemyModelFactory((targetH) => this.models.cloneGroup('soldier', targetH / h));
+      if (this.settings) setEnemyModelsEnabled(this.settings.v.detailedEnemies !== false);
+    });
     // persistent loot inventory (meat eaten to heal; hides/feathers/fangs traded)
     const INV0 = { meat: 0, hide: 0, feather: 0, fang: 0 };
     try { this.inventory = { ...INV0, ...JSON.parse(localStorage.getItem('verdant_inventory') || '{}') }; } catch (_) { this.inventory = { ...INV0 }; }

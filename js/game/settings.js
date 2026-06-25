@@ -1,6 +1,8 @@
 // Player-facing settings: persisted to localStorage and applied to the game.
+import { setEnemyModelsEnabled } from './enemy.js';
+
 const KEY = 'verdant_settings';
-const DEFAULTS = { volume: 70, music: 32, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true, thirdPerson: false };
+const DEFAULTS = { volume: 70, music: 32, sfx: true, sensitivity: 100, fov: 75, realism: 75, daynight: true, weather: true, shadows: true, highDetail: true, flora: 100, cinematic: true, thirdPerson: false, detailedEnemies: true };
 
 export class Settings {
   constructor(game) {
@@ -39,6 +41,7 @@ export class Settings {
     g.world.setFloraDensity(this.v.flora / 100);
     g.cinematicEnabled = this.v.cinematic;
     g.thirdPerson = this.v.thirdPerson;
+    setEnemyModelsEnabled(this.v.detailedEnemies);
   }
 
   buildUI(container) {
@@ -78,5 +81,6 @@ export class Settings {
     slider('Foliage Density', 'flora', 0, 150, '%', () => { g.world.setFloraDensity(this.v.flora / 100); });
     toggle('Cinematic Menu', 'cinematic', () => { g.cinematicEnabled = this.v.cinematic; });
     toggle('Third-Person Camera', 'thirdPerson', () => { g.thirdPerson = this.v.thirdPerson; });
+    toggle('Detailed Enemies (3D models)', 'detailedEnemies', () => { setEnemyModelsEnabled(this.v.detailedEnemies); });
   }
 }

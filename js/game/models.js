@@ -19,7 +19,14 @@ export class Models {
       try {
         this._loader.load(url, (g) => {
           const root = g.scene || g.scenes[0];
-          root.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) { o.castShadow = true; o.receiveShadow = false; o.frustumCulled = true; } });
+          root.traverse((o) => {
+            if (o.isMesh || o.isSkinnedMesh) {
+              o.castShadow = true; o.receiveShadow = false; o.frustumCulled = true;
+              // geometries are shared across every clone — tag them so per-enemy
+              // disposal never frees a geometry another soldier is still using
+              if (o.geometry) { o.geometry.userData = o.geometry.userData || {}; o.geometry.userData.shared = true; }
+            }
+          });
           this.ready[name] = { scene: root, clips: g.animations || [] };
           resolve(this.ready[name]);
         }, undefined, (err) => { console.warn('[models] load failed:', name, err && (err.message || err)); resolve(null); });
@@ -52,6 +59,17 @@ export class Models {
       },
       update(dt) { mixer.update(dt); },
     };
+  }
+
+  // A plain skinned clone (no mixer) with per-clone materials so each instance
+  // can flash/fade independently. For procedurally-posed characters (enemies).
+  cloneGroup(name, scale = 1) {
+    const m = this.ready[name];
+    if (!m) return null;
+    const g = cloneSkinned(m.scene);
+    g.scale.setScalar(scale);
+    g.traverse((o) => { if ((o.isMesh || o.isSkinnedMesh) && o.material) o.material = Array.isArray(o.material) ? o.material.map((x) => x.clone()) : o.material.clone(); });
+    return g;
   }
 
   // Measured world-space height of a loaded model (for auto-scaling to fit)
