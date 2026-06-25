@@ -11,14 +11,6 @@ function boxGeo(w, h, d) {
   return g;
 }
 
-// Optional rigged-model skin for the (humanoid) enemies. The game injects a
-// factory once the glTF soldier loads; until then — or if disabled — enemies
-// use their built-in procedural box bodies. Bosses keep their unique look.
-let _modelFactory = null;   // (targetHeightMeters) => THREE.Group | null
-let _modelsEnabled = true;
-export function setEnemyModelFactory(fn) { _modelFactory = fn; }
-export function setEnemyModelsEnabled(on) { _modelsEnabled = on; }
-
 // Enemy archetypes.
 const TYPES = {
   grunt:   { hp: 2,   speed: 3.2, scale: 1.0,  color: 0xe03a2f, score: 100,  dmg: 8 },
@@ -93,27 +85,6 @@ export class Enemy {
     scene.add(this.group);
 
     this._buildHealthBar();
-    if (!this.isBoss) this._tryModel();
-  }
-
-  // Swap in the rigged soldier model as the visual. The box body stays in the
-  // scene graph with its materials hidden — three still raycasts hidden-material
-  // meshes, so headshot/body/shield hit zones keep working unchanged.
-  _tryModel() {
-    if (!_modelFactory || !_modelsEnabled) return;
-    let g; try { g = _modelFactory(2.4 * this.def.scale); } catch (_) { g = null; }
-    if (!g) return;
-    this.group.add(g);
-    this._model = g;
-    this._upper.traverse((o) => {
-      if (o.isMesh) o.castShadow = false;   // the model casts the shadow now, not the hidden box
-      if (!o.material) return;
-      (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.visible = false; });
-    });
-    // resolve the bones we pose for a procedural walk + cache their rest angle
-    const names = { uL: 'upleg.L_02', uR: 'upleg.R_038', lL: 'leg.L_03', lR: 'leg.R_039', aL: 'arm.L_011', aR: 'arm.R_025' };
-    this._mb = {};
-    for (const k in names) { const b = g.getObjectByName(names[k]); if (b) { b.userData.rest = b.rotation.x; this._mb[k] = b; } }
   }
 
   _buildBody(def) {
@@ -435,42 +406,44 @@ export class Enemy {
     return result;
   }
 
-  // jointed walk cycle — hips/shoulders swing, knees flex on the recovery,
-  // elbows stay bent, and the torso bobs with each stride
+  // jointed walk cycle — full stride with knee flex on the recovery, swinging
+  // bent arms, a vertical bounce, hip sway and a torso counter-twist for a
+  // natural, weighty human gait.
   _animWalk(dt) {
-    this._walk = (this._walk || 0) + dt * this.speed * 1.6;
+    this._walk = (this._walk || 0) + dt * this.speed * 1.7;
     const w = this._walk, sc = this.def.scale;
-    const swing = Math.sin(w) * 0.5;
+    const swing = Math.sin(w) * 0.6;
     this.legs[0].rotation.x = swing; this.legs[1].rotation.x = -swing;
     if (this.knees) {
-      this.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI * 0.5)) * 0.9;
-      this.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI * 0.5)) * 0.9;
+      this.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI * 0.5)) * 1.05;
+      this.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI * 0.5)) * 1.05;
     }
     if (!this.ranged) {
-      this.arms[0].rotation.x = -swing * 0.8; this.arms[1].rotation.x = swing * 0.8;
+      this.arms[0].rotation.x = -swing * 0.95; this.arms[1].rotation.x = swing * 0.95;
+      this.arms[0].rotation.z = 0.06; this.arms[1].rotation.z = -0.06; // slight outward set
       if (this.elbows) {
-        this.elbows[0].rotation.x = 0.4 + Math.max(0, swing) * 0.5;
-        this.elbows[1].rotation.x = 0.4 + Math.max(0, -swing) * 0.5;
+        this.elbows[0].rotation.x = 0.45 + Math.max(0, swing) * 0.6;
+        this.elbows[1].rotation.x = 0.45 + Math.max(0, -swing) * 0.6;
       }
     }
-    if (this._upper) this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * 0.06 * sc;
-    // procedural walk on the rigged model (legs/arms swing + a stride bob)
-    if (this._mb) {
-      const sw = Math.sin(w) * 0.55;
-      const set = (b, v) => { if (b) b.rotation.x = (b.userData.rest || 0) + v; };
-      set(this._mb.uL, sw); set(this._mb.uR, -sw);
-      set(this._mb.lL, Math.max(0, Math.sin(w + Math.PI / 2)) * 0.6);
-      set(this._mb.lR, Math.max(0, Math.sin(w - Math.PI / 2)) * 0.6);
-      set(this._mb.aL, -sw * 0.5); set(this._mb.aR, sw * 0.5);
+    if (this._upper) {
+      this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * 0.07 * sc; // vertical bounce
+      this._upper.position.x = Math.sin(w) * 0.03 * sc;                              // hip sway
+      this._upper.rotation.y = Math.sin(w) * 0.09;                                   // torso counter-twist
+      this._upper.rotation.z = Math.sin(w + Math.PI / 2) * 0.045;                    // shoulder roll
     }
-    if (this._model) { this._model.position.y = Math.abs(Math.sin(w)) * 0.05; this._model.rotation.z = Math.sin(w) * 0.03; }
   }
 
   // standing idle — gentle breathing bob and limbs easing back to rest
   _animIdle(dt) {
     this._idle = (this._idle || 0) + dt;
     const sc = this.def.scale, k = Math.min(1, dt * 8);
-    if (this._upper) this._upper.position.y = this._upperBaseY + Math.sin(this._idle * 2) * 0.025 * sc;
+    if (this._upper) {
+      this._upper.position.y = this._upperBaseY + Math.sin(this._idle * 2) * 0.025 * sc;
+      this._upper.position.x += (0 - this._upper.position.x) * k;
+      this._upper.rotation.y += (0 - this._upper.rotation.y) * k;
+      this._upper.rotation.z += (0 - this._upper.rotation.z) * k;
+    }
     const ease = (o, t) => { if (o) o.rotation.x += (t - o.rotation.x) * k; };
     ease(this.legs[0], 0); ease(this.legs[1], 0);
     if (this.knees) { ease(this.knees[0], 0.05); ease(this.knees[1], 0.05); }
@@ -478,9 +451,6 @@ export class Enemy {
       ease(this.arms[0], 0); ease(this.arms[1], 0);
       if (this.elbows) { ease(this.elbows[0], 0.3); ease(this.elbows[1], 0.3); }
     }
-    // ease the rigged model back to its rest pose while standing
-    if (this._mb) { for (const key in this._mb) { const b = this._mb[key]; const r = b.userData.rest || 0; b.rotation.x += (r - b.rotation.x) * k; } }
-    if (this._model) { this._model.position.y += (0 - this._model.position.y) * k; this._model.rotation.z += (0 - this._model.rotation.z) * k; }
   }
 
   // effective move speed including stalker lunge bursts and boss enrage

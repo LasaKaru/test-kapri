@@ -7,8 +7,6 @@ import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
 import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
-import { Models } from './models.js';
-import { setEnemyModelFactory, setEnemyModelsEnabled } from './enemy.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -134,17 +132,6 @@ class Game {
     this._tpBody = this._buildPlayerBody();
     this._tpBody.visible = false;
     this.scene.add(this._tpBody);
-    // optional: swap the boxy third-person body for the rigged soldier model
-    // when it loads (graceful fallback to the box body if it can't).
-    this.models = new Models();
-    this.models.load('soldier', 'assets/models/soldier.glb').then((m) => {
-      if (!m) return;
-      this._setupSoldierBody();
-      // let the (humanoid) enemies wear the soldier model too
-      const h = this.models.height('soldier') || 1.8;
-      setEnemyModelFactory((targetH) => this.models.cloneGroup('soldier', targetH / h));
-      if (this.settings) setEnemyModelsEnabled(this.settings.v.detailedEnemies !== false);
-    });
     // persistent loot inventory (meat eaten to heal; hides/feathers/fangs traded)
     const INV0 = { meat: 0, hide: 0, feather: 0, fang: 0 };
     try { this.inventory = { ...INV0, ...JSON.parse(localStorage.getItem('verdant_inventory') || '{}') }; } catch (_) { this.inventory = { ...INV0 }; }
@@ -322,35 +309,66 @@ class Game {
   }
 
   // simple low-poly soldier body for the third-person camera
+  // articulated low-poly soldier for the third-person camera, with jointed
+  // arms/legs so it walks (see _animateTpBody)
   _buildPlayerBody() {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x4a6b2a, roughness: 0.8, flatShading: true });
     const dark = new THREE.MeshStandardMaterial({ color: 0x2a3a18, roughness: 0.9, flatShading: true });
-    const add = (geo, m, x, y, z) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; g.add(me); return me; };
-    add(new THREE.BoxGeometry(0.6, 0.42, 0.4), dark, 0, 0.95, 0);        // pelvis
-    add(new THREE.BoxGeometry(0.7, 0.8, 0.42), mat, 0, 1.45, 0);         // torso
-    add(new THREE.BoxGeometry(0.9, 0.22, 0.42), mat, 0, 1.8, 0);         // shoulders
-    add(new THREE.BoxGeometry(0.42, 0.42, 0.42), mat, 0, 2.12, 0);       // head
-    [-0.13, 0.13].forEach((ex) => add(new THREE.BoxGeometry(0.09, 0.07, 0.05), new THREE.MeshBasicMaterial({ color: 0xffdd33 }), ex, 2.13, 0.22));
-    [-1, 1].forEach((s) => add(new THREE.BoxGeometry(0.18, 0.7, 0.2), dark, s * 0.46, 1.45, 0.06)); // arms
-    [-1, 1].forEach((s) => add(new THREE.BoxGeometry(0.22, 0.85, 0.24), dark, s * 0.18, 0.5, 0));   // legs
+    const gear = new THREE.MeshStandardMaterial({ color: 0x3a3026, roughness: 0.85, flatShading: true });
+    const box = (w, h, d, m) => { const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); me.castShadow = true; return me; };
+    const upper = new THREE.Group(); upper.position.y = 0.95; g.add(upper);
+    const p = box(0.6, 0.42, 0.4, dark); p.position.y = 0.02; upper.add(p);
+    const torso = box(0.72, 0.82, 0.42, mat); torso.position.y = 0.5; upper.add(torso);
+    const vest = box(0.64, 0.46, 0.16, gear); vest.position.set(0, 0.52, 0.25); upper.add(vest);
+    const sh = box(0.92, 0.24, 0.42, mat); sh.position.y = 0.84; upper.add(sh);
+    const neck = box(0.18, 0.16, 0.18, dark); neck.position.y = 0.98; upper.add(neck);
+    const head = box(0.44, 0.46, 0.44, mat); head.position.y = 1.24; upper.add(head);
+    [-0.12, 0.12].forEach((ex) => { const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.05), new THREE.MeshBasicMaterial({ color: 0xffdd33 })); e.position.set(ex, 1.24, 0.23); upper.add(e); });
+    const arms = [], elbows = [];
+    [-1, 1].forEach((s) => {
+      const arm = new THREE.Group(); arm.position.set(s * 0.52, 0.82, 0);
+      const up = box(0.18, 0.46, 0.2, dark); up.position.y = -0.23; arm.add(up);
+      const elbow = new THREE.Group(); elbow.position.y = -0.46; arm.add(elbow);
+      const fore = box(0.16, 0.44, 0.18, mat); fore.position.set(0, -0.22, 0.03); elbow.add(fore);
+      const hand = box(0.16, 0.16, 0.16, gear); hand.position.set(0, -0.44, 0.05); elbow.add(hand);
+      upper.add(arm); arms.push(arm); elbows.push(elbow);
+    });
+    const legs = [], knees = [];
+    [-1, 1].forEach((s) => {
+      const leg = new THREE.Group(); leg.position.set(s * 0.18, 0, 0);
+      const thigh = box(0.26, 0.48, 0.28, dark); thigh.position.y = -0.27; leg.add(thigh);
+      const knee = new THREE.Group(); knee.position.y = -0.5; leg.add(knee);
+      const shin = box(0.2, 0.46, 0.22, dark); shin.position.y = -0.22; knee.add(shin);
+      const boot = box(0.24, 0.16, 0.4, gear); boot.position.set(0, -0.46, 0.08); knee.add(boot);
+      upper.add(leg); legs.push(leg); knees.push(knee);
+    });
+    g.userData.rig = { upper, upperBaseY: 0.95, arms, elbows, legs, knees, walk: 0, idle: 0 };
     return g;
   }
-  // build the rigged soldier as the third-person avatar (replaces the box body)
-  _setupSoldierBody() {
-    try {
-      const h = this.models.height('soldier') || 1.8;
-      const inst = this.models.instance('soldier', 1.8 / h);   // scale to ~1.8m tall
-      if (!inst) return;
-      inst.group.visible = false;
-      this.scene.add(inst.group);
-      this._tpModel = inst;
-      try { inst.play('Armature|Standing', 0); } catch (_) {}
-      // retire the placeholder box body
-      if (this._tpBody) { this._tpBody.visible = false; this.scene.remove(this._tpBody); }
-    } catch (e) { console.warn('[soldier] setup failed, keeping box body:', e); this._tpModel = null; }
+  // drive the third-person body's walk/idle from the player's motion
+  _animateTpBody(dt) {
+    const r = this._tpBody && this._tpBody.userData.rig; if (!r) return;
+    if (this.player.moving) {
+      r.walk += dt * (this.player.sprinting ? 11 : 7) * 1.5;
+      const w = r.walk, sw = Math.sin(w) * 0.6;
+      r.legs[0].rotation.x = sw; r.legs[1].rotation.x = -sw;
+      r.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI / 2)) * 1.05;
+      r.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI / 2)) * 1.05;
+      r.arms[0].rotation.x = -sw * 0.9; r.arms[1].rotation.x = sw * 0.9;
+      r.elbows[0].rotation.x = 0.4 + Math.max(0, sw) * 0.6; r.elbows[1].rotation.x = 0.4 + Math.max(0, -sw) * 0.6;
+      r.upper.position.y = r.upperBaseY + Math.abs(Math.sin(w)) * 0.06;
+      r.upper.rotation.y = Math.sin(w) * 0.08;
+    } else {
+      r.idle += dt; const k = Math.min(1, dt * 8);
+      const ease = (o, t) => { o.rotation.x += (t - o.rotation.x) * k; };
+      ease(r.legs[0], 0); ease(r.legs[1], 0); ease(r.knees[0], 0.05); ease(r.knees[1], 0.05);
+      ease(r.arms[0], 0); ease(r.arms[1], 0); ease(r.elbows[0], 0.3); ease(r.elbows[1], 0.3);
+      r.upper.position.y = r.upperBaseY + Math.sin(r.idle * 2) * 0.02;
+      r.upper.rotation.y += (0 - r.upper.rotation.y) * k;
+    }
   }
-  _activeBody() { return this._tpModel ? this._tpModel.group : this._tpBody; }
+  _activeBody() { return this._tpBody; }
 
   _toggleThirdPerson() {
     this.thirdPerson = !this.thirdPerson;
@@ -364,9 +382,9 @@ class Game {
     const body = this._activeBody();
     if (body) {
       body.position.set(p.position.x, p.position.y, p.position.z);
-      body.rotation.y = p.yaw + (this._tpModel ? Math.PI : 0); // model faces +Z; flip to look forward
+      body.rotation.y = p.yaw;
+      if (this._animateTpBody) this._animateTpBody(this._lastDt || 0.016);
     }
-    if (this._tpModel) this._tpModel.update(this._lastDt || 0.016);
     const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd);
     cam.position.addScaledVector(fwd, -4.6 * blend); cam.position.y += 0.7 * blend;
   }
