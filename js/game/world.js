@@ -71,6 +71,8 @@ export class World {
     this.climbVolumes = []; // {x,z,r,baseY,top} — ladder zones on watchtowers
     this.platforms = [];    // {x,z,hw,y} — climbable tower decks you can stand on
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
+    this.destructibles = []; // crate stacks {group,x,z,collider,crates:Set}
+    this._crateMeshes = []; // flat list of crate meshes for raycasting
     this.bounds = 130;
     this._clouds = [];
     this._time = 0;
@@ -98,7 +100,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this._clouds = []; this._waterMats = []; this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -891,18 +893,70 @@ export class World {
 
   _crateStack(x, z) {
     const g = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 1, flatShading: true });
     const layout = [[0, 0, 0], [1.05, 0, 0], [0.5, 1.05, 0.2], [0, 0, 1.05]];
+    const collider = { x, z, r: 1.4 };
+    const entry = { group: g, x, z, collider, crates: new Set() };
     layout.forEach(([cx, cy, cz]) => {
       const s = 0.9 + Math.random() * 0.2;
+      // per-crate material so a hit/break can tint just that crate
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 1, flatShading: true });
       const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat);
       crate.position.set(cx, cy + s / 2, cz);
       crate.rotation.y = Math.random() * 0.3;
       crate.castShadow = true; crate.receiveShadow = true; g.add(crate);
+      crate.userData.dx = { hp: 5, maxHp: 5, stack: entry, size: s };
+      entry.crates.add(crate); this._crateMeshes.push(crate);
     });
     g.position.set(x, 0, z);
     this.root.add(g);
-    this.colliders.push({ x, z, r: 1.4 });
+    this.colliders.push(collider);
+    this.destructibles.push(entry);
+  }
+
+  // raycast the player's bullets against crate meshes (nearest hit), or null
+  raycastDestructibles(raycaster, origin, dir, far) {
+    if (!this._crateMeshes.length) return null;
+    raycaster.set(origin, dir); raycaster.far = far;
+    const hits = raycaster.intersectObjects(this._crateMeshes, false);
+    if (hits.length) return { mesh: hits[0].object, point: hits[0].point, distance: hits[0].distance };
+    return null;
+  }
+
+  // damage a crate; returns { broken, x, y, z } when it shatters (else null)
+  damageCrate(mesh, dmg) {
+    const d = mesh.userData.dx; if (!d) return null;
+    d.hp -= dmg;
+    mesh.material.emissive = mesh.material.emissive || new THREE.Color();
+    mesh.material.color.offsetHSL(0, 0, -0.04 * dmg / d.maxHp); // darken as it takes damage
+    if (d.hp > 0) return null;
+    return this._breakCrate(mesh);
+  }
+
+  _breakCrate(mesh) {
+    const d = mesh.userData.dx, st = d.stack;
+    const wp = new THREE.Vector3(); mesh.getWorldPosition(wp);
+    if (mesh.parent) mesh.parent.remove(mesh);
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) mesh.material.dispose();
+    const i = this._crateMeshes.indexOf(mesh); if (i >= 0) this._crateMeshes.splice(i, 1);
+    st.crates.delete(mesh);
+    // once the whole stack is gone, drop its collider so you can walk/run through
+    if (st.crates.size === 0) {
+      const ci = this.colliders.indexOf(st.collider); if (ci >= 0) this.colliders.splice(ci, 1);
+    }
+    return { broken: true, x: wp.x, y: wp.y, z: wp.z };
+  }
+
+  // blast damage to crates within radius of a point (chained from explosions)
+  damageCratesInRadius(x, z, r, dmg) {
+    const out = [];
+    const r2 = r * r;
+    for (const m of this._crateMeshes.slice()) {
+      const wp = new THREE.Vector3(); m.getWorldPosition(wp);
+      const dx = wp.x - x, dz = wp.z - z;
+      if (dx * dx + dz * dz <= r2) { const br = this.damageCrate(m, dmg); if (br) out.push(br); }
+    }
+    return out;
   }
 
   _barrel(x, z) {

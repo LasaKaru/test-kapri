@@ -825,16 +825,24 @@ class Game {
           else this.effects.bloodBurst(endPoint);
         }
       } else {
-        // nearest of: enemy base core, a huntable animal, else the ground
+        // nearest of: enemy base core, a destructible crate, a huntable animal, else ground
         const bp = this.world.baseHitPoint(origin, dir);
         const ah = (this.world._critters && this.world._critters.raycastAnimal(this.raycaster, origin, dir, shot.def.range)) || null;
+        const cr = this.world.raycastDestructibles ? this.world.raycastDestructibles(this.raycaster, origin, dir, shot.def.range) : null;
         const baseD = bp ? bp.distance : Infinity;
         const animD = ah ? ah.distance : Infinity;
-        if (bp && baseD <= animD && baseD < shot.def.range) {
+        const crateD = cr ? cr.distance : Infinity;
+        const minD = Math.min(baseD, animD, crateD);
+        if (bp && baseD === minD && baseD < shot.def.range) {
           endPoint = bp.point; anyHit = true;
           if (this.world.damageBase(shot.dmg * 6)) this._onBaseDestroyed();
           this.effects.impact(endPoint, 0xff7040, false);
-        } else if (ah && animD < shot.def.range) {
+        } else if (cr && crateD === minD && crateD < shot.def.range) {
+          endPoint = cr.point; anyHit = true;
+          this.effects.impact(endPoint, 0xc8a060, false);
+          const br = this.world.damageCrate(cr.mesh, shot.dmg);
+          if (br) this._onCrateBroken(br);
+        } else if (ah && animD === minD && animD < shot.def.range) {
           endPoint = ah.point; anyHit = true;
           this.effects.bloodBurst(endPoint);
           const res = this.world._critters.damageAnimal(ah.animal, shot.dmg);
@@ -891,6 +899,18 @@ class Game {
   // barrel hit from a bullet
   _explode(blast) { this.ach.unlock('demolition'); this._detonate(blast.x, blast.z, blast.radius || 7, 5, 20); }
 
+  // a crate shattered: splinter debris, a wooden crack, and a chance to drop loot
+  _onCrateBroken(br) {
+    const p = new THREE.Vector3(br.x, br.y || 0.6, br.z);
+    this.effects.smoke(p, { color: 0xb39256, size: 0.7, life: 0.5, rise: 0.5, opacity: 0.75 });
+    this.effects.impact(p, 0xc8a060, true);
+    try { this.audio.melee(); } catch (_) {}                 // a dry wooden crack
+    if (Math.random() < 0.55) {
+      const kind = ['health', 'ammo', 'armor', 'ammo'][Math.floor(Math.random() * 4)];
+      this.pickups.spawn(kind, { x: br.x, z: br.z });
+    }
+  }
+
   // general explosion: FX + AoE damage + barrel chain reaction
   _detonate(x, z, radius, enemyDmg = 6, playerMax = 24, _chained = false) {
     this.audio.explosion();
@@ -911,6 +931,11 @@ class Game {
       this.player.takeDamage(playerMax * (1 - pd / radius));
       this.hud.damageFlash();
       this._afterPlayerDamage();
+    }
+
+    // blow apart any destructible crates in the blast
+    if (this.world.damageCratesInRadius) {
+      for (const br of this.world.damageCratesInRadius(x, z, radius, 999)) this._onCrateBroken(br);
     }
 
     // chain nearby explosive barrels (one hop)
