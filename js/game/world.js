@@ -119,10 +119,116 @@ export class World {
     this._scatterFlora();
     this._buildBase();
     this._buildTowers();
+    this._buildAtmosphere();
     this._critters = new Critters(this.root, this);
   }
 
-  // ---------- Climbable watchtowers (vantage points) ----------
+  // ---------- Atmospheric set-dressing (ported from the HELA reference) ----------
+  // A distant ruined-city skyline lost in the haze, mossy stone monoliths for
+  // cover, drooping cables, and drifting low mist planes — all tuned for depth.
+  _buildAtmosphere() {
+    this._mist = [];
+    this._buildSkyline(50);    // distant towers fading into the fog
+    this._buildMonoliths(12);  // moss-capped stone blocks (cover)
+    this._buildCables(9);      // drooping power lines
+    this._buildMist(12);       // low drifting volumetric haze
+  }
+
+  // 50 distant non-colliding towers in a far ring; the fog fades them to silhouettes
+  _buildSkyline(n) {
+    const greys = [0x8a9088, 0x7e857b, 0x959c92, 0x747b71];
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+    const inst = new THREE.InstancedMesh(geo, mat, n);
+    const dummy = new THREE.Object3D(), col = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = this.bounds * 1.15 + Math.random() * this.bounds * 0.5; // ~150..215, deep in the haze
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const h = 38 + Math.random() * 80, w = 8 + Math.random() * 16, d = 8 + Math.random() * 16;
+      dummy.position.set(x, h / 2, z); dummy.scale.set(w, h, d); dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+      inst.setColorAt(i, col.setHex(greys[i % greys.length]));
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.frustumCulled = false; inst.castShadow = false; inst.receiveShadow = false;
+    this.root.add(inst);
+  }
+
+  // 12 big moss-capped concrete monoliths scattered as cover (colliders)
+  _buildMonoliths(n) {
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a6356, roughness: 1, flatShading: true });
+    const mossMat = new THREE.MeshStandardMaterial({ color: 0x4f7236, roughness: 1, flatShading: true });
+    let made = 0, guard = 0;
+    while (made < n && guard < 200) {
+      guard++;
+      const x = (Math.random() - 0.5) * this.bounds * 1.5, z = (Math.random() - 0.5) * this.bounds * 1.5;
+      if (Math.hypot(x, z - 30) < 18) continue;          // keep the spawn clearing open
+      if (this.waterAt(x, z)) continue;
+      const w = 3.5 + Math.random() * 4, h = 4 + Math.random() * 7, d = 3.5 + Math.random() * 4;
+      const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = (Math.random() - 0.5) * 0.7;
+      const block = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stoneMat);
+      block.position.y = h / 2; block.castShadow = true; block.receiveShadow = true; g.add(block);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(w * 0.98, 0.5, d * 0.98), mossMat);
+      cap.position.y = h + 0.2; cap.castShadow = true; g.add(cap);
+      this.root.add(g);
+      this.colliders.push({ x, z, r: Math.max(w, d) * 0.5 });
+      made++;
+    }
+  }
+
+  // 9 drooping cables strung between tall anchors (watchtowers + a few pylons)
+  _buildCables(n) {
+    const anchors = (this.towers || []).map((t) => new THREE.Vector3(t.x, t.topY + 0.2, t.z));
+    // a couple of utility pylons to give the cables something to span
+    const pylonMat = new THREE.MeshStandardMaterial({ color: 0x3a352c, roughness: 1, flatShading: true });
+    const pyspots = [[-58, 10], [-30, -40], [40, -60], [62, 10], [10, 64]];
+    for (const [px, pz] of pyspots) {
+      if (this.waterAt(px, pz)) continue;
+      const base = Math.max(0, this.heightAt(px, pz)), ph = 13;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, ph, 5), pylonMat);
+      pole.position.set(px, base + ph / 2, pz); pole.castShadow = true; this.root.add(pole);
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.2, 0.2), pylonMat);
+      cross.position.set(px, base + ph - 1, pz); this.root.add(cross);
+      this.colliders.push({ x: px, z: pz, r: 0.5 });
+      anchors.push(new THREE.Vector3(px, base + ph - 1, pz));
+    }
+    const cableMat = new THREE.LineBasicMaterial({ color: 0x14140f });
+    let made = 0;
+    for (let i = 0; i < anchors.length && made < n; i++) {
+      const a = anchors[i], b = anchors[(i + 1) % anchors.length];
+      if (a.equals(b) || a.distanceTo(b) > 80) continue;
+      const sag = 2.5 + Math.random() * 2.5, pts = [];
+      for (let s = 0; s <= 12; s++) { const t = s / 12; const p = a.clone().lerp(b, t); p.y -= Math.sin(t * Math.PI) * sag; pts.push(p); }
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cableMat);
+      line.frustumCulled = false; this.root.add(line);
+      made++;
+    }
+  }
+
+  // 12 drifting low haze sprites — the signature "hazy" depth layer
+  _buildMist(n) {
+    if (!this._mistTex) {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+      g.addColorStop(0, 'rgba(226,224,206,0.85)'); g.addColorStop(1, 'rgba(226,224,206,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+      this._mistTex = new THREE.CanvasTexture(c);
+    }
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.SpriteMaterial({ map: this._mistTex, transparent: true, opacity: 0.42, depthWrite: false, fog: true });
+      const sp = new THREE.Sprite(mat);
+      const size = 26 + Math.random() * 34;
+      sp.scale.set(size, size * 0.55, 1);
+      sp.position.set((Math.random() - 0.5) * this.bounds * 1.7, 2.5 + Math.random() * 5, (Math.random() - 0.5) * this.bounds * 1.7);
+      sp.frustumCulled = false;
+      this.root.add(sp);
+      this._mist.push({ sp, drift: (Math.random() - 0.5) * 0.6 + 0.4, phase: Math.random() * 6.28, sy: 0.4 + Math.random() * 0.6 });
+    }
+  }
+
   // Wooden towers with a ladder you climb (hold W / Space in the ladder zone)
   // up to a railed deck — a tactical sniping perch enemies can't follow you onto.
   _buildTowers() {
@@ -1127,6 +1233,16 @@ export class World {
     this._time += dt;
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
+    // drifting low haze — wraps around the play area
+    if (this._mist) {
+      const lim = this.bounds * 0.95;
+      for (const m of this._mist) {
+        m.sp.position.x += m.drift * dt;
+        m.sp.position.y += Math.sin(this._time * m.sy + m.phase) * 0.004;
+        if (m.sp.position.x > lim) m.sp.position.x = -lim;
+        else if (m.sp.position.x < -lim) m.sp.position.x = lim;
+      }
+    }
     // enemy base: spin the core, flash on hit, collapse when destroyed
     const b = this.base;
     if (b) {
