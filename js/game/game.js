@@ -7,6 +7,7 @@ import { Achievements } from './achievements.js';
 import { CLASSES, Loadout } from './loadout.js';
 import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
+import { Props } from './props.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -69,6 +70,8 @@ class Game {
     this.waves = new WaveManager(this.scene, this.world);
     this.effects = new Effects(this.scene);
     this.pickups = new Pickups(this.scene);
+    this.props = new Props(this.scene);
+    this._placeLandmarks();
     this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
@@ -594,6 +597,25 @@ class Game {
       const n = this.waves.startNextWave();
       this._applyWaveStart(n, startWave > 1 ? 'CHECKPOINT' : (this.coopMode ? 'CO-OP' : 'SURVIVE'));
     }
+  }
+
+  // Place the static medieval diorama as a distant landmark. Tries a few
+  // candidate spots, picks a dry one off the spawn lane, grounds it to terrain.
+  _placeLandmarks() {
+    if (!this.props) return;
+    const w = this.world;
+    const cands = [
+      { x: -64, z: -78 }, { x: 70, z: -70 }, { x: -82, z: 40 }, { x: 60, z: 64 },
+    ];
+    let spot = cands[0];
+    for (const c of cands) {
+      if (w.waterAt && (w.waterAt(c.x, c.z) || w.waterAt(c.x + 16, c.z) || w.waterAt(c.x, c.z + 16))) continue;
+      spot = c; break;
+    }
+    const gy = (w.heightAt ? Math.max(0, w.heightAt(spot.x, spot.z)) : 0);
+    this.props.loadLandmark('assets/models/medieval.glb', {
+      x: spot.x, z: spot.z, groundY: gy, fit: 34, rotationY: Math.PI / 5,
+    });
   }
 
   // short camera sweep from the sky down to the player when a run begins
@@ -1291,6 +1313,9 @@ class Game {
     this.timeScale = scale;
     const dt = rawDt * scale;
     this._lastDt = dt;
+
+    // animate static landmarks (windmill/waterwheel/flags) in every state
+    if (this.props) this.props.update(rawDt);
 
     if (this.state === 'playing') {
       this._pollGamepad();
