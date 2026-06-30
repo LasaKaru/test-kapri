@@ -50,7 +50,15 @@ export class Props {
       g.animations.forEach((c) => mixer.clipAction(c).play());
       this.mixers.push(mixer);
     }
-    if (opts.onPlaced) opts.onPlaced(wrap);
+    // report the grounded world footprint so callers can register a solid
+    // collider (the diorama sits on a rock base — you walk up to it and stop)
+    if (opts.onPlaced) {
+      box = new THREE.Box3().setFromObject(wrap);
+      const c = box.getCenter(new THREE.Vector3());
+      const s = box.getSize(new THREE.Vector3());
+      const footprint = Math.max(s.x, s.z) * 0.5;
+      opts.onPlaced(wrap, { cx: c.x, cz: c.z, r: footprint });
+    }
   }
 
   update(dt) { for (const m of this.mixers) m.update(dt); }

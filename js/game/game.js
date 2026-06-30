@@ -615,6 +615,11 @@ class Game {
     const gy = (w.heightAt ? Math.max(0, w.heightAt(spot.x, spot.z)) : 0);
     this.props.loadLandmark('assets/models/medieval.glb', {
       x: spot.x, z: spot.z, groundY: gy, fit: 34, rotationY: Math.PI / 5,
+      onPlaced: (_wrap, info) => {
+        // make the diorama solid: player can't walk through it, enemies arc around.
+        // shrink slightly so the collider hugs the rock base, not the outer edge.
+        if (w.colliders) w.colliders.push({ x: info.cx, z: info.cz, r: info.r * 0.78 });
+      },
     });
   }
 
