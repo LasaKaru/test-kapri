@@ -214,17 +214,19 @@ export function plantFlora(world, density = 1) {
     return null;
   };
 
-  scatter(group, [11, 23, 47, 88, 131].map((s) => treeGeometry(s, pal)), mat, N(60),
+  // Instanced foliage — all one draw call per template, so dense = still cheap.
+  // Bumped hard for a wild, overgrown forest floor.
+  scatter(group, [11, 23, 47, 88, 131].map((s) => treeGeometry(s, pal)), mat, N(130),
     () => { const p = place(); if (p) { p.scale = sc(0.8, 1.5); colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.6 * p.scale.x }); } return p; }, true);
-  scatter(group, [3, 9, 17, 28].map((s) => flowerGeometry(s, pal)), mat, N(240),
+  scatter(group, [3, 9, 17, 28].map((s) => flowerGeometry(s, pal)), mat, N(360),
     () => { const p = place(); if (p) p.scale = sc(0.8, 1.6); return p; }, false);
-  scatter(group, [5, 14, 30].map((s) => fernGeometry(s, pal)), mat, N(100),
-    () => { const p = place(); if (p) p.scale = sc(0.7, 1.4); return p; }, false);
-  scatter(group, [2, 19, 41].map(mushroomGeometry), mat, N(70),
+  scatter(group, [5, 14, 30].map((s) => fernGeometry(s, pal)), mat, N(220),
+    () => { const p = place(); if (p) p.scale = sc(0.7, 1.5); return p; }, false);
+  scatter(group, [2, 19, 41].map(mushroomGeometry), mat, N(130),
     () => { const p = place(); if (p) p.scale = sc(0.8, 1.6); return p; }, false);
-  scatter(group, [7, 33].map((s) => berryBushGeometry(s, pal)), mat, N(40),
+  scatter(group, [7, 33].map((s) => berryBushGeometry(s, pal)), mat, N(80),
     () => { const p = place(); if (p) { p.scale = sc(0.8, 1.3); colliders.push({ x: p.pos.x, z: p.pos.z, r: 0.5 * p.scale.x }); } return p; }, true);
-  scatter(group, [13, 27].map(cattailGeometry), mat, N(60), placeEdge, false);
+  scatter(group, [13, 27].map(cattailGeometry), mat, N(90), placeEdge, false);
 
   group.userData.floraMat = mat;
   return { group, colliders };

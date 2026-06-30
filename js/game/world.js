@@ -28,7 +28,7 @@ export const MAPS = {
     name: 'Verdant Plains', topo: 'Plains',
     desc: 'Gentle golden grassland. Open sightlines and light cover — a fair fight.',
     ground: 0x4f7d1e, amp: 1.8, freq: 0.05, ridge: 0, lift: 0,
-    treeDensity: 170, rockDensity: 44, grass: 1000, fogFar: 205,
+    treeDensity: 220, rockDensity: 60, grass: 1200, fogFar: 205,
     lakes: [{ x: -58, z: 38, r: 18 }, { x: 60, z: -10, r: 16 }],
     preview: ['#1b2c08', '#7d7a1c', '#4f7d1e'],
   },
@@ -36,7 +36,7 @@ export const MAPS = {
     name: 'Ashen Highlands', topo: 'Highlands',
     desc: 'Raised rugged hills and broken plateaus. More rock, less cover, rolling elevation.',
     ground: 0x6a6a3a, amp: 6.5, freq: 0.055, ridge: 0.35, lift: 2.5,
-    treeDensity: 90, rockDensity: 95, grass: 420, fogFar: 215,
+    treeDensity: 130, rockDensity: 110, grass: 560, fogFar: 215,
     lakes: [{ x: 64, z: 30, r: 14 }],
     preview: ['#3a4426', '#8a7a3a', '#6a6a3a'],
   },
@@ -44,7 +44,7 @@ export const MAPS = {
     name: 'Mire Lowlands', topo: 'Lowlands',
     desc: 'Sunken wetlands and broad water. Heavy fog, close quarters, plenty of wading.',
     ground: 0x3c5a26, amp: 1.3, freq: 0.05, ridge: 0, lift: -1.1,
-    treeDensity: 125, rockDensity: 30, grass: 820, fogFar: 150,
+    treeDensity: 185, rockDensity: 40, grass: 980, fogFar: 150,
     lakes: [{ x: -40, z: 30, r: 26 }, { x: 45, z: 20, r: 24 }, { x: 8, z: 70, r: 22 }, { x: -55, z: -32, r: 20 }],
     preview: ['#1a2614', '#2f5a4a', '#3c5a26'],
   },
@@ -52,7 +52,7 @@ export const MAPS = {
     name: 'Titan Peaks', topo: 'Mountains',
     desc: 'Steep ridges ringing a fighting valley. Verticality, chokepoints and snow.',
     ground: 0x5a5e52, amp: 12, freq: 0.07, ridge: 0.7, lift: 1.5,
-    treeDensity: 70, rockDensity: 125, grass: 300, fogFar: 205,
+    treeDensity: 105, rockDensity: 140, grass: 420, fogFar: 205,
     lakes: [{ x: 58, z: -40, r: 14 }],
     preview: ['#2a3550', '#8a90a0', '#5a5e52'],
   },
@@ -839,6 +839,24 @@ export class World {
     return g;
   }
 
+  // a mossy fallen log lying on the forest floor (cheap cover detail)
+  _makeLog() {
+    const g = new THREE.Group();
+    const len = 2.6 + Math.random() * 3.2, r = 0.26 + Math.random() * 0.2;
+    const bark = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0x5c3d24 : 0x4a3320, roughness: 1, flatShading: true });
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.12, len, 7), bark);
+    log.rotation.z = Math.PI / 2; log.position.y = r; log.castShadow = true; log.receiveShadow = true; g.add(log);
+    // moss patch along the top
+    const moss = new THREE.Mesh(new THREE.BoxGeometry(len * 0.78, 0.1, r * 1.5), new THREE.MeshStandardMaterial({ color: 0x4f7236, roughness: 1, flatShading: true }));
+    moss.position.y = r + r * 0.55; g.add(moss);
+    // a couple of broken branch stubs
+    for (let i = 0; i < 2; i++) {
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.6 + Math.random() * 0.5, 5), bark);
+      br.position.set((Math.random() - 0.5) * len * 0.7, r + 0.2, 0); br.rotation.set(Math.random(), 0, Math.random() * 0.8 - 0.4); g.add(br);
+    }
+    return g;
+  }
+
   _plantForest() {
     // mix of conifers and broadleaf trees, weighted by biome
     const broadleafChance = { plains: 0.4, lowlands: 0.5, highlands: 0.15, mountains: 0.08 }[this.mapId] ?? 0.3;
@@ -858,7 +876,7 @@ export class World {
       if (dist < this.bounds + 10) this.colliders.push({ x, z, r: 0.6 * s });
     }
     // scatter low bushes for ground cover (no collision — you can push through)
-    const bushes = Math.round(this.map.treeDensity * 0.6);
+    const bushes = Math.round(this.map.treeDensity * 0.9);
     for (let i = 0; i < bushes; i++) {
       const ang = Math.random() * Math.PI * 2;
       const dist = 10 + Math.random() * 135;
@@ -866,9 +884,20 @@ export class World {
       if (Math.abs(x) < 4 && Math.abs(z) < 100) continue;
       if (this.waterAt(x, z)) continue;
       const bush = this._makeBush();
-      bush.scale.setScalar(0.7 + Math.random() * 0.8);
+      bush.scale.setScalar(0.7 + Math.random() * 0.9);
       bush.position.set(x, 0, z);
       this.root.add(bush);
+    }
+    // mossy fallen logs strewn about (wild, overgrown feel)
+    const logs = 14;
+    for (let i = 0; i < logs; i++) {
+      const ang = Math.random() * Math.PI * 2, dist = 14 + Math.random() * 120;
+      const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
+      if ((Math.abs(x) < 5 && Math.abs(z) < 100) || this.waterAt(x, z)) continue;
+      const log = this._makeLog();
+      log.position.set(x, Math.max(0, this.heightAt(x, z)), z);
+      log.rotation.y = Math.random() * Math.PI;
+      this.root.add(log);
     }
   }
 
