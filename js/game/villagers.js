@@ -67,24 +67,32 @@ export class Villagers {
   reset() {
     for (const v of this.list) { this.scene.remove(v.group); disposeGroup(v.group); }
     this.list = [];
-    const anchor = this.world.villageAnchor;
-    if (!anchor) return; // no village on this map layout — skip quietly
+    // populate every hamlet on the map (a bigger crowd in the main village, a
+    // few folk in the smaller satellite); fall back to villageAnchor if no zones
+    const zones = (this.world._villageZones && this.world._villageZones.length)
+      ? this.world._villageZones
+      : (this.world.villageAnchor ? [{ x: this.world.villageAnchor.x, z: this.world.villageAnchor.z, r: 28 }] : []);
+    if (!zones.length) return; // no village on this map layout — skip quietly
     const rnd = rng32((this.world._seed || 1) * 7 + 3);
-    const n = 4 + (rnd() * 4 | 0);
-    for (let i = 0; i < n; i++) {
-      const a = rnd() * Math.PI * 2, r = 3 + rnd() * 9;
-      const x = anchor.x + Math.cos(a) * r, z = anchor.z + Math.sin(a) * r;
-      if (!this._dry(x, z)) continue;
-      const { group, legs, arms, s } = buildVillager(rnd);
-      group.position.set(x, this._groundY(x, z), z);
-      const homeR = 4 + rnd() * 8, homeA = rnd() * Math.PI * 2;
-      this.scene.add(group);
-      this.list.push({
-        group, legs, arms, s,
-        homeX: anchor.x + Math.cos(homeA) * homeR, homeZ: anchor.z + Math.sin(homeA) * homeR,
-        anchor, dir: rnd() * Math.PI * 2, walk: 0, pauseT: rnd() * 3, cower: 0,
-      });
-    }
+    zones.forEach((zone, zi) => {
+      const anchor = { x: zone.x, z: zone.z };
+      const wanderR = Math.min(9, zone.r * 0.4);
+      const n = zone.r > 22 ? 4 + (rnd() * 4 | 0) : 2 + (rnd() * 2 | 0); // fewer in a small hamlet
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * Math.PI * 2, r = 3 + rnd() * wanderR;
+        const x = anchor.x + Math.cos(a) * r, z = anchor.z + Math.sin(a) * r;
+        if (!this._dry(x, z)) continue;
+        const { group, legs, arms, s } = buildVillager(rnd);
+        group.position.set(x, this._groundY(x, z), z);
+        const homeR = 4 + rnd() * (wanderR - 1), homeA = rnd() * Math.PI * 2;
+        this.scene.add(group);
+        this.list.push({
+          group, legs, arms, s, wanderR,
+          homeX: anchor.x + Math.cos(homeA) * homeR, homeZ: anchor.z + Math.sin(homeA) * homeR,
+          anchor, dir: rnd() * Math.PI * 2, walk: 0, pauseT: rnd() * 3, cower: 0,
+        });
+      }
+    });
   }
 
   update(dt) {
@@ -115,7 +123,7 @@ export class Villagers {
         if (v.walking) { v.walking = false; v.pauseT = 1 + Math.random() * 2.5; }
         else {
           v.walking = true; v.pauseT = 2 + Math.random() * 3;
-          const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * 3;
+          const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * Math.max(1.5, v.wanderR - 1);
           v.tx = v.anchor.x + Math.cos(a) * r; v.tz = v.anchor.z + Math.sin(a) * r;
         }
       }

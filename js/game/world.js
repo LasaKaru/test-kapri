@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Critters } from './critters.js';
 import { plantFlora } from './flora.js';
 import { plantVillage, updateVillage } from './village.js';
+import { plantRuins } from './ruins.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -133,6 +134,7 @@ export class World {
     this._scatterGrass();
     this._scatterFlora();
     this._buildBases();
+    this._buildRuins();
     this._buildTowers();
     this._buildAtmosphere();
     this._critters = new Critters(this.root, this);
@@ -1130,6 +1132,33 @@ export class World {
     this._villageAnims.push(anim);
     this._villageZones.push({ x: anchor.x, z: anchor.z, r: small ? 18 : 28 });
     for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
+  }
+
+  // Scatter a couple of crumbling ruin sites — clear of the hamlets, bases and
+  // spawn lane — as atmospheric medieval landmarks to stumble on.
+  _buildRuins() {
+    const B = this.bounds;
+    const clear = (x, z) => {
+      if (this.waterAt(x, z) || this.waterAt(x + 8, z)) return false;
+      if (Math.hypot(x, z) < 34 || Math.hypot(x, z) > B - 24) return false;
+      if (Math.abs(x) < 10 && z > -110 && z < 30) return false; // spawn lane
+      for (const v of (this._villageZones || [])) if (Math.hypot(v.x - x, v.z - z) < v.r + 24) return false;
+      for (const b of (this.bases || [])) if (Math.hypot(b.x - x, b.z - z) < 26) return false;
+      return true;
+    };
+    const n = 1 + (Math.random() * 2 | 0); // 1–2 ruin sites
+    let seed = this._seed * 11 + 5;
+    for (let i = 0; i < n; i++) {
+      for (let t = 0; t < 40; t++) {
+        const a = Math.random() * Math.PI * 2, r = 40 + Math.random() * (B - 66);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (!clear(x, z)) continue;
+        const { group, colliders } = plantRuins(this, x, z, seed++);
+        this.root.add(group);
+        for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
+        break;
+      }
+    }
   }
 
   // hollow, enterable building: 4 walls (doorway gap on the +z side), floor, roof
