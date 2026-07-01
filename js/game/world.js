@@ -79,6 +79,8 @@ export class World {
     this.bases = [];        // destructible enemy bases (primary + outposts)
     this._baseColliders = new Set(); // base colliders, tracked so reshuffle can remove them
     this._vaults = [];      // underground vault floor footprints (for groundHeight)
+    this._villageAnims = []; // per-hamlet animation registers (smoke/sails/banners)
+    this._villageZones = []; // { x, z, r } footprints so bases keep clear of hamlets
     // spatial grid over `colliders` — resolve()/steerAround() run per agent per
     // frame (up to ~28 enemies + player + vehicles), so a flat scan over every
     // collider on a dense, large map is real per-frame cost. Rebuilt once a
@@ -112,7 +114,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnim = null; this.bases = []; this._baseColliders = new Set(); this._vaults = []; this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnims = []; this._villageZones = []; this.bases = []; this._baseColliders = new Set(); this._vaults = []; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -429,7 +431,7 @@ export class World {
       if (this.waterAt(x, z) || this.waterAt(x + 8, z) || this.waterAt(x, z + 8)) return false;
       if (Math.hypot(x, z) < 40 || Math.hypot(x, z) > this.bounds - 16) return false; // not on spawn, not off-map
       if (Math.abs(x) < 8 && z > -110 && z < 30) return false; // keep the spawn lane clear
-      if (this.villageAnchor && Math.hypot(this.villageAnchor.x - x, this.villageAnchor.z - z) < 45) return false; // clear of the village
+      for (const v of (this._villageZones || [])) if (Math.hypot(v.x - x, v.z - z) < v.r + 20) return false; // clear of every hamlet
       for (const s of spots) if (Math.hypot(s.x - x, s.z - z) < minSep) return false;
       return true;
     };
@@ -1098,17 +1100,35 @@ export class World {
   // to terrain, registers solid colliders, and exposes its centre as
   // this.villageAnchor so the medieval landmark can be dropped in its midst.
   _buildVillage() {
+    const dryCand = (x, z) => !(this.waterAt(x, z) || this.waterAt(x + 12, z) || this.waterAt(x, z + 12));
+    // main hamlet
     const cands = [[-66, -70], [70, -66], [-78, 44], [62, 60], [-58, 78]];
     let anchor = null;
-    for (const [x, z] of cands) {
-      if (this.waterAt(x, z) || this.waterAt(x + 12, z) || this.waterAt(x, z + 12)) continue;
-      anchor = { x, z }; break;
-    }
+    for (const [x, z] of cands) { if (dryCand(x, z)) { anchor = { x, z }; break; } }
     if (!anchor) anchor = { x: cands[0][0], z: cands[0][1] };
-    this.villageAnchor = anchor;
-    const { group, colliders, anim } = plantVillage(this, anchor.x, anchor.z, this._seed * 3 + 17);
+    this._plantHamlet(anchor, this._seed * 3 + 17, false);
+    this.villageAnchor = anchor; // main hamlet owns the medieval landmark
+
+    // a smaller satellite hamlet, on the far side of the map from the main one,
+    // dry and well clear of it — gives run-to-run variety without a rival town
+    const B = this.bounds;
+    for (let t = 0; t < 40; t++) {
+      const a = Math.atan2(-anchor.z, -anchor.x) + (Math.random() - 0.5) * 1.6; // roughly opposite side
+      const r = B * (0.45 + Math.random() * 0.3);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!dryCand(x, z) || Math.hypot(x, z) > B - 20) continue;
+      if (Math.hypot(x - anchor.x, z - anchor.z) < 90) continue; // keep the two apart
+      if (Math.abs(x) < 10 && z > -110 && z < 30) continue;      // off the spawn lane
+      this._plantHamlet({ x, z }, this._seed * 7 + 41, true);
+      break;
+    }
+  }
+
+  _plantHamlet(anchor, seed, small) {
+    const { group, colliders, anim } = plantVillage(this, anchor.x, anchor.z, seed, { small });
     this.root.add(group);
-    this._villageAnim = anim;
+    this._villageAnims.push(anim);
+    this._villageZones.push({ x: anchor.x, z: anchor.z, r: small ? 18 : 28 });
     for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
   }
 
@@ -1466,7 +1486,7 @@ export class World {
     this._rebuildColliderGrid();
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
-    if (this._villageAnim) updateVillage(this._villageAnim, dt, this._time);
+    for (const anim of this._villageAnims) updateVillage(anim, dt, this._time);
     // drifting low haze — wraps around the play area
     if (this._mist) {
       const lim = this.bounds * 0.95;

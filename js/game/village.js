@@ -788,8 +788,12 @@ export function plantLandmarkRing(world, cx, cz, r, seed = 1) {
   return { group, anim: { smoke: [], windmills: [], banners, flames: [], laundry: [] } };
 }
 
-// Build the hamlet around (ax, az). Returns { group, colliders, smoke }.
-export function plantVillage(world, ax, az, seed = 7) {
+// Build the hamlet around (ax, az). Returns { group, colliders, anim }.
+// opts.small builds a modest satellite hamlet — fewer cottages and none of the
+// big landmark buildings (chapel/tavern/windmill/forge/gate) — so a second one
+// elsewhere on the map reads as an outlying farmstead, not a rival town.
+export function plantVillage(world, ax, az, seed = 7, opts = {}) {
+  const small = !!opts.small;
   const rnd = rng32(seed);
   const group = new THREE.Group();
   const pal = palette();
@@ -812,8 +816,8 @@ export function plantVillage(world, ax, az, seed = 7) {
   colliders.push({ x: ax, z: az, r: wl.userData.radius });
 
   // ring of cottages
-  const houses = 6 + (rnd() * 3 | 0);
-  const ringR = 9 + rnd() * 3;
+  const houses = small ? 2 + (rnd() * 2 | 0) : 6 + (rnd() * 3 | 0);
+  const ringR = small ? 6 + rnd() * 2 : 9 + rnd() * 3;
   const placed = [];
   const chimneys = [];
   for (let i = 0; i < houses; i++) {
@@ -838,7 +842,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // chapel with bell tower — set just beyond the cottage ring on flat ground
-  for (let tries = 0; tries < 6; tries++) {
+  if (!small) for (let tries = 0; tries < 6; tries++) {
     const a = rnd() * Math.PI * 2, r = ringR + 4 + rnd() * 2;
     const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
     if (!dry(x, z) || Math.hypot(x, z) > world.bounds - 8) continue;
@@ -853,7 +857,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // a couple of market stalls ringing the well, plus a cart
-  const stalls = 2 + (rnd() * 2 | 0);
+  const stalls = small ? (rnd() * 2 | 0) : 2 + (rnd() * 2 | 0);
   for (let i = 0; i < stalls; i++) {
     const a = (i / stalls) * Math.PI * 2 + rnd() * 0.6, r = 3.2 + rnd() * 1.5;
     const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
@@ -925,7 +929,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   };
 
   // a windmill on the edge of the hamlet (tall — wants flat, open ground)
-  {
+  if (!small) {
     const sp = findSpot(ringR + 6, ringR + 12, 2.6, 1.4);
     if (sp) {
       const { group: wm, blades } = windmill(pal);
@@ -936,7 +940,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // a blacksmith forge just off the square
-  {
+  if (!small) {
     const sp = findSpot(ringR - 2, ringR + 3, 2.4, 1.6);
     if (sp) {
       const fg = forge(rnd, pal);
@@ -947,7 +951,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // the tavern — the biggest building, fronting the square — plus its yard
-  {
+  if (!small) {
     const sp = findSpot(ringR - 3, ringR + 2, 3.4, 1.6);
     if (sp) {
       const tv = tavern(rnd, pal);
@@ -964,7 +968,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // a gateway arch on the approach side (facing the map centre / spawn)
-  {
+  if (!small) {
     const toC = Math.atan2(-az, -ax); // direction from anchor toward origin
     const gr = ringR + 9;
     const x = ax + Math.cos(toC) * gr, z = az + Math.sin(toC) * gr;
@@ -981,7 +985,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // heraldic banners flanking the square + on the gate approach
-  const nBanners = 3 + (rnd() * 2 | 0);
+  const nBanners = small ? (rnd() * 2 | 0) : 3 + (rnd() * 2 | 0);
   const clothMats = [pal.banner1, pal.banner2, pal.banner3];
   for (let i = 0; i < nBanners; i++) {
     const a = (i / nBanners) * Math.PI * 2 + 0.7, r = 6 + rnd() * 2;
@@ -1015,7 +1019,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   }
 
   // a small graveyard tucked beyond the ring (near the chapel, ideally)
-  {
+  if (!small) {
     const sp = findSpot(ringR + 3, ringR + 9, 2.8, 1.4);
     if (sp) {
       const gv = graveyard(rnd, pal);
