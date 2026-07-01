@@ -8,12 +8,33 @@ export class Props {
   constructor(scene) {
     this.scene = scene;
     this.mixers = [];
+    this.objects = [];   // placed wrap groups, for teardown on map change
+    this._gen = 0;       // bumped on clear() so in-flight loads don't place stale models
     this._loader = new GLTFLoader();
+  }
+
+  // remove every placed landmark (e.g. when the map is rebuilt) and free GPU memory
+  clear() {
+    for (const wrap of this.objects) {
+      this.scene.remove(wrap);
+      wrap.traverse((o) => {
+        if (o.isMesh) {
+          o.geometry && o.geometry.dispose();
+          const m = o.material;
+          if (Array.isArray(m)) m.forEach((x) => x && x.dispose()); else m && m.dispose();
+        }
+      });
+    }
+    this.objects.length = 0;
+    this.mixers.length = 0;
+    this._gen++;
   }
 
   // opts: { x, z, groundY, fit (target max footprint), rotX, rotationY, onPlaced }
   loadLandmark(url, opts = {}) {
+    const gen = this._gen;
     this._loader.load(url, (g) => {
+      if (gen !== this._gen) return; // map changed while loading — drop this model
       try { this._place(g, opts); } catch (e) { console.warn('[props] place failed:', e); }
     }, undefined, (e) => { console.warn('[props] landmark load failed:', url, e && (e.message || e)); });
   }
@@ -29,6 +50,7 @@ export class Props {
     wrap.add(root);
     if (opts.rotationY) wrap.rotation.y = opts.rotationY;
     this.scene.add(wrap);
+    this.objects.push(wrap);
 
     // auto-fit: scale so the largest horizontal dimension ≈ opts.fit
     wrap.updateMatrixWorld(true);

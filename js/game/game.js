@@ -463,6 +463,7 @@ class Game {
   _setMap(id) {
     if (!MAPS[id] || id === this.world.mapId) return;
     this.world.rebuild(id);
+    if (this.props) { this.props.clear(); this._placeLandmarks(); } // re-ground on new terrain
     this.player.reset();
     try { localStorage.setItem('verdant_map', id); } catch (_) {}
     this._updateLoadoutLabel();
