@@ -147,6 +147,15 @@ export function plantVillage(world, ax, az, seed = 7) {
   const colliders = [];
   const gy = (x, z) => (world.heightAt ? Math.max(0, world.heightAt(x, z)) : 0);
   const dry = (x, z) => !(world.waterAt && world.waterAt(x, z));
+  // sample terrain over a footprint: returns the lowest/highest ground height so
+  // structures can sit flush on the low corner and skip spots too steep to look right
+  const slope = (x, z, r) => {
+    let min = Infinity, max = -Infinity;
+    for (const [dx, dz] of [[0, 0], [-r, -r], [r, -r], [-r, r], [r, r]]) {
+      const h = gy(x + dx, z + dz); if (h < min) min = h; if (h > max) max = h;
+    }
+    return { min, max };
+  };
 
   // central well
   const wy = gy(ax, az);
@@ -162,8 +171,11 @@ export function plantVillage(world, ax, az, seed = 7) {
     const r = ringR + (rnd() - 0.5) * 4;
     const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
     if (!dry(x, z) || Math.hypot(x, z) > world.bounds - 6) continue;
+    // skip cliff-side spots where a flat-based hut would float or bury a corner
+    const s = slope(x, z, 2.4);
+    if (s.max - s.min > 2.0) continue;
     const c = cottage(rnd, pal);
-    c.position.set(x, gy(x, z), z);
+    c.position.set(x, s.min, z); // sit on the low corner so nothing floats
     c.rotation.y = Math.atan2(ax - x, az - z) + (rnd() - 0.5) * 0.4; // roughly face the well
     group.add(c);
     colliders.push({ x, z, r: c.userData.radius * 0.85 });
