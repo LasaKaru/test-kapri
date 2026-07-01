@@ -74,6 +74,77 @@ function buildHoard() {
   return g;
 }
 
+// Three vault themes so hatches don't all lead to the same stone box.
+// Each picks a palette and adds a few themed dressing props inside the room.
+const THEMES = [
+  { id: 'treasury', stone: 0x6a6258, dark: 0x4c463d, floor: 0x585149 },
+  { id: 'crypt',     stone: 0x4a4a52, dark: 0x36363e, floor: 0x3a3840 },
+  { id: 'mine',      stone: 0x5a4a3a, dark: 0x3e3226, floor: 0x4a3d2e },
+];
+
+function dressTreasury(vg, cx, cz, half, floorY, rnd) {
+  // rolled rugs + a couple of urns flanking the hoard approach
+  const rug = MAT(0x7a2b32, 1, 0);
+  for (const s of [-1, 1]) {
+    const r = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.5), rug);
+    r.position.set(cx + s * 2.4, floorY + 0.03, cz - half * 0.4); vg.add(r);
+  }
+  for (const s of [-1, 1]) {
+    const urn = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.24, 0.8, 8), MAT(0x8a7a4a, 0.8, 0.3));
+    urn.position.set(cx + s * (half - 2), floorY + 0.4, cz - half + 3.4); urn.castShadow = true; vg.add(urn);
+  }
+}
+function dressCrypt(vg, cx, cz, half, floorY, rnd) {
+  // stone coffins along the side walls + a scatter of bones/skulls
+  const coffinMat = MAT(0x3a3a40, 0.9, 0.1);
+  for (const s of [-1, 1]) {
+    const coffin = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 2.2), coffinMat);
+    coffin.position.set(cx + s * (half - 1.6), floorY + 0.25, cz + 1.0); coffin.castShadow = true; vg.add(coffin);
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.1, 2.3), MAT(0x2e2e34));
+    lid.position.set(cx + s * (half - 1.6), floorY + 0.55, cz + 1.0); vg.add(lid);
+  }
+  const boneMat = MAT(0xd8d0b8, 0.9, 0);
+  for (let i = 0; i < 6; i++) {
+    const bone = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.09), boneMat);
+    bone.position.set(cx + (rnd() - 0.5) * (half * 1.4), floorY + 0.05, cz + (rnd() - 0.5) * (half * 1.4));
+    bone.rotation.y = rnd() * Math.PI; vg.add(bone);
+  }
+  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), boneMat);
+  skull.position.set(cx + 1.2, floorY + 0.18, cz - half * 0.2); vg.add(skull);
+}
+function dressMine(vg, cx, cz, half, floorY, rnd) {
+  // timber support frames along the room + an ore cart on rails
+  const timber = MAT(0x4a3524);
+  for (let i = -1; i <= 1; i++) {
+    const z = cz + i * (half * 0.6);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(half * 2 - 2, 0.2, 0.2), timber);
+    beam.position.set(cx, floorY + 5.6, z); vg.add(beam);
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 5.6, 0.2), timber);
+      post.position.set(cx + s * (half - 1), floorY + 2.8, z); vg.add(post);
+    }
+  }
+  // rail track + a small ore cart
+  const rail = MAT(0x2b2620, 0.5, 0.6);
+  for (const s of [-0.35, 0.35]) {
+    const track = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, half * 1.6), rail);
+    track.position.set(cx + s, floorY + 0.03, cz); vg.add(track);
+  }
+  const cart = new THREE.Group();
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.8), MAT(0x3a3226, 0.8, 0.3));
+  bed.position.y = 0.4; bed.castShadow = true; cart.add(bed);
+  for (const s of [-1, 1]) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.1, 8), rail);
+    wheel.rotation.x = Math.PI / 2; wheel.position.set(0, 0.18, s * 0.45); cart.add(wheel);
+  }
+  const ore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0),
+    new THREE.MeshStandardMaterial({ color: 0x2a6ea0, emissive: 0x1a4a70, emissiveIntensity: 0.5, roughness: 0.6, flatShading: true }));
+  ore.position.y = 0.75; cart.add(ore);
+  cart.position.set(cx, floorY, cz + half * 0.35);
+  vg.add(cart);
+}
+const DRESS = { treasury: dressTreasury, crypt: dressCrypt, mine: dressMine };
+
 export class Underground {
   constructor(scene, world) {
     this.scene = scene;
@@ -123,8 +194,9 @@ export class Underground {
 
     // vault far outside the surface map (isolated, flat floor at y=0)
     const half = 11, cx = 1000 + i * 90, cz = 0, floorY = 0;
+    const theme = THEMES[Math.random() * THEMES.length | 0];
     const vg = new THREE.Group();
-    const stone = MAT(0x6a6258), stoneDark = MAT(0x4c463d), floorMat = MAT(0x585149);
+    const stone = MAT(theme.stone), stoneDark = MAT(theme.dark), floorMat = MAT(theme.floor);
     const floor = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.4, half * 2), floorMat);
     floor.position.set(cx, floorY - 0.2, cz); floor.receiveShadow = true; vg.add(floor);
     const ceil = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.4, half * 2), stoneDark);
@@ -167,11 +239,17 @@ export class Underground {
     const exitGlow = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 1.2), new THREE.MeshStandardMaterial({ color: 0x203018, emissive: 0x8fe04a, emissiveIntensity: 0.9, roughness: 0.6 }));
     exitGlow.position.set(entry.x, floorY + 0.05, cz + half - 1.6); ladder.add(exitGlow);
     vg.add(ladder);
+    // theme-specific dressing (rugs/urns, coffins/bones, or mine timbers/cart)
+    DRESS[theme.id](vg, cx, cz, half, floorY, Math.random);
     // treasure hoard at the far end
     const hoard = buildHoard(); hoard.position.set(cx, floorY, cz - half + 2.6); vg.add(hoard);
 
     this.scene.add(vg);
-    const vault = { group: vg, cx, cz, half, floorY, entry, torches, hoardObj: hoard.userData.gem, hoardPos: { x: cx, z: cz - half + 2.6 }, looted: false };
+    // a guardian spawns partway between the ladder and the hoard the first
+    // time the vault is entered — smash-and-grab is possible, but the hoard
+    // isn't undefended
+    const guardianSpot = { x: cx, z: cz - half * 0.15 };
+    const vault = { group: vg, cx, cz, half, floorY, entry, torches, theme: theme.id, hoardObj: hoard.userData.gem, hoardPos: { x: cx, z: cz - half + 2.6 }, looted: false, guardianSpot, guardianSpawned: false };
     this.vaults.push(vault);
     this.world._vaults.push({ cx, cz, half: half - 0.5, floorY });
     this.hatches.push({ group: hatch, x: hx, z: hz, y: hy, vault });

@@ -1349,6 +1349,21 @@ class Game {
     this.postfx.pulseBloom(0.6);
   }
 
+  // descend into a vault; on first entry, a guardian wakes to defend the hoard
+  // (skipped for co-op clients — the host owns enemy spawning, not us)
+  _enterVault(hatch) {
+    this._teleport(this.underground.enter(hatch));
+    const v = hatch.vault;
+    const THEME_LABEL = { treasury: 'TREASURY', crypt: 'CRYPT', mine: 'OLD MINE' };
+    this.hud.killFeed(`▼ Descended into the ${THEME_LABEL[v.theme] || 'VAULT'}`);
+    const isClient = this.coopMode && !this.coopHost;
+    if (!isClient && !this.pvpMode && !v.guardianSpawned && !v.looted && this.waves && this.waves.spawnAt) {
+      v.guardianSpawned = true;
+      this.waves.spawnAt('shielded', v.guardianSpot.x, v.guardianSpot.z);
+      this.hud.killFeed('⚠ A guardian stirs in the dark…');
+    }
+  }
+
   // [E]: act on the nearest interactable; otherwise ride or dismount a vehicle
   _interact() {
     if (!this.vehicles.isMounted()) {
@@ -1357,7 +1372,7 @@ class Game {
         switch (it.kind) {
           case 'cache': this.secrets.open(it.obj, (r, f, t, p) => this._onSecretFound(r, f, t, p)); return;
           case 'hostage': this.hostages.free(it.obj, (r, f, t, p) => this._onHostageFreed(r, f, t, p)); return;
-          case 'hatch': this._teleport(this.underground.enter(it.obj)); this.hud.killFeed('▼ Descended into the vault'); return;
+          case 'hatch': this._enterVault(it.obj); return;
           case 'exit': this._teleport(this.underground.exit(it.obj)); this.hud.killFeed('▲ Climbed back to the surface'); return;
           case 'hoard': { const r = this.underground.loot(it.obj); if (r) this._onSecretFound({ credits: r.credits, item: r.item }, this.underground.looted, this.underground.looted, it.obj.hoardPos); return; }
         }
