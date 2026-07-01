@@ -27,7 +27,15 @@ function palette() {
     hay: mk(0xc9a94e),
     awning1: mk(0x9c3b3b), // market stall awnings (warm reds/blues)
     awning2: mk(0x37587a),
+    metal: new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.5, metalness: 0.7, flatShading: true }), // anvil / fittings
+    canvas: mk(0xdcd3bc),  // windmill sails
+    crop: mk(0x6f8f3a),    // field rows
+    soil: mk(0x4a3a28),    // tilled earth
+    banner1: mk(0xa52832), // heraldic cloth
+    banner2: mk(0x2f5aa0),
+    banner3: mk(0x2f7d4a),
     win: new THREE.MeshStandardMaterial({ color: 0x120c06, emissive: 0xffb14a, emissiveIntensity: 0.5, roughness: 0.6, flatShading: true }),
+    fire: new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff6a10, emissiveIntensity: 1.6, roughness: 0.5, flatShading: true }),
   };
 }
 
@@ -273,15 +281,184 @@ function buildSmoke(group, chimneys, rnd) {
   return puffs;
 }
 
-// Advance the smoke plumes: each puff rises, sways, grows and fades, then loops.
-export function updateSmoke(puffs, dt) {
-  for (const p of puffs) {
+// A tower windmill: stone base, timber cap, and four sails on a hub that spins.
+// Returns { group, blades } — the world rotates `blades` each frame.
+function windmill(pal) {
+  const g = new THREE.Group();
+  const baseH = 6.5, topR = 1.6, botR = 2.2;
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(topR, botR, baseH, 8), pal.plaster2);
+  tower.position.y = baseH / 2; tower.castShadow = true; tower.receiveShadow = true; g.add(tower);
+  // timber bands
+  for (const yy of [0.15, 0.55, 0.9]) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(botR - (botR - topR) * yy + 0.06, botR - (botR - topR) * yy + 0.06, 0.18, 8), pal.timber);
+    band.position.y = baseH * yy; g.add(band);
+  }
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(topR + 0.3, 1.6, 8), pal.roof);
+  cap.position.y = baseH + 0.7; cap.castShadow = true; g.add(cap);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.2), pal.timber);
+  door.position.set(0, 0.85, botR - 0.1); g.add(door);
+
+  // sail assembly on a hub, mounted on the +z face near the cap
+  const blades = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.5, 8), pal.timber);
+  hub.rotation.x = Math.PI / 2; blades.add(hub);
+  for (let i = 0; i < 4; i++) {
+    const arm = new THREE.Group();
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.2, 0.14), pal.timber);
+    spar.position.y = 2.1; arm.add(spar);
+    const sail = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3.4, 0.06), pal.canvas);
+    sail.position.set(0.62, 2.2, 0); sail.castShadow = true; arm.add(sail);
+    arm.rotation.z = (i / 4) * Math.PI * 2;
+    blades.add(arm);
+  }
+  blades.position.set(0, baseH + 0.4, topR + 0.4);
+  g.add(blades);
+  g.userData.radius = botR;
+  return { group: g, blades };
+}
+
+// A blacksmith: open timber-framed forge with a glowing hearth and an anvil.
+function forge(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 4.0, d = 3.4, h = 2.6;
+  // back + side walls (open front), stone lower course
+  const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.3), pal.stone);
+  back.position.set(0, h / 2, -d / 2); back.castShadow = true; g.add(back);
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.3, h, d), pal.plaster);
+    side.position.set(sx * w / 2, h / 2, 0); side.castShadow = true; g.add(side);
+  }
+  // lean-to roof
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.16, d + 0.6), pal.roof2);
+  roof.position.set(0, h + 0.35, 0.1); roof.rotation.x = -0.28; roof.castShadow = true; g.add(roof);
+  // support posts at the open front
+  for (const sx of [-1, 1]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.18, h, 0.18), pal.timber);
+    p.position.set(sx * (w / 2 - 0.2), h / 2, d / 2 - 0.2); g.add(p);
+  }
+  // stone forge hearth with glowing coals + a small flame
+  const hearth = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.2), pal.stone);
+  hearth.position.set(-w / 4, 0.5, -d / 4); hearth.castShadow = true; g.add(hearth);
+  const coals = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.2, 0.8), pal.fire.clone());
+  coals.position.set(-w / 4, 1.05, -d / 4); g.add(coals);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 5), pal.fire.clone());
+  flame.position.set(-w / 4, 1.4, -d / 4); g.add(flame);
+  // anvil: block + horn on a stump
+  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.7, 8), pal.timber);
+  stump.position.set(w / 4, 0.35, d / 5); g.add(stump);
+  const anvil = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.28, 0.34), pal.metal);
+  anvil.position.set(w / 4, 0.84, d / 5); anvil.castShadow = true; g.add(anvil);
+  const horn = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.4, 6), pal.metal);
+  horn.rotation.z = -Math.PI / 2; horn.position.set(w / 4 + 0.5, 0.84, d / 5); g.add(horn);
+  g.userData.radius = Math.max(w, d) * 0.5;
+  g.userData.flames = [{ mesh: flame, base: 1.0 }, { mesh: coals, base: 1.6 }]; // flicker targets
+  return g;
+}
+
+// A tall pole flying a heraldic pennant that ripples in the wind (animated).
+function banner(pal, clothMat) {
+  const g = new THREE.Group();
+  const poleH = 5.0;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, poleH, 6), pal.timber);
+  pole.position.y = poleH / 2; pole.castShadow = true; g.add(pole);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), pal.metal);
+  knob.position.y = poleH + 0.1; g.add(knob);
+  // triangular pennant built from segments so it can ripple along its length
+  const cloth = new THREE.Group();
+  const segs = 5, segW = 0.44;
+  for (let i = 0; i < segs; i++) {
+    const hgt = 1.0 * (1 - i / segs) + 0.25;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(segW, hgt, 0.04), clothMat);
+    seg.position.set(segW / 2 + i * segW, 0, 0);
+    seg.userData.baseX = seg.position.x; seg.userData.i = i;
+    cloth.add(seg);
+  }
+  cloth.position.set(0.1, poleH - 0.8, 0);
+  g.add(cloth);
+  g.userData.radius = 0.4;
+  return { group: g, cloth };
+}
+
+// A wrought-iron brazier: a bowl of embers on legs with a flame (flickers).
+function brazier(pal) {
+  const g = new THREE.Group();
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.32, 0.4, 8), pal.metal);
+  bowl.position.y = 1.0; bowl.castShadow = true; g.add(bowl);
+  for (let i = 0; i < 3; i++) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.0, 0.07), pal.metal);
+    const a = (i / 3) * Math.PI * 2;
+    leg.position.set(Math.cos(a) * 0.3, 0.5, Math.sin(a) * 0.3); leg.rotation.z = Math.cos(a) * 0.18; leg.rotation.x = -Math.sin(a) * 0.18; g.add(leg);
+  }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.9, 6), pal.fire.clone());
+  flame.position.y = 1.5; g.add(flame);
+  g.userData.radius = 0.5;
+  g.userData.flames = [{ mesh: flame, base: 1.6 }];
+  return g;
+}
+
+// A stone-and-timber gateway arch marking the entrance to the hamlet.
+function gateArch(pal) {
+  const g = new THREE.Group();
+  const pierH = 4.0, gap = 4.0;
+  for (const sx of [-1, 1]) {
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(1.0, pierH, 1.0), pal.stone);
+    pier.position.set(sx * (gap / 2 + 0.5), pierH / 2, 0); pier.castShadow = true; g.add(pier);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.4, 1.3), pal.stone);
+    cap.position.set(sx * (gap / 2 + 0.5), pierH + 0.2, 0); g.add(cap);
+  }
+  // timber lintel beam across the top
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(gap + 1.4, 0.5, 0.6), pal.timber);
+  lintel.position.set(0, pierH + 0.1, 0); lintel.castShadow = true; g.add(lintel);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.1), pal.plaster);
+  sign.position.set(0, pierH - 0.6, 0.35); g.add(sign);
+  g.userData.piers = [{ x: -(gap / 2 + 0.5), r: 0.6 }, { x: (gap / 2 + 0.5), r: 0.6 }];
+  return g;
+}
+
+// A tilled crop field: dark soil bed with rows of green plants.
+function cropField(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 5 + rnd() * 3, d = 4 + rnd() * 2;
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, d), pal.soil);
+  bed.position.y = 0.07; bed.receiveShadow = true; g.add(bed);
+  const rows = Math.max(3, Math.round(w / 0.7));
+  for (let r = 0; r < rows; r++) {
+    const rx = -w / 2 + 0.5 + r * (w - 1) / (rows - 1);
+    const row = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4 + rnd() * 0.2, d - 0.6), pal.crop);
+    row.position.set(rx, 0.3, 0); g.add(row);
+  }
+  g.userData.radius = Math.max(w, d) * 0.5;
+  return g;
+}
+
+// Advance every animated village element (smoke, windmill sails, banners,
+// flickering fires) one frame. `time` is the world clock for phase coherence.
+export function updateVillage(anim, dt, time) {
+  // drifting chimney smoke
+  for (const p of anim.smoke) {
     p.t += dt * p.speed;
     if (p.t >= 1) p.t -= 1;
     const k = p.t;
     p.mesh.position.set(p.ox + Math.sin(k * 6 + p.sway) * 0.35, p.oy + k * 3.6, p.oz + Math.cos(k * 5 + p.sway) * 0.3);
     p.mesh.scale.setScalar(0.3 + k * 1.3);
-    p.mesh.material.opacity = Math.max(0, 0.45 * (1 - k) * Math.min(1, k * 6)); // fade in fast, out slow
+    p.mesh.material.opacity = Math.max(0, 0.45 * (1 - k) * Math.min(1, k * 6));
+  }
+  // turning windmill sails
+  for (const wm of anim.windmills) wm.blades.rotation.z += dt * wm.speed;
+  // rippling banners — each segment lags the one before it for a wave
+  for (const b of anim.banners) {
+    for (const seg of b.cloth.children) {
+      const i = seg.userData.i;
+      const wave = Math.sin(time * 3 + i * 0.9 + b.phase);
+      seg.position.z = wave * 0.12 * (i + 1);
+      seg.rotation.y = wave * 0.18;
+    }
+  }
+  // flickering forge/brazier fires
+  for (const f of anim.flames) {
+    const flick = 0.75 + Math.sin(time * 11 + f.phase) * 0.15 + Math.sin(time * 23 + f.phase) * 0.1;
+    f.mesh.material.emissiveIntensity = f.base * flick;
+    if (f.mesh.geometry.type === 'ConeGeometry') f.mesh.scale.y = 0.85 + flick * 0.3;
   }
 }
 
@@ -402,9 +579,101 @@ export function plantVillage(world, ax, az, seed = 7) {
     group.add(fenceRun(pal, x0, z0, x1, z1, gy(x0, z0), gy(x1, z1)));
   }
 
+  // animation registers, filled as animated structures are placed
+  const windmills = [], banners = [], flames = [];
+  const addFlames = (obj, ox, oz) => { // register flicker targets (phase varies by position)
+    if (!obj.userData.flames) return;
+    for (const f of obj.userData.flames) flames.push({ mesh: f.mesh, base: f.base, phase: (ox + oz) * 0.7 });
+  };
+  // find a dry, sufficiently flat spot on a ring around the anchor
+  const findSpot = (rMin, rMax, flatR, maxSlope, tries = 8) => {
+    for (let t = 0; t < tries; t++) {
+      const a = rnd() * Math.PI * 2, r = rMin + rnd() * (rMax - rMin);
+      const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+      if (!dry(x, z) || Math.hypot(x, z) > world.bounds - 8) continue;
+      const s = slope(x, z, flatR);
+      if (s.max - s.min > maxSlope) continue;
+      return { x, z, y: s.min, a };
+    }
+    return null;
+  };
+
+  // a windmill on the edge of the hamlet (tall — wants flat, open ground)
+  {
+    const sp = findSpot(ringR + 6, ringR + 12, 2.6, 1.4);
+    if (sp) {
+      const { group: wm, blades } = windmill(pal);
+      wm.position.set(sp.x, sp.y, sp.z); wm.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(wm); colliders.push({ x: sp.x, z: sp.z, r: wm.userData.radius });
+      windmills.push({ blades, speed: 0.5 + rnd() * 0.4 });
+    }
+  }
+
+  // a blacksmith forge just off the square
+  {
+    const sp = findSpot(ringR - 2, ringR + 3, 2.4, 1.6);
+    if (sp) {
+      const fg = forge(rnd, pal);
+      fg.position.set(sp.x, sp.y, sp.z); fg.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(fg); colliders.push({ x: sp.x, z: sp.z, r: fg.userData.radius * 0.85 });
+      addFlames(fg, sp.x, sp.z);
+    }
+  }
+
+  // a gateway arch on the approach side (facing the map centre / spawn)
+  {
+    const toC = Math.atan2(-az, -ax); // direction from anchor toward origin
+    const gr = ringR + 9;
+    const x = ax + Math.cos(toC) * gr, z = az + Math.sin(toC) * gr;
+    if (dry(x, z) && Math.hypot(x, z) < world.bounds - 6) {
+      const s = slope(x, z, 3.0);
+      if (s.max - s.min < 1.8) {
+        const ga = gateArch(pal);
+        ga.position.set(x, s.min, z); ga.rotation.y = toC + Math.PI / 2; // arch spans across the path
+        group.add(ga);
+        const cs = Math.cos(ga.rotation.y), sn = Math.sin(ga.rotation.y);
+        for (const p of ga.userData.piers) colliders.push({ x: x + p.x * cs, z: z - p.x * sn, r: p.r });
+      }
+    }
+  }
+
+  // heraldic banners flanking the square + on the gate approach
+  const nBanners = 3 + (rnd() * 2 | 0);
+  const clothMats = [pal.banner1, pal.banner2, pal.banner3];
+  for (let i = 0; i < nBanners; i++) {
+    const a = (i / nBanners) * Math.PI * 2 + 0.7, r = 6 + rnd() * 2;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z)) continue;
+    const { group: bn, cloth } = banner(pal, clothMats[i % clothMats.length]);
+    bn.position.set(x, gy(x, z), z); bn.rotation.y = rnd() * Math.PI * 2;
+    group.add(bn);
+    banners.push({ cloth, phase: rnd() * Math.PI * 2 });
+  }
+
+  // fire braziers for light + warmth around the square
+  const nBraz = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < nBraz; i++) {
+    const a = (i / nBraz) * Math.PI * 2 + 1.3, r = 4 + rnd() * 1.5;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z)) continue;
+    const br = brazier(pal); br.position.set(x, gy(x, z), z);
+    group.add(br); colliders.push({ x, z, r: br.userData.radius * 0.6 });
+    addFlames(br, x, z);
+  }
+
+  // a couple of crop fields on the outskirts
+  const nFields = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < nFields; i++) {
+    const sp = findSpot(ringR + 4, ringR + 14, 3.0, 1.2);
+    if (!sp) continue;
+    const fld = cropField(rnd, pal);
+    fld.position.set(sp.x, sp.y, sp.z); fld.rotation.y = rnd() * Math.PI * 2;
+    group.add(fld); // fields are low — no collider, you can walk through the rows
+  }
+
   // drifting smoke from a few chimneys
   const smoke = buildSmoke(group, chimneys, rnd);
 
   group.userData.villagePalette = pal;
-  return { group, colliders, smoke };
+  return { group, colliders, anim: { smoke, windmills, banners, flames } };
 }

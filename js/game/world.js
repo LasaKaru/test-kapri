@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Critters } from './critters.js';
 import { plantFlora } from './flora.js';
-import { plantVillage, updateSmoke } from './village.js';
+import { plantVillage, updateVillage } from './village.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -101,7 +101,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageSmoke = null; this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnim = null; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -960,9 +960,9 @@ export class World {
     }
     if (!anchor) anchor = { x: cands[0][0], z: cands[0][1] };
     this.villageAnchor = anchor;
-    const { group, colliders, smoke } = plantVillage(this, anchor.x, anchor.z, this._seed * 3 + 17);
+    const { group, colliders, anim } = plantVillage(this, anchor.x, anchor.z, this._seed * 3 + 17);
     this.root.add(group);
-    this._villageSmoke = smoke;
+    this._villageAnim = anim;
     for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
   }
 
@@ -1282,7 +1282,7 @@ export class World {
     this._time += dt;
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
-    if (this._villageSmoke) updateSmoke(this._villageSmoke, dt);
+    if (this._villageAnim) updateVillage(this._villageAnim, dt, this._time);
     // drifting low haze — wraps around the play area
     if (this._mist) {
       const lim = this.bounds * 0.95;
