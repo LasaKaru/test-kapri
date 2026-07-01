@@ -92,27 +92,19 @@ export class Secrets {
     return best;
   }
 
-  // try to open the nearest cache; on success invokes cb(reward, found, total, pos)
-  tryOpen(px, pz, cb) {
-    const c = this.nearest(px, pz);
-    if (!c) return false;
+  // open a specific cache; invokes cb(reward, found, total, pos)
+  open(c, cb) {
+    if (!c || c.opened) return false;
     c.opened = true; c._openT = 0;
     this.found++;
-    if (this._prompt) this._prompt.classList.add('hidden');
     cb(c.reward, this.found, this.total, { x: c.x, z: c.z });
     return true;
   }
 
-  update(dt, px, pz, showPrompt = true) {
-    // animate opening lids
+  // animate opening lids (the game owns the shared [E] prompt)
+  update(dt) {
     for (const c of this.caches) {
       if (c.opened && c._openT < 1) { c._openT = Math.min(1, c._openT + dt * 2.2); c.lid.rotation.x = -c._openT * 1.25; }
-    }
-    // proximity prompt
-    if (this._prompt) {
-      const c = showPrompt ? this.nearest(px, pz) : null;
-      if (c) { this._prompt.textContent = '[E] Search cache'; this._prompt.classList.remove('hidden'); }
-      else this._prompt.classList.add('hidden');
     }
   }
 }

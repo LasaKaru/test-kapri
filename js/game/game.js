@@ -9,6 +9,7 @@ import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
 import { Props } from './props.js';
 import { Secrets } from './secrets.js';
+import { Hostages } from './hostages.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -74,6 +75,7 @@ class Game {
     this.props = new Props(this.scene);
     this._placeLandmarks();
     this.secrets = new Secrets(this.scene, this.world);
+    this.hostages = new Hostages(this.scene, this.world);
     this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
@@ -230,13 +232,7 @@ class Game {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
-      if (e.code === 'KeyE') {
-        // search a nearby secret cache first; otherwise ride/dismount a vehicle
-        const searched = !this.vehicles.isMounted() && this.secrets &&
-          this.secrets.tryOpen(this.player.position.x, this.player.position.z,
-            (reward, found, total, pos) => this._onSecretFound(reward, found, total, pos));
-        if (!searched) this.vehicles.toggleMount();
-      }
+      if (e.code === 'KeyE') this._interact();
       if (this.vehicles.isMounted()) return; // driving — gun keys disabled
       if (e.code === 'Space') { e.preventDefault(); if (this.player.jump()) this.audio.jump(); }
       if (e.code === 'KeyT') this._toggleThirdPerson();
@@ -557,7 +553,8 @@ class Game {
     // fresh single-player mission: reshuffle the enemy bases so the same
     // battlefield feels new each deployment (co-op mirrors the host, so skip it)
     if (startWave === 1 && !this.coopMode && this.world.reshuffleBases) this.world.reshuffleBases();
-    if (startWave === 1 && this.secrets) this.secrets.reset(); // fresh caches to discover
+    if (startWave === 1 && this.secrets) this.secrets.reset();     // fresh caches to discover
+    if (startWave === 1 && this.hostages) this.hostages.reset();   // fresh captives to rescue
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -1300,6 +1297,44 @@ class Game {
     if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac(px, pz) * 100) + '%'; }
   }
 
+  // nearest actionable thing to the player: { kind, obj, d } or null
+  _nearestInteract() {
+    const px = this.player.position.x, pz = this.player.position.z;
+    let best = null;
+    const consider = (obj, kind) => { if (!obj) return; const d = Math.hypot(obj.x - px, obj.z - pz); if (!best || d < best.d) best = { kind, obj, d }; };
+    if (this.secrets) consider(this.secrets.nearest(px, pz), 'cache');
+    if (this.hostages) consider(this.hostages.nearest(px, pz), 'hostage');
+    return best;
+  }
+
+  // [E]: act on the nearest cache / hostage; otherwise ride or dismount a vehicle
+  _interact() {
+    if (!this.vehicles.isMounted()) {
+      const it = this._nearestInteract();
+      if (it && it.kind === 'cache') { this.secrets.open(it.obj, (r, f, t, p) => this._onSecretFound(r, f, t, p)); return; }
+      if (it && it.kind === 'hostage') { this.hostages.free(it.obj, (r, f, t, p) => this._onHostageFreed(r, f, t, p)); return; }
+    }
+    this.vehicles.toggleMount();
+  }
+
+  // keep the shared [E] prompt in sync with the nearest interactable
+  _updateInteractPrompt() {
+    const el = document.getElementById('interact-prompt'); if (!el) return;
+    const it = this.vehicles.isMounted() ? null : this._nearestInteract();
+    if (it) { el.textContent = it.kind === 'cache' ? '[E] Search cache' : '[E] Free hostage'; el.classList.remove('hidden'); }
+    else el.classList.add('hidden');
+  }
+
+  _onHostageFreed(reward, freed, total, pos) {
+    this.credits += reward.credits;
+    this.hud.setCredits(this.credits);
+    if (reward.xp) this._awardXp(reward.xp);
+    this.hud.killFeed(`✚ HOSTAGE RESCUED (${freed}/${total})  +${reward.credits}¢`);
+    try { this.audio.announce('base'); } catch (_) {}
+    this.postfx.pulseBloom(0.5);
+    if (this.ach) this.ach.unlock('liberator');
+  }
+
   _onSecretFound(reward, found, total, pos) {
     this.credits += reward.credits;
     this.hud.setCredits(this.credits);
@@ -1468,7 +1503,9 @@ class Game {
       this.coop.update(dt);
       this.vehicles.update(dt);     // ordnance + driving (sets the camera when mounted)
       this.vehicles.promptTick();
-      if (this.secrets) this.secrets.update(dt, this.player.position.x, this.player.position.z, !this.vehicles.isMounted());
+      if (this.secrets) this.secrets.update(dt);
+      if (this.hostages) this.hostages.update(dt);
+      this._updateInteractPrompt();
       this._updateBaseBar();
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
