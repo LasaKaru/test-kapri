@@ -546,6 +546,9 @@ class Game {
     this.vehicles.reset();
     this.godmode = false; this.cheatArsenal = false; this.speedRun = false;
     this.world._combatActive = true; // predators (wolves) hunt during a run
+    // fresh single-player mission: reshuffle the enemy bases so the same
+    // battlefield feels new each deployment (co-op mirrors the host, so skip it)
+    if (startWave === 1 && !this.coopMode && this.world.reshuffleBases) this.world.reshuffleBases();
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -875,7 +878,7 @@ class Game {
         const minD = Math.min(baseD, animD, crateD);
         if (bp && baseD === minD && baseD < shot.def.range) {
           endPoint = bp.point; anyHit = true;
-          if (this.world.damageBase(shot.dmg * 6)) this._onBaseDestroyed();
+          if (this.world.damageBase(shot.dmg * 6, bp.base)) this._onBaseDestroyed(bp.base);
           this.effects.impact(endPoint, 0xff7040, false);
         } else if (cr && crateD === minD && crateD < shot.def.range) {
           endPoint = cr.point; anyHit = true;
@@ -1280,22 +1283,26 @@ class Game {
 
   _updateBaseBar() {
     const wrap = document.getElementById('base-bar-wrap'); if (!wrap) return;
-    const b = this.world.base;
-    const d = b ? Math.hypot(this.player.position.x - b.x, this.player.position.z - b.z) : 1e9;
+    const px = this.player.position.x, pz = this.player.position.z;
+    const b = this.world._nearestBase ? this.world._nearestBase(px, pz) : this.world.base;
+    const d = b ? Math.hypot(px - b.x, pz - b.z) : 1e9;
     const show = !!(b && b.alive && (this.vehicles.isMounted() || d < 90));
     wrap.classList.toggle('hidden', !show);
-    if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac() * 100) + '%'; }
+    if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac(px, pz) * 100) + '%'; }
   }
 
-  _onBaseDestroyed() {
-    this.score += 5000;
+  _onBaseDestroyed(base) {
+    const b = base || this.world.base;
+    const primary = !b || b.primary;
+    const reward = primary ? 5000 : 2000;
+    this.score += reward;
     this.hud.setScore(this.score);
     this.hud.popKill();
-    this.hud.killFeed('☠ ENEMY BASE DESTROYED  +5000');
+    this.hud.killFeed(`☠ ${primary ? 'ENEMY BASE' : 'OUTPOST'} DESTROYED  +${reward}`);
     this.audio.announce('base');
     this._triggerKillCam();
     this.ach.unlock('basebuster');
-    this._detonate(this.world.base.x, this.world.base.z, 12, 0, 0);
+    if (b) this._detonate(b.x, b.z, 12, 0, 0);
     this.postfx.pulseBloom(1.0);
   }
 
