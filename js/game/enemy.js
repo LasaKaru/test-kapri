@@ -31,6 +31,15 @@ const TYPES = {
   // long-range marksman: a slow, telegraphed, high-damage single shot
   sniper:  { hp: 3,   speed: 2.3, scale: 1.0,  color: 0x2f8a5a, score: 300,  dmg: 26,
              ranged: true, sniper: true, prefDist: 30, fireCd: 3.6, projSpeed: 64, volley: 1 },
+  // ---- undead horde ----
+  zombie:  { hp: 3,   speed: 2.2, scale: 1.0,  color: 0x6f8a3f, score: 130,  dmg: 12, zombie: true },
+  feral:   { hp: 2,   speed: 6.0, scale: 0.92, color: 0x7d9a4a, score: 180,  dmg: 9,  zombie: true, lunge: true },
+  lurker:  { hp: 14,  speed: 1.7, scale: 1.55, color: 0x53702f, score: 420,  dmg: 22, zombie: true },
+  // ---- armed raiders: carry a rifle and fire aimed bullets ----
+  gunner:  { hp: 4,   speed: 2.6, scale: 1.0,  color: 0x4a5a30, score: 280,  dmg: 9,
+             ranged: true, gun: true, prefDist: 20, fireCd: 1.5, projSpeed: 72, volley: 1 },
+  raider:  { hp: 6,   speed: 2.2, scale: 1.05, color: 0x5a4a2a, score: 360,  dmg: 11,
+             ranged: true, gun: true, prefDist: 16, fireCd: 0.9, projSpeed: 70, volley: 3 },
   // boss: huge, tanky, heavy melee + ranged volleys
   boss:    { hp: 110, speed: 1.8, scale: 3.0,  color: 0x8a1020, score: 3000, dmg: 32,
              ranged: true, prefDist: 9, fireCd: 3.0, projSpeed: 26, volley: 3, boss: true },
@@ -59,6 +68,8 @@ export class Enemy {
     this.isSummoner = !!def.summonCd;
     this.lunge = !!def.lunge;
     this.sniper = !!def.sniper;
+    this.zombie = !!def.zombie;
+    this.gun = !!def.gun;
     this.phases = !!def.phases;
     this.named = def.named || null;
     this.phase = 1;
@@ -88,16 +99,17 @@ export class Enemy {
   }
 
   _buildBody(def) {
-    const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.8, flatShading: true, emissive: 0x300000, emissiveIntensity: 0.4 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x2a0608 : 0x5a0d08, roughness: 0.9, flatShading: true });
-    const gearMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x140305 : 0x3a3026, roughness: 0.85, flatShading: true, metalness: 0.2 });
+    const mat = new THREE.MeshStandardMaterial({ color: def.color, roughness: this.zombie ? 0.97 : 0.8, flatShading: true, emissive: this.zombie ? 0x0a1500 : 0x300000, emissiveIntensity: this.zombie ? 0.12 : 0.4 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x2a0608 : this.zombie ? 0x2e3a1e : 0x5a0d08, roughness: 0.9, flatShading: true });
+    const gearMat = new THREE.MeshStandardMaterial({ color: this.isBoss ? 0x140305 : this.zombie ? 0x44371f : 0x3a3026, roughness: 0.85, flatShading: true, metalness: 0.2 });
     const s = def.scale;
     const box = (w, h, d, m) => new THREE.Mesh(boxGeo(w * s, h * s, d * s), m);
 
     // ---- torso: pelvis + chest + a strapped vest, with a slight forward hunch
     const upper = new THREE.Group();
     upper.position.y = 0.98 * s;
-    upper.rotation.x = 0.06; // subtle aggressive lean
+    this._restLean = this.zombie ? 0.24 : 0.06;   // zombies hunch forward
+    upper.rotation.x = this._restLean;
     this.group.add(upper);
     this._upper = upper;
     this._upperBaseY = 0.98 * s;
@@ -113,7 +125,7 @@ export class Enemy {
     head.position.y = 1.28 * s; head.castShadow = true; head.userData.zone = 'head';
     upper.add(head);
     const brow = box(0.54, 0.12, 0.12, gearMat); brow.position.set(0, 1.4 * s, 0.22 * s); upper.add(brow);
-    const eyeHex = this.ranged ? (this.isBoss ? 0xff5050 : 0xff66ff) : 0xffdd33;
+    const eyeHex = this.zombie ? 0xcdec4f : this.ranged ? (this.isBoss ? 0xff5050 : 0xff66ff) : 0xffdd33;
     const eyeMat = new THREE.MeshBasicMaterial({ color: eyeHex });
     [-0.12, 0.12].forEach((ex) => {
       const eye = new THREE.Mesh(new THREE.BoxGeometry(0.11 * s, 0.09 * s, 0.05), eyeMat);
@@ -147,8 +159,8 @@ export class Enemy {
       this.legs.push(leg); this.knees.push(knee);
     });
 
-    // ranged enemies (and summoner) carry a glowing orb (the muzzle/cast origin)
-    if (this.ranged || this.isSummoner) {
+    // ranged casters (spitter/summoner/boss) carry a glowing orb (cast origin)
+    if ((this.ranged || this.isSummoner) && !this.gun) {
       const orbHex = this.isBoss ? 0xff4030 : this.isSummoner ? 0xc080ff : 0xd86bff;
       const orb = new THREE.Mesh(
         new THREE.SphereGeometry(0.18 * s, 8, 6),
@@ -158,6 +170,23 @@ export class Enemy {
       this.group.add(orb);
       this._orb = orb;
       this._orbHex = orbHex;
+    }
+
+    // armed raiders carry a rifle, held forward in both hands, with a muzzle flash
+    if (this.gun) {
+      this.arms[0].rotation.x = -1.2; this.arms[1].rotation.x = -1.25;
+      if (this.elbows) { this.elbows[0].rotation.x = 0.7; this.elbows[1].rotation.x = 0.55; }
+      const gunMat = new THREE.MeshStandardMaterial({ color: 0x202320, roughness: 0.5, metalness: 0.5, flatShading: true });
+      const gun = new THREE.Group();
+      const body = new THREE.Mesh(boxGeo(0.12 * s, 0.13 * s, 0.7 * s), gunMat); body.position.z = 0.18 * s; gun.add(body);
+      const barrel = new THREE.Mesh(boxGeo(0.06 * s, 0.06 * s, 0.46 * s), gunMat); barrel.position.z = 0.56 * s; gun.add(barrel);
+      const mag = new THREE.Mesh(boxGeo(0.08 * s, 0.24 * s, 0.12 * s), gunMat); mag.position.set(0, -0.15 * s, 0.16 * s); gun.add(mag);
+      gun.position.set(0.16 * s, 0.96 * s, 0.42 * s);
+      this.group.add(gun); this._gun = gun;
+      const flash = new THREE.Mesh(new THREE.SphereGeometry(0.17 * s, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0, depthWrite: false }));
+      flash.position.set(0.16 * s, 0.96 * s, 1.22 * s);
+      this.group.add(flash);
+      this._muzzleFlash = flash; this._orb = flash; // shots originate from the muzzle
     }
 
     // exploder: glowing volatile core
@@ -286,12 +315,17 @@ export class Enemy {
 
     if (this._flash > 0) {
       this._flash -= dt;
-      if (this._flash <= 0) { this._mat.emissive.setHex(0x300000); this._mat.emissiveIntensity = 0.4; }
+      if (this._flash <= 0) { this._mat.emissive.setHex(this.zombie ? 0x0a1500 : 0x300000); this._mat.emissiveIntensity = this.zombie ? 0.12 : 0.4; }
+    }
+    // muzzle flash decay for armed raiders
+    if (this._muzzleFlash && this._flashT > 0) {
+      this._flashT -= dt;
+      this._muzzleFlash.material.opacity = Math.max(0, this._flashT / 0.05);
     }
     // hit flinch — brief upper-body jerk back, easing to the resting lean
     if (this._upper) {
-      if (this._flinch > 0) { this._flinch -= dt; this._upper.rotation.x = 0.06 - 0.28 * (this._flinch / 0.18); }
-      else this._upper.rotation.x = 0.06;
+      if (this._flinch > 0) { this._flinch -= dt; this._upper.rotation.x = this._restLean - 0.28 * (this._flinch / 0.18); }
+      else this._upper.rotation.x = this._restLean;
     }
     if (this.attackCd > 0) this.attackCd -= dt;
     if (this.fireCd > 0) this.fireCd -= dt;
@@ -365,6 +399,7 @@ export class Enemy {
       if (this.fireCd <= 0 && dist < this.prefDist * 2.2) {
         this.fireCd = this.def.fireCd;
         result.shots = this._buildShots(target);
+        if (this._muzzleFlash) { this._flashT = 0.05; this._muzzleFlash.material.opacity = 1; }
       }
     } else if (this.explode) {
       moveDir = 1; // always rush
@@ -410,15 +445,22 @@ export class Enemy {
   // bent arms, a vertical bounce, hip sway and a torso counter-twist for a
   // natural, weighty human gait.
   _animWalk(dt) {
-    this._walk = (this._walk || 0) + dt * this.speed * 1.7;
+    this._walk = (this._walk || 0) + dt * this.speed * (this.zombie ? 1.3 : 1.7);
     const w = this._walk, sc = this.def.scale;
-    const swing = Math.sin(w) * 0.6;
+    const swing = Math.sin(w) * (this.zombie ? 0.42 : 0.6);
     this.legs[0].rotation.x = swing; this.legs[1].rotation.x = -swing;
     if (this.knees) {
-      this.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI * 0.5)) * 1.05;
-      this.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI * 0.5)) * 1.05;
+      const kb = this.zombie ? 0.6 : 1.05;
+      this.knees[0].rotation.x = Math.max(0, Math.sin(w + Math.PI * 0.5)) * kb;
+      this.knees[1].rotation.x = Math.max(0, Math.sin(w - Math.PI * 0.5)) * kb;
     }
-    if (!this.ranged) {
+    if (this.zombie) {
+      // arms outstretched, reaching, with a slow side-to-side loll
+      const loll = Math.sin(w * 0.7) * 0.12;
+      this.arms[0].rotation.x = -1.35 + Math.sin(w) * 0.08; this.arms[1].rotation.x = -1.4 - Math.sin(w) * 0.08;
+      this.arms[0].rotation.z = 0.2 + loll; this.arms[1].rotation.z = -0.2 + loll;
+      if (this.elbows) { this.elbows[0].rotation.x = 0.5; this.elbows[1].rotation.x = 0.45; }
+    } else if (!this.ranged) {
       this.arms[0].rotation.x = -swing * 0.95; this.arms[1].rotation.x = swing * 0.95;
       this.arms[0].rotation.z = 0.06; this.arms[1].rotation.z = -0.06; // slight outward set
       if (this.elbows) {
@@ -427,10 +469,10 @@ export class Enemy {
       }
     }
     if (this._upper) {
-      this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * 0.07 * sc; // vertical bounce
-      this._upper.position.x = Math.sin(w) * 0.03 * sc;                              // hip sway
-      this._upper.rotation.y = Math.sin(w) * 0.09;                                   // torso counter-twist
-      this._upper.rotation.z = Math.sin(w + Math.PI / 2) * 0.045;                    // shoulder roll
+      this._upper.position.y = this._upperBaseY + Math.abs(Math.sin(w)) * (this.zombie ? 0.05 : 0.07) * sc;
+      this._upper.position.x = Math.sin(w) * 0.03 * sc;
+      this._upper.rotation.y = Math.sin(w * (this.zombie ? 0.6 : 1)) * (this.zombie ? 0.13 : 0.09);
+      this._upper.rotation.z = Math.sin(w + Math.PI / 2) * (this.zombie ? 0.07 : 0.045);
     }
   }
 
@@ -447,7 +489,10 @@ export class Enemy {
     const ease = (o, t) => { if (o) o.rotation.x += (t - o.rotation.x) * k; };
     ease(this.legs[0], 0); ease(this.legs[1], 0);
     if (this.knees) { ease(this.knees[0], 0.05); ease(this.knees[1], 0.05); }
-    if (!this.ranged) {
+    if (this.zombie) {
+      ease(this.arms[0], -1.35); ease(this.arms[1], -1.4);   // keep reaching while idle
+      if (this.elbows) { ease(this.elbows[0], 0.5); ease(this.elbows[1], 0.45); }
+    } else if (!this.ranged) {
       ease(this.arms[0], 0); ease(this.arms[1], 0);
       if (this.elbows) { ease(this.elbows[0], 0.3); ease(this.elbows[1], 0.3); }
     }
@@ -520,27 +565,30 @@ export class WaveManager {
       const bossType = (w % 10 === 0) ? 'warden' : 'boss';
       this.spawnQueue.push(bossType);
       for (let i = 0; i < 3 + w; i++) this.spawnQueue.push('grunt');
+      for (let i = 0; i < 3 + w; i++) this.spawnQueue.push('zombie');
       for (let i = 0; i < Math.floor(w / 3); i++) this.spawnQueue.push('spitter');
+      for (let i = 0; i < Math.floor(w / 4); i++) this.spawnQueue.push('gunner');
       if (bossType === 'warden') for (let i = 0; i < Math.floor(w / 5); i++) this.spawnQueue.push('stalker');
     } else {
-      const grunts = 4 + w * 2;
-      const runners = Math.max(0, Math.floor((w - 1) * 1.5));
+      const grunts = 3 + w;
+      const zombies = 4 + Math.floor(w * 1.6);          // the bulk of the horde
+      const runners = Math.max(0, Math.floor((w - 1) * 1.2));
+      const ferals = w >= 3 ? Math.floor((w - 2) / 2) : 0;
       const brutes = w >= 3 ? Math.floor(w / 3) : 0;
+      const lurkers = w >= 5 ? Math.floor((w - 4) / 3) : 0;
       const spitters = w >= 2 ? Math.floor(w / 2) : 0;
+      const gunners = w >= 3 ? Math.floor((w - 2) / 2) : 0;
+      const raiders = w >= 6 ? Math.floor((w - 5) / 3) : 0;
       const exploders = w >= 3 ? Math.floor((w - 2) / 2) : 0;
       const shielded = w >= 4 ? Math.floor((w - 3) / 2) : 0;
       const stalkers = w >= 4 ? Math.floor((w - 3) / 2) : 0;
       const snipers = w >= 5 ? Math.floor((w - 4) / 3) : 0;
       const summoners = w >= 6 ? Math.floor(w / 6) : 0;
-      for (let i = 0; i < grunts; i++) this.spawnQueue.push('grunt');
-      for (let i = 0; i < runners; i++) this.spawnQueue.push('runner');
-      for (let i = 0; i < brutes; i++) this.spawnQueue.push('brute');
-      for (let i = 0; i < spitters; i++) this.spawnQueue.push('spitter');
-      for (let i = 0; i < exploders; i++) this.spawnQueue.push('exploder');
-      for (let i = 0; i < shielded; i++) this.spawnQueue.push('shielded');
-      for (let i = 0; i < stalkers; i++) this.spawnQueue.push('stalker');
-      for (let i = 0; i < snipers; i++) this.spawnQueue.push('sniper');
-      for (let i = 0; i < summoners; i++) this.spawnQueue.push('summoner');
+      const add = (type, n) => { for (let i = 0; i < n; i++) this.spawnQueue.push(type); };
+      add('grunt', grunts); add('zombie', zombies); add('runner', runners); add('feral', ferals);
+      add('brute', brutes); add('lurker', lurkers); add('spitter', spitters);
+      add('gunner', gunners); add('raider', raiders); add('exploder', exploders);
+      add('shielded', shielded); add('stalker', stalkers); add('sniper', snipers); add('summoner', summoners);
     }
     // difficulty scales the head-count; the boss (if any) is always kept first
     const sp = this.difficulty.spawn;

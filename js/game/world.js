@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Critters } from './critters.js';
 import { plantFlora } from './flora.js';
+import { plantVillage, updateSmoke } from './village.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -28,7 +29,7 @@ export const MAPS = {
     name: 'Verdant Plains', topo: 'Plains',
     desc: 'Gentle golden grassland. Open sightlines and light cover — a fair fight.',
     ground: 0x4f7d1e, amp: 1.8, freq: 0.05, ridge: 0, lift: 0,
-    treeDensity: 150, rockDensity: 44, grass: 700, fogFar: 240,
+    treeDensity: 220, rockDensity: 60, grass: 1200, fogFar: 205,
     lakes: [{ x: -58, z: 38, r: 18 }, { x: 60, z: -10, r: 16 }],
     preview: ['#1b2c08', '#7d7a1c', '#4f7d1e'],
   },
@@ -36,7 +37,7 @@ export const MAPS = {
     name: 'Ashen Highlands', topo: 'Highlands',
     desc: 'Raised rugged hills and broken plateaus. More rock, less cover, rolling elevation.',
     ground: 0x6a6a3a, amp: 6.5, freq: 0.055, ridge: 0.35, lift: 2.5,
-    treeDensity: 90, rockDensity: 95, grass: 420, fogFar: 215,
+    treeDensity: 130, rockDensity: 110, grass: 560, fogFar: 215,
     lakes: [{ x: 64, z: 30, r: 14 }],
     preview: ['#3a4426', '#8a7a3a', '#6a6a3a'],
   },
@@ -44,7 +45,7 @@ export const MAPS = {
     name: 'Mire Lowlands', topo: 'Lowlands',
     desc: 'Sunken wetlands and broad water. Heavy fog, close quarters, plenty of wading.',
     ground: 0x3c5a26, amp: 1.3, freq: 0.05, ridge: 0, lift: -1.1,
-    treeDensity: 125, rockDensity: 30, grass: 820, fogFar: 150,
+    treeDensity: 185, rockDensity: 40, grass: 980, fogFar: 150,
     lakes: [{ x: -40, z: 30, r: 26 }, { x: 45, z: 20, r: 24 }, { x: 8, z: 70, r: 22 }, { x: -55, z: -32, r: 20 }],
     preview: ['#1a2614', '#2f5a4a', '#3c5a26'],
   },
@@ -52,7 +53,7 @@ export const MAPS = {
     name: 'Titan Peaks', topo: 'Mountains',
     desc: 'Steep ridges ringing a fighting valley. Verticality, chokepoints and snow.',
     ground: 0x5a5e52, amp: 12, freq: 0.07, ridge: 0.7, lift: 1.5,
-    treeDensity: 70, rockDensity: 125, grass: 300, fogFar: 205,
+    treeDensity: 105, rockDensity: 140, grass: 420, fogFar: 205,
     lakes: [{ x: 58, z: -40, r: 14 }],
     preview: ['#2a3550', '#8a90a0', '#5a5e52'],
   },
@@ -71,6 +72,8 @@ export class World {
     this.climbVolumes = []; // {x,z,r,baseY,top} — ladder zones on watchtowers
     this.platforms = [];    // {x,z,hw,y} — climbable tower decks you can stand on
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
+    this.destructibles = []; // crate stacks {group,x,z,collider,crates:Set}
+    this._crateMeshes = []; // flat list of crate meshes for raycasting
     this.bounds = 130;
     this._clouds = [];
     this._time = 0;
@@ -98,7 +101,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this._clouds = []; this._waterMats = []; this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageSmoke = null; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -111,16 +114,123 @@ export class World {
     this._buildMountains();
     this._plantForest();
     this._buildTown();
+    this._buildVillage();
     this._buildWater();
     this._scatterRocks();
     this._scatterGrass();
     this._scatterFlora();
     this._buildBase();
     this._buildTowers();
+    this._buildAtmosphere();
     this._critters = new Critters(this.root, this);
   }
 
-  // ---------- Climbable watchtowers (vantage points) ----------
+  // ---------- Atmospheric set-dressing (ported from the HELA reference) ----------
+  // A distant ruined-city skyline lost in the haze, mossy stone monoliths for
+  // cover, drooping cables, and drifting low mist planes — all tuned for depth.
+  _buildAtmosphere() {
+    this._mist = [];
+    this._buildSkyline(50);    // distant towers fading into the fog
+    this._buildMonoliths(12);  // moss-capped stone blocks (cover)
+    this._buildCables(9);      // drooping power lines
+    this._buildMist(12);       // low drifting volumetric haze
+  }
+
+  // 50 distant non-colliding towers in a far ring; the fog fades them to silhouettes
+  _buildSkyline(n) {
+    const greys = [0x8a9088, 0x7e857b, 0x959c92, 0x747b71];
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
+    const inst = new THREE.InstancedMesh(geo, mat, n);
+    const dummy = new THREE.Object3D(), col = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = this.bounds * 1.15 + Math.random() * this.bounds * 0.5; // ~150..215, deep in the haze
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const h = 38 + Math.random() * 80, w = 8 + Math.random() * 16, d = 8 + Math.random() * 16;
+      dummy.position.set(x, h / 2, z); dummy.scale.set(w, h, d); dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+      inst.setColorAt(i, col.setHex(greys[i % greys.length]));
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.frustumCulled = false; inst.castShadow = false; inst.receiveShadow = false;
+    this.root.add(inst);
+  }
+
+  // 12 big moss-capped concrete monoliths scattered as cover (colliders)
+  _buildMonoliths(n) {
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a6356, roughness: 1, flatShading: true });
+    const mossMat = new THREE.MeshStandardMaterial({ color: 0x4f7236, roughness: 1, flatShading: true });
+    let made = 0, guard = 0;
+    while (made < n && guard < 200) {
+      guard++;
+      const x = (Math.random() - 0.5) * this.bounds * 1.5, z = (Math.random() - 0.5) * this.bounds * 1.5;
+      if (Math.hypot(x, z - 30) < 18) continue;          // keep the spawn clearing open
+      if (this.waterAt(x, z)) continue;
+      const w = 3.5 + Math.random() * 4, h = 4 + Math.random() * 7, d = 3.5 + Math.random() * 4;
+      const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = (Math.random() - 0.5) * 0.7;
+      const block = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stoneMat);
+      block.position.y = h / 2; block.castShadow = true; block.receiveShadow = true; g.add(block);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(w * 0.98, 0.5, d * 0.98), mossMat);
+      cap.position.y = h + 0.2; cap.castShadow = true; g.add(cap);
+      this.root.add(g);
+      this.colliders.push({ x, z, r: Math.max(w, d) * 0.5 });
+      made++;
+    }
+  }
+
+  // 9 drooping cables strung between tall anchors (watchtowers + a few pylons)
+  _buildCables(n) {
+    const anchors = (this.towers || []).map((t) => new THREE.Vector3(t.x, t.topY + 0.2, t.z));
+    // a couple of utility pylons to give the cables something to span
+    const pylonMat = new THREE.MeshStandardMaterial({ color: 0x3a352c, roughness: 1, flatShading: true });
+    const pyspots = [[-58, 10], [-30, -40], [40, -60], [62, 10], [10, 64]];
+    for (const [px, pz] of pyspots) {
+      if (this.waterAt(px, pz)) continue;
+      const base = Math.max(0, this.heightAt(px, pz)), ph = 13;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, ph, 5), pylonMat);
+      pole.position.set(px, base + ph / 2, pz); pole.castShadow = true; this.root.add(pole);
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.2, 0.2), pylonMat);
+      cross.position.set(px, base + ph - 1, pz); this.root.add(cross);
+      this.colliders.push({ x: px, z: pz, r: 0.5 });
+      anchors.push(new THREE.Vector3(px, base + ph - 1, pz));
+    }
+    const cableMat = new THREE.LineBasicMaterial({ color: 0x14140f });
+    let made = 0;
+    for (let i = 0; i < anchors.length && made < n; i++) {
+      const a = anchors[i], b = anchors[(i + 1) % anchors.length];
+      if (a.equals(b) || a.distanceTo(b) > 80) continue;
+      const sag = 2.5 + Math.random() * 2.5, pts = [];
+      for (let s = 0; s <= 12; s++) { const t = s / 12; const p = a.clone().lerp(b, t); p.y -= Math.sin(t * Math.PI) * sag; pts.push(p); }
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cableMat);
+      line.frustumCulled = false; this.root.add(line);
+      made++;
+    }
+  }
+
+  // 12 drifting low haze sprites — the signature "hazy" depth layer
+  _buildMist(n) {
+    if (!this._mistTex) {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+      g.addColorStop(0, 'rgba(226,224,206,0.85)'); g.addColorStop(1, 'rgba(226,224,206,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+      this._mistTex = new THREE.CanvasTexture(c);
+    }
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.SpriteMaterial({ map: this._mistTex, transparent: true, opacity: 0.42, depthWrite: false, fog: true });
+      const sp = new THREE.Sprite(mat);
+      const size = 26 + Math.random() * 34;
+      sp.scale.set(size, size * 0.55, 1);
+      sp.position.set((Math.random() - 0.5) * this.bounds * 1.7, 2.5 + Math.random() * 5, (Math.random() - 0.5) * this.bounds * 1.7);
+      sp.frustumCulled = false;
+      this.root.add(sp);
+      this._mist.push({ sp, drift: (Math.random() - 0.5) * 0.6 + 0.4, phase: Math.random() * 6.28, sy: 0.4 + Math.random() * 0.6 });
+    }
+  }
+
   // Wooden towers with a ladder you climb (hold W / Space in the ladder zone)
   // up to a railed deck — a tactical sniping perch enemies can't follow you onto.
   _buildTowers() {
@@ -282,7 +392,7 @@ export class World {
     this.root.add(sky);
     this._skyU = uniforms;
 
-    scene.fog = new THREE.Fog(0xc09a3a, 55, 230);
+    scene.fog = new THREE.Fog(0xdccaa2, 40, 205);   // pale warm haze, brought in for depth
     this._fog = scene.fog;
 
     // sun disc + glow
@@ -337,7 +447,7 @@ export class World {
   // ---------- Lights ----------
   _buildLights() {
     const scene = this.scene;
-    const hemi = new THREE.HemisphereLight(0xfff0b0, 0x1f3a10, 0.8);
+    const hemi = new THREE.HemisphereLight(0xfff3c8, 0x3a5520, 0.8);  // warm sky + brighter green bounce
     this.root.add(hemi);
     this._hemi = hemi;
     const sun = new THREE.DirectionalLight(0xffe39a, 2.2);
@@ -395,9 +505,10 @@ export class World {
     const lerp = (a, b, t) => a + (b - a) * t;
     const C = (hex) => new THREE.Color(hex);
 
-    // keyframe palettes
-    const goldT = { top: C(0x2a4a6e), mid: C(0xb59428), bot: C(0xe8951f), fog: C(0xc09a3a), light: C(0xffe39a), li: 2.0, hemi: 0.8 };
-    const dayK = { top: C(0x3f7fd0), mid: C(0xbfe0ff), bot: C(0xeaf4ff), fog: C(0xc6d8e6), light: C(0xfff4d8), li: 2.5, hemi: 0.95 };
+    // keyframe palettes — tuned for a bright, hazy, warm-morning forest look:
+    // pale warm haze on the horizon, luminous fill light, soft bright shadows.
+    const goldT = { top: C(0x6f8db0), mid: C(0xd9c293), bot: C(0xf2dcad), fog: C(0xdccaa2), light: C(0xffe9bb), li: 2.15, hemi: 1.2 };
+    const dayK = { top: C(0x6fa6dd), mid: C(0xd2e7f4), bot: C(0xeff7ff), fog: C(0xdde8ec), light: C(0xfff5e6), li: 2.5, hemi: 1.25 };
     // Night keeps a bright blue moonlight floor so you can still see & fight.
     const nightK = { top: C(0x16264f), mid: C(0x33507f), bot: C(0x5a7aa8), fog: C(0x33486f), light: C(0xbcd4ff), li: 1.85, hemi: 1.05 };
 
@@ -730,6 +841,24 @@ export class World {
     return g;
   }
 
+  // a mossy fallen log lying on the forest floor (cheap cover detail)
+  _makeLog() {
+    const g = new THREE.Group();
+    const len = 2.6 + Math.random() * 3.2, r = 0.26 + Math.random() * 0.2;
+    const bark = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0x5c3d24 : 0x4a3320, roughness: 1, flatShading: true });
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.12, len, 7), bark);
+    log.rotation.z = Math.PI / 2; log.position.y = r; log.castShadow = true; log.receiveShadow = true; g.add(log);
+    // moss patch along the top
+    const moss = new THREE.Mesh(new THREE.BoxGeometry(len * 0.78, 0.1, r * 1.5), new THREE.MeshStandardMaterial({ color: 0x4f7236, roughness: 1, flatShading: true }));
+    moss.position.y = r + r * 0.55; g.add(moss);
+    // a couple of broken branch stubs
+    for (let i = 0; i < 2; i++) {
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.6 + Math.random() * 0.5, 5), bark);
+      br.position.set((Math.random() - 0.5) * len * 0.7, r + 0.2, 0); br.rotation.set(Math.random(), 0, Math.random() * 0.8 - 0.4); g.add(br);
+    }
+    return g;
+  }
+
   _plantForest() {
     // mix of conifers and broadleaf trees, weighted by biome
     const broadleafChance = { plains: 0.4, lowlands: 0.5, highlands: 0.15, mountains: 0.08 }[this.mapId] ?? 0.3;
@@ -749,7 +878,7 @@ export class World {
       if (dist < this.bounds + 10) this.colliders.push({ x, z, r: 0.6 * s });
     }
     // scatter low bushes for ground cover (no collision — you can push through)
-    const bushes = Math.round(this.map.treeDensity * 0.6);
+    const bushes = Math.round(this.map.treeDensity * 0.9);
     for (let i = 0; i < bushes; i++) {
       const ang = Math.random() * Math.PI * 2;
       const dist = 10 + Math.random() * 135;
@@ -757,9 +886,20 @@ export class World {
       if (Math.abs(x) < 4 && Math.abs(z) < 100) continue;
       if (this.waterAt(x, z)) continue;
       const bush = this._makeBush();
-      bush.scale.setScalar(0.7 + Math.random() * 0.8);
+      bush.scale.setScalar(0.7 + Math.random() * 0.9);
       bush.position.set(x, 0, z);
       this.root.add(bush);
+    }
+    // mossy fallen logs strewn about (wild, overgrown feel)
+    const logs = 14;
+    for (let i = 0; i < logs; i++) {
+      const ang = Math.random() * Math.PI * 2, dist = 14 + Math.random() * 120;
+      const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
+      if ((Math.abs(x) < 5 && Math.abs(z) < 100) || this.waterAt(x, z)) continue;
+      const log = this._makeLog();
+      log.position.set(x, Math.max(0, this.heightAt(x, z)), z);
+      log.rotation.y = Math.random() * Math.PI;
+      this.root.add(log);
     }
   }
 
@@ -806,6 +946,24 @@ export class World {
       const fx = Math.cos(ang) * r, fz = Math.sin(ang) * r;
       if (!this.waterAt(fx, fz)) this._fencePost(fx, fz);
     }
+  }
+
+  // A procedural medieval hamlet clustered around a dry anchor point. Grounds
+  // to terrain, registers solid colliders, and exposes its centre as
+  // this.villageAnchor so the medieval landmark can be dropped in its midst.
+  _buildVillage() {
+    const cands = [[-66, -70], [70, -66], [-78, 44], [62, 60], [-58, 78]];
+    let anchor = null;
+    for (const [x, z] of cands) {
+      if (this.waterAt(x, z) || this.waterAt(x + 12, z) || this.waterAt(x, z + 12)) continue;
+      anchor = { x, z }; break;
+    }
+    if (!anchor) anchor = { x: cands[0][0], z: cands[0][1] };
+    this.villageAnchor = anchor;
+    const { group, colliders, smoke } = plantVillage(this, anchor.x, anchor.z, this._seed * 3 + 17);
+    this.root.add(group);
+    this._villageSmoke = smoke;
+    for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
   }
 
   // hollow, enterable building: 4 walls (doorway gap on the +z side), floor, roof
@@ -890,18 +1048,70 @@ export class World {
 
   _crateStack(x, z) {
     const g = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 1, flatShading: true });
     const layout = [[0, 0, 0], [1.05, 0, 0], [0.5, 1.05, 0.2], [0, 0, 1.05]];
+    const collider = { x, z, r: 1.4 };
+    const entry = { group: g, x, z, collider, crates: new Set() };
     layout.forEach(([cx, cy, cz]) => {
       const s = 0.9 + Math.random() * 0.2;
+      // per-crate material so a hit/break can tint just that crate
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 1, flatShading: true });
       const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat);
       crate.position.set(cx, cy + s / 2, cz);
       crate.rotation.y = Math.random() * 0.3;
       crate.castShadow = true; crate.receiveShadow = true; g.add(crate);
+      crate.userData.dx = { hp: 5, maxHp: 5, stack: entry, size: s };
+      entry.crates.add(crate); this._crateMeshes.push(crate);
     });
     g.position.set(x, 0, z);
     this.root.add(g);
-    this.colliders.push({ x, z, r: 1.4 });
+    this.colliders.push(collider);
+    this.destructibles.push(entry);
+  }
+
+  // raycast the player's bullets against crate meshes (nearest hit), or null
+  raycastDestructibles(raycaster, origin, dir, far) {
+    if (!this._crateMeshes.length) return null;
+    raycaster.set(origin, dir); raycaster.far = far;
+    const hits = raycaster.intersectObjects(this._crateMeshes, false);
+    if (hits.length) return { mesh: hits[0].object, point: hits[0].point, distance: hits[0].distance };
+    return null;
+  }
+
+  // damage a crate; returns { broken, x, y, z } when it shatters (else null)
+  damageCrate(mesh, dmg) {
+    const d = mesh.userData.dx; if (!d) return null;
+    d.hp -= dmg;
+    mesh.material.emissive = mesh.material.emissive || new THREE.Color();
+    mesh.material.color.offsetHSL(0, 0, -0.04 * dmg / d.maxHp); // darken as it takes damage
+    if (d.hp > 0) return null;
+    return this._breakCrate(mesh);
+  }
+
+  _breakCrate(mesh) {
+    const d = mesh.userData.dx, st = d.stack;
+    const wp = new THREE.Vector3(); mesh.getWorldPosition(wp);
+    if (mesh.parent) mesh.parent.remove(mesh);
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) mesh.material.dispose();
+    const i = this._crateMeshes.indexOf(mesh); if (i >= 0) this._crateMeshes.splice(i, 1);
+    st.crates.delete(mesh);
+    // once the whole stack is gone, drop its collider so you can walk/run through
+    if (st.crates.size === 0) {
+      const ci = this.colliders.indexOf(st.collider); if (ci >= 0) this.colliders.splice(ci, 1);
+    }
+    return { broken: true, x: wp.x, y: wp.y, z: wp.z };
+  }
+
+  // blast damage to crates within radius of a point (chained from explosions)
+  damageCratesInRadius(x, z, r, dmg) {
+    const out = [];
+    const r2 = r * r;
+    for (const m of this._crateMeshes.slice()) {
+      const wp = new THREE.Vector3(); m.getWorldPosition(wp);
+      const dx = wp.x - x, dz = wp.z - z;
+      if (dx * dx + dz * dz <= r2) { const br = this.damageCrate(m, dmg); if (br) out.push(br); }
+    }
+    return out;
   }
 
   _barrel(x, z) {
@@ -970,7 +1180,7 @@ export class World {
   }
 
   _scatterGrass() {
-    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x86b32a, roughness: 1, flatShading: true, side: THREE.DoubleSide });
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x8cba36, roughness: 1, flatShading: true, side: THREE.DoubleSide });
     // real-time wind: sway each blade's top by world position + time
     bladeMat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this._windTime = (this._windTime || { value: 0 });
@@ -982,8 +1192,8 @@ export class World {
          transformed.x += sway * max(0.0, position.y);`
       );
     };
-    const blade = new THREE.ConeGeometry(0.16, 1.0, 3);
-    blade.translate(0, 0.5, 0); // pivot at base so the top sways
+    const blade = new THREE.ConeGeometry(0.2, 1.5, 3);   // taller, lusher blades
+    blade.translate(0, 0.75, 0); // pivot at base so the top sways
     const mesh = new THREE.InstancedMesh(blade, bladeMat, this.map.grass);
     const dummy = new THREE.Object3D();
     for (let i = 0; i < this.map.grass; i++) {
@@ -991,7 +1201,7 @@ export class World {
       const gx = Math.cos(ang) * dist, gz = Math.sin(ang) * dist;
       dummy.position.set(gx, 0, gz);
       dummy.rotation.y = Math.random() * Math.PI;
-      dummy.scale.setScalar(this.waterAt(gx, gz) ? 0 : 0.6 + Math.random());
+      dummy.scale.set(0.8 + Math.random() * 0.6, this.waterAt(gx, gz) ? 0 : 0.75 + Math.random() * 1.25, 0.8 + Math.random() * 0.6);
       dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     }
     mesh.frustumCulled = false;
@@ -1072,6 +1282,17 @@ export class World {
     this._time += dt;
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
+    if (this._villageSmoke) updateSmoke(this._villageSmoke, dt);
+    // drifting low haze — wraps around the play area
+    if (this._mist) {
+      const lim = this.bounds * 0.95;
+      for (const m of this._mist) {
+        m.sp.position.x += m.drift * dt;
+        m.sp.position.y += Math.sin(this._time * m.sy + m.phase) * 0.004;
+        if (m.sp.position.x > lim) m.sp.position.x = -lim;
+        else if (m.sp.position.x < -lim) m.sp.position.x = lim;
+      }
+    }
     // enemy base: spin the core, flash on hit, collapse when destroyed
     const b = this.base;
     if (b) {
