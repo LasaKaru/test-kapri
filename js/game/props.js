@@ -43,8 +43,11 @@ export class Props {
     const root = g.scene || (g.scenes && g.scenes[0]);
     if (!root) return;
     root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = true; } });
-    // Sketchfab/FBX exports are Z-up — rotate to Y-up
-    root.rotation.x = (opts.rotX != null ? opts.rotX : -Math.PI / 2);
+    // glTF/GLB is Y-up by spec, and Sketchfab bakes its own Z-up→Y-up matrix
+    // into the model's root node, so the model already loads upright. Only
+    // rotate if a caller explicitly asks (rotX); adding one by default would
+    // double-rotate and tip the model onto its side.
+    if (opts.rotX) root.rotation.x = opts.rotX;
 
     const wrap = new THREE.Group();
     wrap.add(root);
