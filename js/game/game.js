@@ -600,18 +600,30 @@ class Game {
     }
   }
 
-  // Place the static medieval diorama as a distant landmark. Tries a few
-  // candidate spots, picks a dry one off the spawn lane, grounds it to terrain.
+  // Place the static medieval diorama as a landmark overlooking the procedural
+  // village. Sits just outside the hamlet (offset outward from map centre) so
+  // the two read as neighbours rather than overlapping.
   _placeLandmarks() {
     if (!this.props) return;
     const w = this.world;
-    const cands = [
-      { x: -64, z: -78 }, { x: 70, z: -70 }, { x: -82, z: 40 }, { x: 60, z: 64 },
-    ];
-    let spot = cands[0];
-    for (const c of cands) {
-      if (w.waterAt && (w.waterAt(c.x, c.z) || w.waterAt(c.x + 16, c.z) || w.waterAt(c.x, c.z + 16))) continue;
-      spot = c; break;
+    let spot;
+    const anchor = w.villageAnchor;
+    if (anchor) {
+      const d = Math.hypot(anchor.x, anchor.z) || 1;
+      const ux = anchor.x / d, uz = anchor.z / d; // outward from centre
+      const off = 30;
+      spot = { x: anchor.x + ux * off, z: anchor.z + uz * off };
+      // if that lands in water or out of bounds, fall back to hugging the anchor
+      if ((w.waterAt && w.waterAt(spot.x, spot.z)) || Math.hypot(spot.x, spot.z) > w.bounds - 20) {
+        spot = { x: anchor.x + ux * 18, z: anchor.z + uz * 18 };
+      }
+    } else {
+      const cands = [{ x: -64, z: -78 }, { x: 70, z: -70 }, { x: -82, z: 40 }, { x: 60, z: 64 }];
+      spot = cands[0];
+      for (const c of cands) {
+        if (w.waterAt && (w.waterAt(c.x, c.z) || w.waterAt(c.x + 16, c.z) || w.waterAt(c.x, c.z + 16))) continue;
+        spot = c; break;
+      }
     }
     const gy = (w.heightAt ? Math.max(0, w.heightAt(spot.x, spot.z)) : 0);
     this.props.loadLandmark('assets/models/medieval.glb', {

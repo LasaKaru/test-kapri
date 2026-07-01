@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Critters } from './critters.js';
 import { plantFlora } from './flora.js';
+import { plantVillage } from './village.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -113,6 +114,7 @@ export class World {
     this._buildMountains();
     this._plantForest();
     this._buildTown();
+    this._buildVillage();
     this._buildWater();
     this._scatterRocks();
     this._scatterGrass();
@@ -944,6 +946,23 @@ export class World {
       const fx = Math.cos(ang) * r, fz = Math.sin(ang) * r;
       if (!this.waterAt(fx, fz)) this._fencePost(fx, fz);
     }
+  }
+
+  // A procedural medieval hamlet clustered around a dry anchor point. Grounds
+  // to terrain, registers solid colliders, and exposes its centre as
+  // this.villageAnchor so the medieval landmark can be dropped in its midst.
+  _buildVillage() {
+    const cands = [[-66, -70], [70, -66], [-78, 44], [62, 60], [-58, 78]];
+    let anchor = null;
+    for (const [x, z] of cands) {
+      if (this.waterAt(x, z) || this.waterAt(x + 12, z) || this.waterAt(x, z + 12)) continue;
+      anchor = { x, z }; break;
+    }
+    if (!anchor) anchor = { x: cands[0][0], z: cands[0][1] };
+    this.villageAnchor = anchor;
+    const { group, colliders } = plantVillage(this, anchor.x, anchor.z, this._seed * 3 + 17);
+    this.root.add(group);
+    for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
   }
 
   // hollow, enterable building: 4 walls (doorway gap on the +z side), floor, roof
