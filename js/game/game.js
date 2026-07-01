@@ -1349,18 +1349,22 @@ class Game {
     this.postfx.pulseBloom(0.6);
   }
 
-  // descend into a vault; on first entry, a guardian wakes to defend the hoard
-  // (skipped for co-op clients — the host owns enemy spawning, not us)
+  // descend into a vault; on first entry, its guardian(s) wake to defend the
+  // hoard (skipped for co-op clients — the host owns enemy spawning, not us)
   _enterVault(hatch) {
     this._teleport(this.underground.enter(hatch));
     const v = hatch.vault;
-    const THEME_LABEL = { treasury: 'TREASURY', crypt: 'CRYPT', mine: 'OLD MINE' };
+    const THEME_LABEL = { treasury: 'TREASURY', crypt: 'CRYPT', mine: 'OLD MINE', sanctum: 'SANCTUM' };
     this.hud.killFeed(`▼ Descended into the ${THEME_LABEL[v.theme] || 'VAULT'}`);
     const isClient = this.coopMode && !this.coopHost;
     if (!isClient && !this.pvpMode && !v.guardianSpawned && !v.looted && this.waves && this.waves.spawnAt) {
       v.guardianSpawned = true;
-      this.waves.spawnAt('shielded', v.guardianSpot.x, v.guardianSpot.z);
-      this.hud.killFeed('⚠ A guardian stirs in the dark…');
+      const types = v.guardianTypes || ['shielded'];
+      types.forEach((type, i) => {
+        const spread = (i - (types.length - 1) / 2) * 1.8; // fan multiple guardians out so they don't stack
+        this.waves.spawnAt(type, v.guardianSpot.x + spread, v.guardianSpot.z);
+      });
+      this.hud.killFeed(types.length > 1 ? '⚠ Guardians stir in the dark…' : '⚠ A guardian stirs in the dark…');
     }
   }
 

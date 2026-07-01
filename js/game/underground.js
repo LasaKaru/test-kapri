@@ -74,13 +74,20 @@ function buildHoard() {
   return g;
 }
 
-// Three vault themes so hatches don't all lead to the same stone box.
-// Each picks a palette and adds a few themed dressing props inside the room.
+// Vault themes so hatches don't all lead to the same stone box. `weight`
+// biases the random pick — sanctum is rare and tougher, with better loot.
 const THEMES = [
-  { id: 'treasury', stone: 0x6a6258, dark: 0x4c463d, floor: 0x585149 },
-  { id: 'crypt',     stone: 0x4a4a52, dark: 0x36363e, floor: 0x3a3840 },
-  { id: 'mine',      stone: 0x5a4a3a, dark: 0x3e3226, floor: 0x4a3d2e },
+  { id: 'treasury', stone: 0x6a6258, dark: 0x4c463d, floor: 0x585149, weight: 3 },
+  { id: 'crypt',     stone: 0x4a4a52, dark: 0x36363e, floor: 0x3a3840, weight: 3 },
+  { id: 'mine',      stone: 0x5a4a3a, dark: 0x3e3226, floor: 0x4a3d2e, weight: 3 },
+  { id: 'sanctum',   stone: 0x3a2438, dark: 0x241628, floor: 0x2c1a2e, weight: 1 },
 ];
+function pickTheme() {
+  const total = THEMES.reduce((s, t) => s + t.weight, 0);
+  let r = Math.random() * total;
+  for (const t of THEMES) { if ((r -= t.weight) <= 0) return t; }
+  return THEMES[0];
+}
 
 function dressTreasury(vg, cx, cz, half, floorY, rnd) {
   // rolled rugs + a couple of urns flanking the hoard approach
@@ -143,7 +150,33 @@ function dressMine(vg, cx, cz, half, floorY, rnd) {
   cart.position.set(cx, floorY, cz + half * 0.35);
   vg.add(cart);
 }
-const DRESS = { treasury: dressTreasury, crypt: dressCrypt, mine: dressMine };
+function dressSanctum(vg, cx, cz, half, floorY, rnd) {
+  // a glowing rune ring on the floor around the hoard, ringed by ritual
+  // candles, with hanging chains along the walls — an ominous, guarded feel
+  const runeMat = new THREE.MeshStandardMaterial({ color: 0x2a1030, emissive: 0x9a30ff, emissiveIntensity: 0.7, roughness: 0.6, flatShading: true });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.0, 24), runeMat);
+  ring.rotation.x = -Math.PI / 2; ring.position.set(cx, floorY + 0.03, cz - half + 4.2); vg.add(ring);
+  const ring2 = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.85, 20), runeMat);
+  ring2.rotation.x = -Math.PI / 2; ring2.position.set(cx, floorY + 0.03, cz - half + 4.2); vg.add(ring2);
+  const candleWax = MAT(0x3a3226), candleFlame = new THREE.MeshStandardMaterial({ color: 0xb040ff, emissive: 0x9a20ff, emissiveIntensity: 1.5, roughness: 0.5, flatShading: true });
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const cxx = cx + Math.cos(a) * 3.2, czz = cz - half + 4.2 + Math.sin(a) * 3.2;
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.4, 6), candleWax);
+    stick.position.set(cxx, floorY + 0.2, czz); vg.add(stick);
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 5), candleFlame);
+    flame.position.set(cxx, floorY + 0.46, czz); vg.add(flame);
+  }
+  // hanging chains along the side walls
+  const chainMat = MAT(0x1c1c20, 0.5, 0.7);
+  for (const s of [-1, 1]) {
+    for (let i = -1; i <= 1; i++) {
+      const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), chainMat);
+      chain.position.set(cx + s * (half - 0.7), floorY + 3.4, cz + i * (half * 0.55)); vg.add(chain);
+    }
+  }
+}
+const DRESS = { treasury: dressTreasury, crypt: dressCrypt, mine: dressMine, sanctum: dressSanctum };
 
 export class Underground {
   constructor(scene, world) {
@@ -194,7 +227,7 @@ export class Underground {
 
     // vault far outside the surface map (isolated, flat floor at y=0)
     const half = 11, cx = 1000 + i * 90, cz = 0, floorY = 0;
-    const theme = THEMES[Math.random() * THEMES.length | 0];
+    const theme = pickTheme();
     const vg = new THREE.Group();
     const stone = MAT(theme.stone), stoneDark = MAT(theme.dark), floorMat = MAT(theme.floor);
     const floor = new THREE.Mesh(new THREE.BoxGeometry(half * 2, 0.4, half * 2), floorMat);
@@ -245,11 +278,12 @@ export class Underground {
     const hoard = buildHoard(); hoard.position.set(cx, floorY, cz - half + 2.6); vg.add(hoard);
 
     this.scene.add(vg);
-    // a guardian spawns partway between the ladder and the hoard the first
+    // guardian(s) spawn partway between the ladder and the hoard the first
     // time the vault is entered — smash-and-grab is possible, but the hoard
-    // isn't undefended
+    // isn't undefended. The rare sanctum posts two guards instead of one.
     const guardianSpot = { x: cx, z: cz - half * 0.15 };
-    const vault = { group: vg, cx, cz, half, floorY, entry, torches, theme: theme.id, hoardObj: hoard.userData.gem, hoardPos: { x: cx, z: cz - half + 2.6 }, looted: false, guardianSpot, guardianSpawned: false };
+    const guardianTypes = theme.id === 'sanctum' ? ['shielded', 'lurker'] : ['shielded'];
+    const vault = { group: vg, cx, cz, half, floorY, entry, torches, theme: theme.id, hoardObj: hoard.userData.gem, hoardPos: { x: cx, z: cz - half + 2.6 }, looted: false, guardianSpot, guardianTypes, guardianSpawned: false };
     this.vaults.push(vault);
     this.world._vaults.push({ cx, cz, half: half - 0.5, floorY });
     this.hatches.push({ group: hatch, x: hx, z: hz, y: hy, vault });
@@ -289,11 +323,13 @@ export class Underground {
     this.inside = null;
     return h ? { x: h.x, y: h.y + 0.1, z: h.z + 1.8 } : { x: 0, y: 0, z: 0 };
   }
-  // loot the hoard once; returns a reward or null
+  // loot the hoard once; returns a reward or null. The sanctum pays out more
+  // for the extra risk of its second guardian.
   loot(vault) {
     if (!vault || vault.looted) return null;
     vault.looted = true; this.looted++;
     if (vault.hoardObj) vault.hoardObj.visible = false;
+    if (vault.theme === 'sanctum') return { credits: 750 + (Math.random() * 400 | 0), item: 'armor' };
     return { credits: 400 + (Math.random() * 400 | 0), item: Math.random() < 0.6 ? 'armor' : 'ammo' };
   }
 
