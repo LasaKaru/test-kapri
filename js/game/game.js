@@ -10,6 +10,7 @@ import { PerksUI } from './perks.js';
 import { Props } from './props.js';
 import { Secrets } from './secrets.js';
 import { Hostages } from './hostages.js';
+import { Underground } from './underground.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -76,6 +77,7 @@ class Game {
     this._placeLandmarks();
     this.secrets = new Secrets(this.scene, this.world);
     this.hostages = new Hostages(this.scene, this.world);
+    this.underground = new Underground(this.scene, this.world);
     this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
@@ -555,6 +557,7 @@ class Game {
     if (startWave === 1 && !this.coopMode && this.world.reshuffleBases) this.world.reshuffleBases();
     if (startWave === 1 && this.secrets) this.secrets.reset();     // fresh caches to discover
     if (startWave === 1 && this.hostages) this.hostages.reset();   // fresh captives to rescue
+    if (startWave === 1 && this.underground) this.underground.reset(); // fresh hatches + vaults
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -1301,18 +1304,40 @@ class Game {
   _nearestInteract() {
     const px = this.player.position.x, pz = this.player.position.z;
     let best = null;
-    const consider = (obj, kind) => { if (!obj) return; const d = Math.hypot(obj.x - px, obj.z - pz); if (!best || d < best.d) best = { kind, obj, d }; };
-    if (this.secrets) consider(this.secrets.nearest(px, pz), 'cache');
-    if (this.hostages) consider(this.hostages.nearest(px, pz), 'hostage');
+    const consider = (kind, x, z, obj) => { const d = Math.hypot(x - px, z - pz); if (!best || d < best.d) best = { kind, obj, d }; };
+    if (this.secrets) { const c = this.secrets.nearest(px, pz); if (c) consider('cache', c.x, c.z, c); }
+    if (this.hostages) { const h = this.hostages.nearest(px, pz); if (h) consider('hostage', h.x, h.z, h); }
+    if (this.underground) {
+      const u = this.underground.nearest(px, pz);
+      if (u) {
+        const c = u.kind === 'hatch' ? { x: u.obj.x, z: u.obj.z }
+          : u.kind === 'exit' ? { x: u.obj.entry.x, z: u.obj.entry.z }
+            : u.obj.hoardPos;
+        consider(u.kind, c.x, c.z, u.obj);
+      }
+    }
     return best;
   }
 
-  // [E]: act on the nearest cache / hostage; otherwise ride or dismount a vehicle
+  _teleport(pos) {
+    this.player.position.set(pos.x, pos.y, pos.z);
+    this.player.vy = 0; this.player.onGround = true;
+    this.postfx.pulseBloom(0.6);
+  }
+
+  // [E]: act on the nearest interactable; otherwise ride or dismount a vehicle
   _interact() {
     if (!this.vehicles.isMounted()) {
       const it = this._nearestInteract();
-      if (it && it.kind === 'cache') { this.secrets.open(it.obj, (r, f, t, p) => this._onSecretFound(r, f, t, p)); return; }
-      if (it && it.kind === 'hostage') { this.hostages.free(it.obj, (r, f, t, p) => this._onHostageFreed(r, f, t, p)); return; }
+      if (it) {
+        switch (it.kind) {
+          case 'cache': this.secrets.open(it.obj, (r, f, t, p) => this._onSecretFound(r, f, t, p)); return;
+          case 'hostage': this.hostages.free(it.obj, (r, f, t, p) => this._onHostageFreed(r, f, t, p)); return;
+          case 'hatch': this._teleport(this.underground.enter(it.obj)); this.hud.killFeed('▼ Descended into the vault'); return;
+          case 'exit': this._teleport(this.underground.exit(it.obj)); this.hud.killFeed('▲ Climbed back to the surface'); return;
+          case 'hoard': { const r = this.underground.loot(it.obj); if (r) this._onSecretFound({ credits: r.credits, item: r.item }, this.underground.looted, this.underground.looted, it.obj.hoardPos); return; }
+        }
+      }
     }
     this.vehicles.toggleMount();
   }
@@ -1321,7 +1346,8 @@ class Game {
   _updateInteractPrompt() {
     const el = document.getElementById('interact-prompt'); if (!el) return;
     const it = this.vehicles.isMounted() ? null : this._nearestInteract();
-    if (it) { el.textContent = it.kind === 'cache' ? '[E] Search cache' : '[E] Free hostage'; el.classList.remove('hidden'); }
+    const LABEL = { cache: '[E] Search cache', hostage: '[E] Free hostage', hatch: '[E] Descend', exit: '[E] Climb out', hoard: '[E] Take treasure' };
+    if (it) { el.textContent = LABEL[it.kind] || '[E]'; el.classList.remove('hidden'); }
     else el.classList.add('hidden');
   }
 
@@ -1505,6 +1531,7 @@ class Game {
       this.vehicles.promptTick();
       if (this.secrets) this.secrets.update(dt);
       if (this.hostages) this.hostages.update(dt);
+      if (this.underground) this.underground.update(dt);
       this._updateInteractPrompt();
       this._updateBaseBar();
       this.effects.update(dt, this.player.position);

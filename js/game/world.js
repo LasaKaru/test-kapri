@@ -78,6 +78,7 @@ export class World {
     this._fill = 1.5;       // density multiplier so the larger map stays populated
     this.bases = [];        // destructible enemy bases (primary + outposts)
     this._baseColliders = new Set(); // base colliders, tracked so reshuffle can remove them
+    this._vaults = [];      // underground vault floor footprints (for groundHeight)
     this._clouds = [];
     this._time = 0;
     this._waterMats = [];
@@ -104,7 +105,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnim = null; this.bases = []; this._baseColliders = new Set(); this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnim = null; this.bases = []; this._baseColliders = new Set(); this._vaults = []; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -283,6 +284,13 @@ export class World {
   }
   // ground height incl. tower decks (only when the player is near deck height)
   groundHeight(x, z, y) {
+    // inside an underground vault footprint the floor is flat and fixed —
+    // these rooms live far outside the surface map so nothing else overlaps
+    if (this._vaults) {
+      for (const v of this._vaults) {
+        if (Math.abs(x - v.cx) <= v.half && Math.abs(z - v.cz) <= v.half) return v.floorY;
+      }
+    }
     let h = Math.max(0, this.heightAt(x, z));
     for (const p of this.platforms) {
       if (Math.abs(x - p.x) <= p.hw && Math.abs(z - p.z) <= p.hw && (y == null || y > p.y - 2.2)) h = Math.max(h, p.y);
