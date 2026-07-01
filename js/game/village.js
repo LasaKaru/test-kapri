@@ -80,11 +80,13 @@ function cottage(rnd, pal) {
     win.position.set((rnd() - 0.5) * (w - 1.4), 1.4, face * (d / 2 + 0.01)); g.add(win);
   }
 
-  // a small chimney sometimes
+  // a small chimney sometimes — record its top so the village can vent smoke
   if (rnd() < 0.6) {
-    const ch = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1 + rnd() * 0.6, 0.5), pal.stone);
-    ch.position.set((rnd() - 0.5) * (w * 0.4), h + pitch * 0.6, (rnd() - 0.5) * (d * 0.4));
-    ch.castShadow = true; g.add(ch);
+    const chH = 1.1 + rnd() * 0.6;
+    const cx = (rnd() - 0.5) * (w * 0.4), cz = (rnd() - 0.5) * (d * 0.4), cy = h + pitch * 0.6;
+    const ch = new THREE.Mesh(new THREE.BoxGeometry(0.5, chH, 0.5), pal.stone);
+    ch.position.set(cx, cy, cz); ch.castShadow = true; g.add(ch);
+    g.userData.chimney = { x: cx, y: cy + chH / 2, z: cz }; // local top of the flue
   }
 
   g.userData.radius = Math.max(w, d) * 0.5;
@@ -252,7 +254,38 @@ function lanternPost(pal) {
   return g;
 }
 
-// Build the hamlet around (ax, az). Returns { group, colliders }.
+// Build a small pool of drifting smoke puffs above the given chimney tops.
+// Adds the meshes to `group` (so they dispose with it) and returns per-puff
+// state the world animates each frame. Capped so cost stays tiny.
+function buildSmoke(group, chimneys, rnd) {
+  const puffs = [];
+  const geo = new THREE.IcosahedronGeometry(0.5, 0);
+  const used = chimneys.slice(0, 4); // only a few plumes — plenty for the look
+  for (const c of used) {
+    const perPuff = 3;
+    for (let i = 0; i < perPuff; i++) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x9a938a, roughness: 1, transparent: true, opacity: 0, depthWrite: false, flatShading: true });
+      const m = new THREE.Mesh(geo, mat);
+      m.frustumCulled = true; group.add(m);
+      puffs.push({ mesh: m, ox: c.x, oy: c.y + 0.3, oz: c.z, t: i / perPuff, speed: 0.28 + rnd() * 0.12, sway: rnd() * Math.PI * 2 });
+    }
+  }
+  return puffs;
+}
+
+// Advance the smoke plumes: each puff rises, sways, grows and fades, then loops.
+export function updateSmoke(puffs, dt) {
+  for (const p of puffs) {
+    p.t += dt * p.speed;
+    if (p.t >= 1) p.t -= 1;
+    const k = p.t;
+    p.mesh.position.set(p.ox + Math.sin(k * 6 + p.sway) * 0.35, p.oy + k * 3.6, p.oz + Math.cos(k * 5 + p.sway) * 0.3);
+    p.mesh.scale.setScalar(0.3 + k * 1.3);
+    p.mesh.material.opacity = Math.max(0, 0.45 * (1 - k) * Math.min(1, k * 6)); // fade in fast, out slow
+  }
+}
+
+// Build the hamlet around (ax, az). Returns { group, colliders, smoke }.
 export function plantVillage(world, ax, az, seed = 7) {
   const rnd = rng32(seed);
   const group = new THREE.Group();
@@ -279,6 +312,7 @@ export function plantVillage(world, ax, az, seed = 7) {
   const houses = 6 + (rnd() * 3 | 0);
   const ringR = 9 + rnd() * 3;
   const placed = [];
+  const chimneys = [];
   for (let i = 0; i < houses; i++) {
     const a = (i / houses) * Math.PI * 2 + rnd() * 0.5;
     const r = ringR + (rnd() - 0.5) * 4;
@@ -293,6 +327,11 @@ export function plantVillage(world, ax, az, seed = 7) {
     group.add(c);
     colliders.push({ x, z, r: c.userData.radius * 0.85 });
     placed.push({ x, z, a });
+    // resolve the chimney top into world space (mirrors the collider rotation)
+    if (c.userData.chimney) {
+      const lc = c.userData.chimney, cs = Math.cos(c.rotation.y), sn = Math.sin(c.rotation.y);
+      chimneys.push({ x: x + lc.x * cs + lc.z * sn, y: s.min + lc.y, z: z - lc.x * sn + lc.z * cs });
+    }
   }
 
   // chapel with bell tower — set just beyond the cottage ring on flat ground
@@ -363,6 +402,9 @@ export function plantVillage(world, ax, az, seed = 7) {
     group.add(fenceRun(pal, x0, z0, x1, z1, gy(x0, z0), gy(x1, z1)));
   }
 
+  // drifting smoke from a few chimneys
+  const smoke = buildSmoke(group, chimneys, rnd);
+
   group.userData.villagePalette = pal;
-  return { group, colliders };
+  return { group, colliders, smoke };
 }
