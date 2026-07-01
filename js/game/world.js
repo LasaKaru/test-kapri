@@ -79,6 +79,13 @@ export class World {
     this.bases = [];        // destructible enemy bases (primary + outposts)
     this._baseColliders = new Set(); // base colliders, tracked so reshuffle can remove them
     this._vaults = [];      // underground vault floor footprints (for groundHeight)
+    // spatial grid over `colliders` — resolve()/steerAround() run per agent per
+    // frame (up to ~28 enemies + player + vehicles), so a flat scan over every
+    // collider on a dense, large map is real per-frame cost. Rebuilt once a
+    // frame (cheap: O(colliders)) so per-agent queries only touch nearby cells.
+    this._gridCell = 16;
+    this._colliderGrid = null;
+    this._maxColliderR = 0;
     this._clouds = [];
     this._time = 0;
     this._waterMats = [];
@@ -1382,11 +1389,29 @@ export class World {
     return res;
   }
 
+  // Iterate colliders that could possibly be within `reach` of (x,z) — via the
+  // spatial grid when it's built, else a brute-force fallback. `reach` must
+  // already include the largest collider radius (callers pass margin + maxR).
+  _collidersNear(x, z, reach, cb) {
+    const grid = this._colliderGrid;
+    if (!grid) { for (const c of this.colliders) cb(c); return; }
+    const cell = this._gridCell;
+    const span = Math.max(1, Math.ceil(reach / cell));
+    const cx = Math.floor(x / cell), cz = Math.floor(z / cell);
+    for (let ix = cx - span; ix <= cx + span; ix++) {
+      for (let iz = cz - span; iz <= cz + span; iz++) {
+        const bucket = grid.get(ix + ',' + iz);
+        if (!bucket) continue;
+        for (const c of bucket) cb(c);
+      }
+    }
+  }
+
   // Lightweight steering: returns a perpendicular nudge away from obstacles
   // that lie ahead, so enemies arc around buildings instead of grinding them.
   steerAround(x, z, dx, dz, radius) {
     let sx = 0, sz = 0;
-    for (const c of this.colliders) {
+    this._collidersNear(x, z, (this._maxColliderR || 0) + radius + 3, (c) => {
       const ox = c.x - x, oz = c.z - z;
       const d = Math.hypot(ox, oz);
       const reach = c.r + radius + 3;
@@ -1399,12 +1424,12 @@ export class World {
           sx += px * side * w; sz += pz * side * w;
         }
       }
-    }
+    });
     return { x: sx, z: sz };
   }
 
   resolve(x, z, radius) {
-    for (const c of this.colliders) {
+    this._collidersNear(x, z, (this._maxColliderR || 0) + radius, (c) => {
       const dx = x - c.x, dz = z - c.z;
       const d = Math.hypot(dx, dz);
       const min = radius + c.r;
@@ -1412,14 +1437,33 @@ export class World {
         const push = (min - d);
         x += (dx / d) * push; z += (dz / d) * push;
       }
-    }
+    });
     const dc = Math.hypot(x, z);
     if (dc > this.bounds) { x = (x / dc) * this.bounds; z = (z / dc) * this.bounds; }
     return { x, z };
   }
 
+  // rebuild the collider spatial grid — cheap (O(colliders), no per-collider
+  // allocation beyond the bucket arrays) so we just do it once every frame
+  // rather than track every mutation site that touches `colliders`
+  _rebuildColliderGrid() {
+    const cell = this._gridCell;
+    const grid = new Map();
+    let maxR = 0;
+    for (const c of this.colliders) {
+      if (c.r > maxR) maxR = c.r;
+      const key = Math.floor(c.x / cell) + ',' + Math.floor(c.z / cell);
+      let bucket = grid.get(key);
+      if (!bucket) { bucket = []; grid.set(key, bucket); }
+      bucket.push(c);
+    }
+    this._colliderGrid = grid;
+    this._maxColliderR = maxR;
+  }
+
   update(dt, camera) {
     this._time += dt;
+    this._rebuildColliderGrid();
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
     if (this._villageAnim) updateVillage(this._villageAnim, dt, this._time);

@@ -35,6 +35,7 @@ import { Cheats } from './cheats.js';
 import { Cinematic } from './cinematic.js';
 
 const BASE_FOV = 75;
+const INTERACT_LABEL = { cache: '[E] Search cache', hostage: '[E] Free hostage', hatch: '[E] Descend', exit: '[E] Climb out', hoard: '[E] Take treasure' };
 
 class Game {
   constructor() {
@@ -87,6 +88,13 @@ class Game {
     this.raycaster = new THREE.Raycaster();
     this.minimap = new Minimap(document.getElementById('minimap'));
     this.baseFov = BASE_FOV;
+
+    // cache hot-path DOM refs once — these are touched every frame in loop()
+    this._baseBarWrapEl = document.getElementById('base-bar-wrap');
+    this._baseFillEl = document.getElementById('base-fill');
+    this._interactPromptEl = document.getElementById('interact-prompt');
+    this._baseBarShown = null;
+    this._interactShown = null;
 
     this.state = 'title';
     this.coopMode = false;   // shared-waves co-op (single-player never sets these)
@@ -1307,13 +1315,13 @@ class Game {
   }
 
   _updateBaseBar() {
-    const wrap = document.getElementById('base-bar-wrap'); if (!wrap) return;
+    const wrap = this._baseBarWrapEl; if (!wrap) return;
     const px = this.player.position.x, pz = this.player.position.z;
     const b = this.world._nearestBase ? this.world._nearestBase(px, pz) : this.world.base;
     const d = b ? Math.hypot(px - b.x, pz - b.z) : 1e9;
     const show = !!(b && b.alive && (this.vehicles.isMounted() || d < 90));
-    wrap.classList.toggle('hidden', !show);
-    if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac(px, pz) * 100) + '%'; }
+    if (show !== this._baseBarShown) { this._baseBarShown = show; wrap.classList.toggle('hidden', !show); }
+    if (show && this._baseFillEl) this._baseFillEl.style.width = ((b.hp / b.maxHp) * 100) + '%';
   }
 
   // nearest actionable thing to the player: { kind, obj, d } or null
@@ -1358,12 +1366,15 @@ class Game {
     this.vehicles.toggleMount();
   }
 
-  // keep the shared [E] prompt in sync with the nearest interactable
+  // keep the shared [E] prompt in sync with the nearest interactable — only
+  // touches the DOM when the shown label actually changes
   _updateInteractPrompt() {
-    const el = document.getElementById('interact-prompt'); if (!el) return;
+    const el = this._interactPromptEl; if (!el) return;
     const it = this.vehicles.isMounted() ? null : this._nearestInteract();
-    const LABEL = { cache: '[E] Search cache', hostage: '[E] Free hostage', hatch: '[E] Descend', exit: '[E] Climb out', hoard: '[E] Take treasure' };
-    if (it) { el.textContent = LABEL[it.kind] || '[E]'; el.classList.remove('hidden'); }
+    const next = it ? (INTERACT_LABEL[it.kind] || '[E]') : null;
+    if (next === this._interactShown) return;
+    this._interactShown = next;
+    if (next) { el.textContent = next; el.classList.remove('hidden'); }
     else el.classList.add('hidden');
   }
 

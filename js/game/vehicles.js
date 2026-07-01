@@ -20,6 +20,10 @@ export class Vehicles {
     this.ord = [];           // in-flight ordnance (shells / rockets)
     this._ordGeo = new THREE.SphereGeometry(0.35, 8, 6);
     this._ordMat = new THREE.MeshBasicMaterial({ color: 0xffd070 });
+    // cache hot-path DOM refs once — avoids a getElementById lookup every frame
+    this._promptEl = document.getElementById('vehicle-prompt');
+    this._hudEl = document.getElementById('vehicle-hud');
+    this._promptShown = null; // last shown text, so we only touch the DOM on change
   }
 
   // ---- spawning ----
@@ -198,24 +202,35 @@ export class Vehicles {
   }
 
   _hud(on) {
-    const el = document.getElementById('vehicle-hud');
+    const el = this._hudEl;
     if (el) el.classList.toggle('hidden', !on);
-    if (!on) { const p = document.getElementById('vehicle-prompt'); if (p) p.classList.add('hidden'); }
+    this._hudKey = null; // force a fresh write on the next _hudUpdate
+    if (!on) { if (this._promptEl) this._promptEl.classList.add('hidden'); this._promptShown = null; }
   }
   _hudUpdate(v) {
-    const el = document.getElementById('vehicle-hud'); if (!el) return;
+    const el = this._hudEl; if (!el) return;
     const spd = Math.round(Math.abs(v.speed) * 3.6);
+    const alt = v.def.fly ? Math.round(v.alt) : 0;
+    // the rounded readout usually holds steady frame-to-frame — skip the
+    // string rebuild + DOM write unless something the player would see changed
+    const key = spd + ':' + alt;
+    if (key === this._hudKey) return;
+    this._hudKey = key;
     el.textContent = v.def.fly
-      ? `✈ ${v.def.name}  ·  ${spd} km/h  ·  ALT ${Math.round(v.alt)}m  ·  [Click] Rockets  ·  [E] Exit`
+      ? `✈ ${v.def.name}  ·  ${spd} km/h  ·  ALT ${alt}m  ·  [Click] Rockets  ·  [E] Exit`
       : `▣ ${v.def.name}  ·  ${spd} km/h  ·  [Click] Fire  ·  [E] Exit`;
   }
 
-  // prompt shown when on foot near a ridable vehicle
+  // prompt shown when on foot near a ridable vehicle. Only touches the DOM
+  // when the shown text actually changes, instead of writing every frame.
   promptTick() {
     if (this.mounted) return;
-    const el = document.getElementById('vehicle-prompt'); if (!el) return;
+    const el = this._promptEl; if (!el) return;
     const v = this.nearest(6);
-    if (v) { el.textContent = `[E] Ride ${v.def.name}`; el.classList.remove('hidden'); }
+    const next = v ? `[E] Ride ${v.def.name}` : null;
+    if (next === this._promptShown) return;
+    this._promptShown = next;
+    if (next) { el.textContent = next; el.classList.remove('hidden'); }
     else el.classList.add('hidden');
   }
 
