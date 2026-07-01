@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Order Tracking — Kapruka post-sale demo</title>
+<meta name="description" content="Track a Kapruka order end to end: status, delivery timeline and a 'where is my order?' assistant, powered by the kapruka_track_order MCP tool." />
+<link rel="icon" href="assets/favicon.svg" />
+<style>
+  :root{
+    --bg:#070d04;--bg-2:#0c160a;--card:#0f1b09;--line:#20351a;
+    --green:#2f6b1e;--lime:#bce04a;--lime-bright:#d8ff5e;
+    --gold:#ffcf4a;--gold-deep:#e8951f;--text:#e9f3d6;--muted:#9bb07e;
+    --crimson:#e03a2f;--blue:#5ab0ff;--radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Rajdhani',system-ui,-apple-system,sans-serif;
+    background:radial-gradient(ellipse at 50% -10%,#12220b 0%,var(--bg) 60%);
+    color:var(--text);line-height:1.5;min-height:100vh;padding:24px 16px 64px;
+  }
+  h1,h2,h3{font-family:'Orbitron','Rajdhani',sans-serif;letter-spacing:.04em}
+  a{color:var(--lime);text-decoration:none}
+  .wrap{max-width:820px;margin:0 auto}
+
+  header.page{text-align:center;margin-bottom:28px}
+  .kicker{color:var(--gold);font-weight:700;letter-spacing:.22em;font-size:.72rem;text-transform:uppercase}
+  header.page h1{font-size:clamp(1.6rem,5vw,2.4rem);margin:6px 0 4px}
+  header.page p{color:var(--muted);max-width:520px;margin:0 auto}
+
+  .search{
+    display:flex;gap:10px;flex-wrap:wrap;background:var(--card);
+    border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:22px;
+  }
+  .search input{
+    flex:1;min-width:200px;background:#0a1305;border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:12px 14px;font:inherit;font-size:1rem;letter-spacing:.08em;
+  }
+  .search input:focus{outline:none;border-color:var(--lime);box-shadow:0 0 0 2px rgba(188,224,74,.15)}
+  .search button{
+    background:linear-gradient(180deg,var(--lime-bright),var(--green));color:#07120a;font:inherit;
+    font-weight:700;letter-spacing:.06em;border:none;border-radius:10px;padding:12px 22px;cursor:pointer;
+    text-transform:uppercase;transition:transform .12s,filter .12s;
+  }
+  .search button:hover{filter:brightness(1.08)}
+  .search button:active{transform:translateY(1px)}
+  .hint{width:100%;color:var(--muted);font-size:.82rem}
+  .hint code{color:var(--gold);background:#0a1305;padding:1px 6px;border-radius:5px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px}
+  .card h2{font-size:1.05rem;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+
+  .status-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .status-head .ord{font-family:'Orbitron',monospace;font-size:1.35rem;letter-spacing:.08em}
+  .badge{
+    font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;
+    padding:6px 14px;border-radius:999px;border:1px solid;white-space:nowrap;
+  }
+  .badge.delivered{color:#9cffb0;border-color:#2e6b3a;background:rgba(46,107,58,.18)}
+  .badge.shipped,.badge.out-for-delivery{color:var(--gold);border-color:var(--gold-deep);background:rgba(232,149,31,.15)}
+  .badge.confirmed,.badge.received{color:var(--blue);border-color:#2c5c86;background:rgba(90,176,255,.12)}
+  .badge.cancelled{color:#ff9c9c;border-color:#8a2c2c;background:rgba(224,58,47,.14)}
+
+  .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:18px}
+  .meta .k{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em}
+  .meta .v{font-size:1.02rem;font-weight:600;margin-top:2px}
+
+  .greeting{margin-top:16px;padding:12px 14px;border-left:3px solid var(--gold);background:rgba(255,207,74,.07);
+    border-radius:0 8px 8px 0;font-style:italic;color:#f6e7bd}
+
+  /* Timeline */
+  .timeline{position:relative;padding-left:26px}
+  .timeline::before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--line)}
+  .step{position:relative;padding:0 0 18px 6px}
+  .step:last-child{padding-bottom:0}
+  .step::before{content:"";position:absolute;left:-24px;top:3px;width:12px;height:12px;border-radius:50%;
+    background:var(--bg);border:2px solid var(--green)}
+  .step.done::before{background:var(--lime);border-color:var(--lime);box-shadow:0 0 8px rgba(188,224,74,.6)}
+  .step.current::before{background:var(--gold);border-color:var(--gold);box-shadow:0 0 10px rgba(255,207,74,.8);
+    animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 6px rgba(255,207,74,.5)}50%{box-shadow:0 0 14px rgba(255,207,74,.95)}}
+  .step .label{font-weight:600}
+  .step .time{color:var(--muted);font-size:.82rem}
+
+  /* Assistant */
+  .assistant .bubble{background:#0a1305;border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+    color:#e9f3d6}
+  .assistant .bubble strong{color:var(--lime-bright)}
+  .assistant .row{display:flex;gap:10px;align-items:flex-start}
+  .assistant .av{flex:0 0 34px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+    background:linear-gradient(180deg,var(--lime-bright),var(--green));color:#07120a;font-weight:800;font-family:'Orbitron',sans-serif}
+
+  .footnote{text-align:center;color:var(--muted);font-size:.8rem;margin-top:26px}
+  .hidden{display:none}
+  .error{color:#ff9c9c;border-color:#8a2c2c}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div class="kicker">Kapruka · Post-sale experience</div>
+    <h1>Where is my order?</h1>
+    <p>Enter a Kapruka order number to see live status, the full delivery
+       timeline, and an assistant answer — the same journey your agent completes
+       after checkout.</p>
+  </header>
+
+  <form class="search" id="trackForm" autocomplete="off">
+    <input id="orderInput" name="order" value="VPAY827982BA"
+           placeholder="e.g. VPAY827982BA" aria-label="Order number" />
+    <button type="submit">Track order</button>
+    <div class="hint">Try the demo test order <code>VPAY827982BA</code>. In a live
+       agent this calls the <code>kapruka_track_order</code> MCP tool.</div>
+  </form>
+
+  <div id="result"></div>
+
+  <p class="footnote">Discovery → cart → checkout → <strong>order tracking</strong>.
+     This page renders a real response from the Kapruka order-tracking tool.</p>
+</div>
+
+<script>
+/* Seed data: a real response from kapruka_track_order for the demo test order.
+   In a live integration the agent fetches this from the MCP tool at runtime;
+   here we cache the demo order so the page works fully client-side. */
+const DEMO_ORDERS = {
+  "VPAY827982BA": {
+    order_number: "VPAY827982BA",
+    pnref: "3005082",
+    status: "delivered",
+    status_display: "Delivered",
+    order_date: "Tue Jun 23 07:10:46 EDT 2026",
+    delivery_date: "24 / JUNE / 2026",
+    shipped_date: "24 Jun 2026 05:11:27 GMT",
+    amount: { value: "26060", currency: "LKR" },
+    payment_method: "3645",
+    comments: "Delivery successfully completed.",
+    recipient: {
+      name: "Ms. Gayathri Fernando",
+      phone: "077-3517248",
+      address: "No. 10/11, Halpita, Polgasowita — House / Residence",
+      city: "Polgasowita"
+    },
+    greeting_message: "Get well soon Gayathri  (from Kapruka family)",
+    special_instructions: "",
+    progress: [
+      { step: "Order Confirmed and Awaiting preparation", timestamp: "Jun 23, 2026 4:40 PM" },
+      { step: "Kapruka Flower Shop — Flower Arrangement is preparing", timestamp: "Jun 23, 2026 5:15 PM" },
+      { step: "Kapruka Warehouse — Order is preparing", timestamp: "Jun 23, 2026 5:23 PM" },
+      { step: "Kapruka Warehouse — Order Prepared", timestamp: "Jun 23, 2026 5:23 PM" },
+      { step: "Other Items received to Kapruka Logistics Facility", timestamp: "Jun 23, 2026 5:23 PM" },
+      { step: "Order Received", timestamp: "Jun 23, 2026 5:40 PM" },
+      { step: "Flower Arrangement received to Kapruka Logistics Facility", timestamp: "Jun 23, 2026 7:37 PM" },
+      { step: "Kapruka Flower Shop — Flower Arrangement prepared", timestamp: "Jun 24, 2026 8:11 AM" },
+      { step: "Order has been out for delivery", timestamp: "Jun 24, 2026 8:23 AM" },
+      { step: "Order received by our delivery agent", timestamp: "Jun 24, 2026 8:24 AM" },
+      { step: "Order has been delivered", timestamp: "Jun 24, 2026 10:41 AM" }
+    ],
+    live_tracking_available: true,
+    has_delivery_video: false,
+    has_delivery_photo: false,
+    items: []
+  }
+};
+
+const $ = (sel, el=document) => el.querySelector(sel);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function money(a){
+  if(!a) return "—";
+  const n = Number(a.value);
+  const val = isNaN(n) ? a.value : n.toLocaleString('en-LK');
+  return `${a.currency || 'LKR'} ${val}`;
+}
+
+// Which progress steps count as "done" vs the live/current one.
+function classifySteps(order){
+  const done = order.status === 'delivered';
+  return order.progress.map((p, i) => {
+    const isLast = i === order.progress.length - 1;
+    let cls = 'done';
+    if (!done && isLast) cls = 'current';
+    return { ...p, cls };
+  });
+}
+
+// A short natural-language answer to "where is my order?"
+function assistantAnswer(order){
+  const r = order.recipient || {};
+  const name = r.name ? r.name.split(' ').slice(-1)[0] : 'the recipient';
+  if (order.status === 'delivered'){
+    const last = order.progress[order.progress.length - 1];
+    return `Good news — order <strong>${esc(order.order_number)}</strong> was
+      <strong>delivered</strong> to ${esc(r.name || 'the recipient')} in
+      ${esc(r.city || 'the delivery city')} on <strong>${esc(order.delivery_date)}</strong>
+      (${esc(last.timestamp)}). ${esc(order.comments || '')}`;
+  }
+  if (['shipped','out-for-delivery'].includes(order.status)){
+    return `Order <strong>${esc(order.order_number)}</strong> is
+      <strong>on its way</strong> to ${esc(name)} in ${esc(r.city || 'the delivery city')},
+      expected on <strong>${esc(order.delivery_date)}</strong>.`;
+  }
+  if (['confirmed','received'].includes(order.status)){
+    return `Order <strong>${esc(order.order_number)}</strong> is
+      <strong>${esc(order.status_display || order.status)}</strong> and being prepared —
+      estimated delivery <strong>${esc(order.delivery_date)}</strong>.`;
+  }
+  if (order.status === 'cancelled'){
+    return `Order <strong>${esc(order.order_number)}</strong> has been
+      <strong>cancelled</strong>. ${esc(order.comments || '')}`;
+  }
+  return `Order <strong>${esc(order.order_number)}</strong> status:
+      <strong>${esc(order.status_display || order.status)}</strong>.`;
+}
+
+function render(order){
+  const badgeCls = esc(order.status || '').replace(/\s+/g,'-');
+  const steps = classifySteps(order).map(s => `
+    <div class="step ${s.cls}">
+      <div class="label">${esc(s.step)}</div>
+      <div class="time">${esc(s.timestamp)}</div>
+    </div>`).join('');
+
+  const r = order.recipient || {};
+
+  return `
+  <div class="card">
+    <div class="status-head">
+      <span class="ord">${esc(order.order_number)}</span>
+      <span class="badge ${badgeCls}">${esc(order.status_display || order.status)}</span>
+    </div>
+    <div class="meta">
+      <div><div class="k">Order date</div><div class="v">${esc(order.order_date)}</div></div>
+      <div><div class="k">Delivery date</div><div class="v">${esc(order.delivery_date)}</div></div>
+      <div><div class="k">Amount</div><div class="v">${esc(money(order.amount))}</div></div>
+      <div><div class="k">Deliver to</div><div class="v">${esc(r.name || '—')}</div></div>
+      <div><div class="k">City</div><div class="v">${esc(r.city || '—')}</div></div>
+      <div><div class="k">Contact</div><div class="v">${esc(r.phone || '—')}</div></div>
+    </div>
+    ${r.address ? `<div class="meta"><div style="grid-column:1/-1"><div class="k">Address</div><div class="v">${esc(r.address)}</div></div></div>` : ''}
+    ${order.greeting_message ? `<div class="greeting">“${esc(order.greeting_message)}”</div>` : ''}
+  </div>
+
+  <div class="card assistant">
+    <div class="row">
+      <div class="av">K</div>
+      <div class="bubble">${assistantAnswer(order)}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Delivery timeline</h2>
+    <div class="timeline">${steps}</div>
+  </div>`;
+}
+
+function lookup(num){
+  const key = (num || '').trim().toUpperCase();
+  const out = $('#result');
+  if (!key){ out.innerHTML = ''; return; }
+  const order = DEMO_ORDERS[key];
+  if (!order){
+    out.innerHTML = `<div class="card error">
+      <h2>No order found</h2>
+      <p style="color:var(--muted)">We couldn't find <strong>${esc(key)}</strong> in the
+      demo cache. Try the test order <code>VPAY827982BA</code>. A live agent would call
+      <code>kapruka_track_order</code> for any real order number.</p></div>`;
+    return;
+  }
+  out.innerHTML = render(order);
+}
+
+$('#trackForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  lookup($('#orderInput').value);
+});
+
+// Auto-load the demo order on first paint.
+lookup($('#orderInput').value);
+</script>
+</body>
+</html>
