@@ -234,6 +234,24 @@ function cart(pal) {
   return g;
 }
 
+// a timber lantern post: a warm glowing box on a pole (emissive, so bloom
+// makes it read as a light at night — no real light, keeps it cheap)
+function lanternPost(pal) {
+  const g = new THREE.Group();
+  const h = 2.4;
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, h, 0.14), pal.timber);
+  post.position.y = h / 2; post.castShadow = true; g.add(post);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), pal.timber);
+  arm.position.set(0.2, h - 0.1, 0); g.add(arm);
+  const lantMat = new THREE.MeshStandardMaterial({ color: 0x2a1c08, emissive: 0xffb14a, emissiveIntensity: 1.1, roughness: 0.5, flatShading: true });
+  const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.4, 0.28), lantMat);
+  lantern.position.set(0.4, h - 0.25, 0); g.add(lantern);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.22, 4), pal.roof2);
+  cap.position.set(0.4, h + 0.03, 0); cap.rotation.y = Math.PI / 4; g.add(cap);
+  g.userData.radius = 0.3;
+  return g;
+}
+
 // Build the hamlet around (ax, az). Returns { group, colliders }.
 export function plantVillage(world, ax, az, seed = 7) {
   const rnd = rng32(seed);
@@ -311,6 +329,16 @@ export function plantVillage(world, ax, az, seed = 7) {
       const ct = cart(pal); ct.position.set(x, gy(x, z), z); ct.rotation.y = rnd() * Math.PI * 2;
       group.add(ct); colliders.push({ x, z, r: ct.userData.radius * 0.7 });
     }
+  }
+
+  // lantern posts ringing the market square for warm night-time glow
+  const lanterns = 3 + (rnd() * 2 | 0);
+  for (let i = 0; i < lanterns; i++) {
+    const a = (i / lanterns) * Math.PI * 2 + 0.4, r = 5 + rnd() * 1.5;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z)) continue;
+    const lp = lanternPost(pal); lp.position.set(x, gy(x, z), z); lp.rotation.y = rnd() * Math.PI * 2;
+    group.add(lp);
   }
 
   // hay bales scattered between houses
