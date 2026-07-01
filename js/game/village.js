@@ -362,6 +362,100 @@ function forge(rnd, pal) {
   return g;
 }
 
+// The tavern: the biggest building in the hamlet — two-storey half-timbered
+// inn with an overhanging upper floor, a hanging sign, a chimney, and an
+// outdoor bench-and-table area for the ale-swilling crowd (decorative).
+function tavern(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 6.2, d = 4.6, h = 2.7, h2 = 2.2;
+  const wallMat = pal.plaster2;
+
+  // ground floor
+  const gf = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  gf.position.y = h / 2; gf.castShadow = true; gf.receiveShadow = true; g.add(gf);
+  // upper floor, overhanging on all sides (classic Tudor jetty)
+  const over = 0.35;
+  const uf = new THREE.Mesh(new THREE.BoxGeometry(w + over * 2, h2, d + over * 2), pal.plaster);
+  uf.position.y = h + h2 / 2; uf.castShadow = true; uf.receiveShadow = true; g.add(uf);
+  // timber framing on both floors
+  for (const yy of [h * 0.5, h + h2 * 0.5]) {
+    for (const sx of [-1, 1]) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, yy === h * 0.5 ? h : h2, 0.2), pal.timber);
+      p.position.set(sx * (w / 2 - 0.1), yy, d / 2 - 0.1); g.add(p);
+    }
+  }
+  const jettyBeam = new THREE.Mesh(new THREE.BoxGeometry(w + over * 2, 0.2, 0.22), pal.timber);
+  jettyBeam.position.set(0, h - 0.05, d / 2 + over - 0.11); g.add(jettyBeam);
+
+  // pitched roof over the upper floor
+  const pitch = 1.8, roofOver = 0.5;
+  const slabLen = Math.hypot(w / 2 + over + roofOver, pitch) + 0.1;
+  const ang = Math.atan2(pitch, w / 2 + over + roofOver);
+  for (const side of [-1, 1]) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(slabLen, 0.18, d + (over + roofOver) * 2), pal.roof);
+    slab.position.set(side * (w / 4), h + h2 + pitch / 2, 0);
+    slab.rotation.z = side * (Math.PI / 2 - ang) * -1;
+    slab.castShadow = true; g.add(slab);
+  }
+  const triShape = new THREE.Shape();
+  triShape.moveTo(-(w + over * 2) / 2, 0); triShape.lineTo((w + over * 2) / 2, 0); triShape.lineTo(0, pitch); triShape.lineTo(-(w + over * 2) / 2, 0);
+  const triGeo = new THREE.ExtrudeGeometry(triShape, { depth: 0.12, bevelEnabled: false });
+  for (const sz of [-1, 1]) {
+    const tri = new THREE.Mesh(triGeo, pal.plaster);
+    tri.position.set(0, h + h2, sz * (d + over * 2) / 2); tri.castShadow = true; g.add(tri);
+  }
+  // chimney
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.6, 0.6), pal.stone);
+  ch.position.set(w / 3, h + h2 + pitch * 0.7, 0); ch.castShadow = true; g.add(ch);
+
+  // double door + glowing windows on both floors
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.9, 0.14), pal.timber);
+  door.position.set(0, 0.95, d / 2 + 0.02); g.add(door);
+  const winPositions = [[-w / 3, 1.7, d / 2 + 0.01], [w / 3, 1.7, d / 2 + 0.01], [-w / 3, h + 1.1, d / 2 + over + 0.01], [w / 3, h + 1.1, d / 2 + over + 0.01]];
+  for (const [wx, wy, wz] of winPositions) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.1), pal.win.clone());
+    win.material.emissiveIntensity = 0.4 + rnd() * 0.4;
+    win.position.set(wx, wy, wz); g.add(win);
+  }
+  // hanging sign on a bracket above the door
+  const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.1), pal.metal);
+  bracket.position.set(0, h - 0.1, d / 2 + 0.6); g.add(bracket);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.06), pal.roof2);
+  sign.position.set(0, h - 0.55, d / 2 + 1.1); g.add(sign);
+  const signGlyph = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.07, 8), pal.hay);
+  signGlyph.rotation.x = Math.PI / 2; signGlyph.position.set(0, h - 0.55, d / 2 + 1.14); g.add(signGlyph);
+
+  g.userData.radius = Math.max(w + over * 2, d + over * 2) * 0.5;
+  g.userData.benchAnchor = { x: 0, z: -(d / 2 + 1.5) }; // where the outdoor seating goes (local space)
+  return g;
+}
+
+// outdoor bench-and-table set for the tavern yard
+function benchTable(pal) {
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.7), pal.timber);
+  top.position.y = 0.7; top.castShadow = true; g.add(top);
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.6), pal.timber);
+    leg.position.set(sx * 0.65, 0.35, 0); g.add(leg);
+  }
+  for (const sz of [-1, 1]) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.3), pal.timber);
+    bench.position.set(0, 0.42, sz * 0.55); g.add(bench);
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.08), pal.timber);
+      leg.position.set(sx * 0.6, 0.21, sz * 0.55); g.add(leg);
+    }
+  }
+  // a couple of mugs on the table
+  for (let i = 0; i < 2; i++) {
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.14, 8), pal.metal);
+    mug.position.set((i - 0.5) * 0.5, 0.82, 0.1); g.add(mug);
+  }
+  g.userData.radius = 1.0;
+  return g;
+}
+
 // A tall pole flying a heraldic pennant that ripples in the wind (animated).
 function banner(pal, clothMat) {
   const g = new THREE.Group();
@@ -657,6 +751,43 @@ function trough(pal) {
   return g;
 }
 
+// A reverent ring of lantern posts and heraldic banners marking a special
+// landmark (the Medieval Fantasy Book diorama) as a place worth finding —
+// a "preserved relic" look, not a full building cluster. Returns
+// { group, anim } so the caller can animate the banners via updateVillage.
+export function plantLandmarkRing(world, cx, cz, r, seed = 1) {
+  const rnd = rng32(seed);
+  const group = new THREE.Group();
+  const pal = palette();
+  const gy = (x, z) => (world.heightAt ? Math.max(0, world.heightAt(x, z)) : 0);
+  const dry = (x, z) => !(world.waterAt && world.waterAt(x, z));
+  const ring = r + 3.5;
+
+  const lanterns = 5 + (rnd() * 3 | 0);
+  for (let i = 0; i < lanterns; i++) {
+    const a = (i / lanterns) * Math.PI * 2 + rnd() * 0.3;
+    const x = cx + Math.cos(a) * ring, z = cz + Math.sin(a) * ring;
+    if (!dry(x, z)) continue;
+    const lp = lanternPost(pal); lp.position.set(x, gy(x, z), z);
+    lp.rotation.y = a + Math.PI; group.add(lp);
+  }
+
+  const banners = [];
+  const nBanners = 3 + (rnd() * 2 | 0);
+  const clothMats = [pal.banner1, pal.banner2, pal.banner3];
+  for (let i = 0; i < nBanners; i++) {
+    const a = (i / nBanners) * Math.PI * 2 + 0.9;
+    const x = cx + Math.cos(a) * (ring + 1.2), z = cz + Math.sin(a) * (ring + 1.2);
+    if (!dry(x, z)) continue;
+    const { group: bn, cloth } = banner(pal, clothMats[i % clothMats.length]);
+    bn.position.set(x, gy(x, z), z); bn.rotation.y = a + Math.PI / 2;
+    group.add(bn);
+    banners.push({ cloth, phase: rnd() * Math.PI * 2 });
+  }
+
+  return { group, anim: { smoke: [], windmills: [], banners, flames: [], laundry: [] } };
+}
+
 // Build the hamlet around (ax, az). Returns { group, colliders, smoke }.
 export function plantVillage(world, ax, az, seed = 7) {
   const rnd = rng32(seed);
@@ -812,6 +943,23 @@ export function plantVillage(world, ax, az, seed = 7) {
       fg.position.set(sp.x, sp.y, sp.z); fg.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
       group.add(fg); colliders.push({ x: sp.x, z: sp.z, r: fg.userData.radius * 0.85 });
       addFlames(fg, sp.x, sp.z);
+    }
+  }
+
+  // the tavern — the biggest building, fronting the square — plus its yard
+  {
+    const sp = findSpot(ringR - 3, ringR + 2, 3.4, 1.6);
+    if (sp) {
+      const tv = tavern(rnd, pal);
+      tv.position.set(sp.x, sp.y, sp.z); tv.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(tv); colliders.push({ x: sp.x, z: sp.z, r: tv.userData.radius * 0.85 });
+      // outdoor bench-and-table set out front, rotated into world space
+      const ba = tv.userData.benchAnchor, cs2 = Math.cos(tv.rotation.y), sn2 = Math.sin(tv.rotation.y);
+      const bx = sp.x + ba.x * cs2 + ba.z * sn2, bz = sp.z - ba.x * sn2 + ba.z * cs2;
+      if (dry(bx, bz)) {
+        const bt = benchTable(pal); bt.position.set(bx, gy(bx, bz), bz); bt.rotation.y = tv.rotation.y;
+        group.add(bt); colliders.push({ x: bx, z: bz, r: bt.userData.radius * 0.6 });
+      }
     }
   }
 

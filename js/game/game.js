@@ -11,6 +11,8 @@ import { Props } from './props.js';
 import { Secrets } from './secrets.js';
 import { Hostages } from './hostages.js';
 import { Underground } from './underground.js';
+import { Villagers } from './villagers.js';
+import { plantLandmarkRing, updateVillage } from './village.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -78,6 +80,7 @@ class Game {
     this.secrets = new Secrets(this.scene, this.world);
     this.hostages = new Hostages(this.scene, this.world);
     this.underground = new Underground(this.scene, this.world);
+    this.villagers = new Villagers(this.scene, this.world);
     this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
@@ -558,6 +561,7 @@ class Game {
     if (startWave === 1 && this.secrets) this.secrets.reset();     // fresh caches to discover
     if (startWave === 1 && this.hostages) this.hostages.reset();   // fresh captives to rescue
     if (startWave === 1 && this.underground) this.underground.reset(); // fresh hatches + vaults
+    if (startWave === 1 && this.villagers) this.villagers.reset();     // fresh villager NPCs
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -644,6 +648,18 @@ class Game {
         // make the diorama solid: player can't walk through it, enemies arc around.
         // shrink slightly so the collider hugs the rock base, not the outer edge.
         if (w.colliders) w.colliders.push({ x: info.cx, z: info.cz, r: info.r * 0.78 });
+        // a reverent ring of lanterns + banners marking it as a landmark worth finding
+        if (this._landmarkRing) {
+          this.scene.remove(this._landmarkRing);
+          this._landmarkRing.traverse((o) => {
+            if (o.geometry) o.geometry.dispose();
+            if (o.material) { const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x) => x && x.dispose && x.dispose()); }
+          });
+        }
+        const { group: ring, anim } = plantLandmarkRing(w, info.cx, info.cz, info.r, (w._seed || 1) * 5 + 2);
+        this.scene.add(ring);
+        this._landmarkRing = ring;
+        this._landmarkRingAnim = anim;
       },
     });
   }
@@ -1532,6 +1548,8 @@ class Game {
       if (this.secrets) this.secrets.update(dt);
       if (this.hostages) this.hostages.update(dt);
       if (this.underground) this.underground.update(dt);
+      if (this.villagers) this.villagers.update(dt);
+      if (this._landmarkRingAnim) updateVillage(this._landmarkRingAnim, dt, this.world._time || 0);
       this._updateInteractPrompt();
       this._updateBaseBar();
       this.effects.update(dt, this.player.position);
