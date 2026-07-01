@@ -6,7 +6,7 @@ export class TacMap {
     this.overlay = document.getElementById('tacmap');
     this.canvas = document.getElementById('tacmap-canvas');
     this.ctx = this.canvas.getContext('2d');
-    this.span = 300;            // world units across the view width
+    this.span = 400;            // world units across the view width (fits the big map)
     this.center = { x: 0, z: -20 };
     this._relief = null;        // cached offscreen relief
     this._reliefKey = '';
@@ -26,7 +26,7 @@ export class TacMap {
     this.canvas.addEventListener('pointerup', () => { dragging = false; });
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.span = Math.max(150, Math.min(420, this.span * (e.deltaY > 0 ? 1.1 : 0.9)));
+      this.span = Math.max(150, Math.min(560, this.span * (e.deltaY > 0 ? 1.1 : 0.9)));
       this._relief = null;
     }, { passive: false });
   }

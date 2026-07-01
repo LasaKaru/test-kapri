@@ -20,6 +20,10 @@ export class Vehicles {
     this.ord = [];           // in-flight ordnance (shells / rockets)
     this._ordGeo = new THREE.SphereGeometry(0.35, 8, 6);
     this._ordMat = new THREE.MeshBasicMaterial({ color: 0xffd070 });
+    // cache hot-path DOM refs once — avoids a getElementById lookup every frame
+    this._promptEl = document.getElementById('vehicle-prompt');
+    this._hudEl = document.getElementById('vehicle-hud');
+    this._promptShown = null; // last shown text, so we only touch the DOM on change
   }
 
   // ---- spawning ----
@@ -92,7 +96,7 @@ export class Vehicles {
       const bp = this.game.world.baseHitPoint(origin, dir);
       this.game.effects.tracer(muzzle, hit ? hit.point : (bp ? bp.point : origin.clone().addScaledVector(dir, 120)), 0xffd070);
       if (hit) { hit.enemy.hit(2, hit.zone); this.game.effects.bloodBurst(hit.point); }
-      else if (bp) { this.game.world.damageBase(6); this.game.effects.impact(bp.point, 0xff7040, false); }
+      else if (bp) { if (this.game.world.damageBase(6, bp.base)) this.game._onBaseDestroyed(bp.base); this.game.effects.impact(bp.point, 0xff7040, false); }
     } else {
       // launch ordnance (tank shell / jet rocket)
       this.launchOrdnance(v.def.weapon, muzzle, dir);
@@ -116,10 +120,11 @@ export class Vehicles {
     const p = o.mesh.position;
     this.game.scene.remove(o.mesh);
     this.game._detonate(p.x, p.z, o.radius, 8, 30);
-    // big damage to the base if the blast lands on it
-    const b = this.game.world.base;
-    if (b && b.alive && Math.hypot(p.x - b.x, p.z - b.z) < o.radius + b.r) {
-      if (this.game.world.damageBase(o.baseDmg)) this.game._onBaseDestroyed();
+    // big damage to any base the blast lands on
+    for (const b of (this.game.world.bases || [])) {
+      if (b.alive && Math.hypot(p.x - b.x, p.z - b.z) < o.radius + b.r) {
+        if (this.game.world.damageBase(o.baseDmg, b)) this.game._onBaseDestroyed(b);
+      }
     }
   }
 
@@ -132,8 +137,8 @@ export class Vehicles {
       o.mesh.position.addScaledVector(o.vel, dt);
       o.life -= dt;
       const p = o.mesh.position;
-      const b = this.game.world.base;
-      const hitBase = b && b.alive && Math.hypot(p.x - b.x, p.y - 3.6, p.z - b.z) < b.r + 0.6;
+      const b = this.game.world._nearestBase ? this.game.world._nearestBase(p.x, p.z) : this.game.world.base;
+      const hitBase = b && b.alive && Math.hypot(p.x - b.x, p.y - (b.coreY || 3.6), p.z - b.z) < b.r + 0.6;
       if (p.y <= 0.2 || o.life <= 0 || hitBase) { this._explodeOrd(o); this.ord.splice(i, 1); }
     }
     if (this.mounted) this._drive(dt);
@@ -197,24 +202,35 @@ export class Vehicles {
   }
 
   _hud(on) {
-    const el = document.getElementById('vehicle-hud');
+    const el = this._hudEl;
     if (el) el.classList.toggle('hidden', !on);
-    if (!on) { const p = document.getElementById('vehicle-prompt'); if (p) p.classList.add('hidden'); }
+    this._hudKey = null; // force a fresh write on the next _hudUpdate
+    if (!on) { if (this._promptEl) this._promptEl.classList.add('hidden'); this._promptShown = null; }
   }
   _hudUpdate(v) {
-    const el = document.getElementById('vehicle-hud'); if (!el) return;
+    const el = this._hudEl; if (!el) return;
     const spd = Math.round(Math.abs(v.speed) * 3.6);
+    const alt = v.def.fly ? Math.round(v.alt) : 0;
+    // the rounded readout usually holds steady frame-to-frame — skip the
+    // string rebuild + DOM write unless something the player would see changed
+    const key = spd + ':' + alt;
+    if (key === this._hudKey) return;
+    this._hudKey = key;
     el.textContent = v.def.fly
-      ? `✈ ${v.def.name}  ·  ${spd} km/h  ·  ALT ${Math.round(v.alt)}m  ·  [Click] Rockets  ·  [E] Exit`
+      ? `✈ ${v.def.name}  ·  ${spd} km/h  ·  ALT ${alt}m  ·  [Click] Rockets  ·  [E] Exit`
       : `▣ ${v.def.name}  ·  ${spd} km/h  ·  [Click] Fire  ·  [E] Exit`;
   }
 
-  // prompt shown when on foot near a ridable vehicle
+  // prompt shown when on foot near a ridable vehicle. Only touches the DOM
+  // when the shown text actually changes, instead of writing every frame.
   promptTick() {
     if (this.mounted) return;
-    const el = document.getElementById('vehicle-prompt'); if (!el) return;
+    const el = this._promptEl; if (!el) return;
     const v = this.nearest(6);
-    if (v) { el.textContent = `[E] Ride ${v.def.name}`; el.classList.remove('hidden'); }
+    const next = v ? `[E] Ride ${v.def.name}` : null;
+    if (next === this._promptShown) return;
+    this._promptShown = next;
+    if (next) { el.textContent = next; el.classList.remove('hidden'); }
     else el.classList.add('hidden');
   }
 

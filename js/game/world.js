@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Critters } from './critters.js';
 import { plantFlora } from './flora.js';
 import { plantVillage, updateVillage } from './village.js';
+import { plantRuins } from './ruins.js';
 
 // --- seeded value noise / fbm for organic, Earth-like terrain ---
 function hash2(ix, iz, seed) {
@@ -74,7 +75,20 @@ export class World {
     this.barrels = [];    // explosive barrels {group,x,z,hp,dead}
     this.destructibles = []; // crate stacks {group,x,z,collider,crates:Set}
     this._crateMeshes = []; // flat list of crate meshes for raycasting
-    this.bounds = 130;
+    this.bounds = 185;      // playable radius (bigger battlefield)
+    this._fill = 1.5;       // density multiplier so the larger map stays populated
+    this.bases = [];        // destructible enemy bases (primary + outposts)
+    this._baseColliders = new Set(); // base colliders, tracked so reshuffle can remove them
+    this._vaults = [];      // underground vault floor footprints (for groundHeight)
+    this._villageAnims = []; // per-hamlet animation registers (smoke/sails/banners)
+    this._villageZones = []; // { x, z, r } footprints so bases keep clear of hamlets
+    // spatial grid over `colliders` — resolve()/steerAround() run per agent per
+    // frame (up to ~28 enemies + player + vehicles), so a flat scan over every
+    // collider on a dense, large map is real per-frame cost. Rebuilt once a
+    // frame (cheap: O(colliders)) so per-agent queries only touch nearby cells.
+    this._gridCell = 16;
+    this._colliderGrid = null;
+    this._maxColliderR = 0;
     this._clouds = [];
     this._time = 0;
     this._waterMats = [];
@@ -101,7 +115,7 @@ export class World {
     this._seed = MAP_SEEDS[this.mapId] || 11;
     this._fogFar = this.map.fogFar;
     this.lakes = this.map.lakes.map((l) => ({ ...l }));
-    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnim = null; this._time = 0;
+    this.colliders = []; this.climbVolumes = []; this.platforms = []; this.barrels = []; this.destructibles = []; this._crateMeshes = []; this._clouds = []; this._waterMats = []; this._villageAnims = []; this._villageZones = []; this.bases = []; this._baseColliders = new Set(); this._vaults = []; this._time = 0;
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this._build();
@@ -119,7 +133,8 @@ export class World {
     this._scatterRocks();
     this._scatterGrass();
     this._scatterFlora();
-    this._buildBase();
+    this._buildBases();
+    this._buildRuins();
     this._buildTowers();
     this._buildAtmosphere();
     this._critters = new Critters(this.root, this);
@@ -280,6 +295,13 @@ export class World {
   }
   // ground height incl. tower decks (only when the player is near deck height)
   groundHeight(x, z, y) {
+    // inside an underground vault footprint the floor is flat and fixed —
+    // these rooms live far outside the surface map so nothing else overlaps
+    if (this._vaults) {
+      for (const v of this._vaults) {
+        if (Math.abs(x - v.cx) <= v.half && Math.abs(z - v.cz) <= v.half) return v.floorY;
+      }
+    }
     let h = Math.max(0, this.heightAt(x, z));
     for (const p of this.platforms) {
       if (Math.abs(x - p.x) <= p.hw && Math.abs(z - p.z) <= p.hw && (y == null || y > p.y - 2.2)) h = Math.max(h, p.y);
@@ -315,57 +337,185 @@ export class World {
   }
 
   // ---------- Enemy base (vehicle attack objective) ----------
-  _buildBase() {
-    const bx = 0, bz = -118;
+  // Build one destructible enemy base — a walled compound with a reactor core.
+  // Each base picks a random theme and dressing (braziers, banners, palisade
+  // spikes, crates) so no two look alike. Primary bases are larger/tougher.
+  _buildOneBase(bx, bz, primary) {
     const g = new THREE.Group();
-    const wall = new THREE.MeshStandardMaterial({ color: 0x3a3f33, roughness: 0.9, metalness: 0.2, flatShading: true });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x55303a, roughness: 0.5, metalness: 0.6, flatShading: true });
-    const R = 14;
-    // perimeter walls (visual) + corner towers (solid)
-    for (const [dx, dz, w, d] of [[0, -R, 2 * R, 2], [0, R, 2 * R, 2], [-R, 0, 2, 2 * R], [R, 0, 2, 2 * R]]) {
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, 4, d), wall);
-      seg.position.set(bx + dx, 2, bz + dz); seg.castShadow = true; g.add(seg);
+    const THEMES = [
+      { wall: 0x3a3f33, trim: 0x55303a, banner: 0x9c2b2b }, // war camp (green-grey)
+      { wall: 0x6b5f47, trim: 0x3a2c1c, banner: 0x2f5aa0 }, // sandstone keep
+      { wall: 0x44474d, trim: 0x2b2d31, banner: 0x2f7d4a }, // iron fortress
+    ];
+    const th = THEMES[Math.random() * THEMES.length | 0];
+    const wall = new THREE.MeshStandardMaterial({ color: th.wall, roughness: 0.9, metalness: 0.2, flatShading: true });
+    const metal = new THREE.MeshStandardMaterial({ color: th.trim, roughness: 0.5, metalness: 0.6, flatShading: true });
+    const bannerMat = new THREE.MeshStandardMaterial({ color: th.banner, roughness: 1, flatShading: true });
+    const R = primary ? 14 : 9;
+    const coreR = primary ? 3.2 : 2.1;
+    const wallH = primary ? 4 : 3;
+    const rot = Math.random() * Math.PI * 2; // whole compound faces a random way
+    g.rotation.y = rot;
+    const cs = Math.cos(rot), sn = Math.sin(rot);
+    const worldXZ = (lx, lz) => ({ x: bx + lx * cs + lz * sn, z: bz - lx * sn + lz * cs });
+
+    // perimeter walls with a gate gap on the +z side
+    const gate = 4;
+    for (const [dx, dz, w, d] of [[0, -R, 2 * R, 1.6], [-R, 0, 1.6, 2 * R], [R, 0, 1.6, 2 * R]]) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wall);
+      seg.position.set(dx, wallH / 2, dz); seg.castShadow = true; g.add(seg);
     }
+    for (const side of [-1, 1]) { // split front wall for the gate
+      const w = R - gate / 2;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, 1.6), wall);
+      seg.position.set(side * (gate / 2 + w / 2), wallH / 2, R); seg.castShadow = true; g.add(seg);
+    }
+    // corner towers (solid) + a brazier glowing atop each
+    const towerH = primary ? 7 : 5;
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      const t = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.9, 7, 6), wall);
-      t.position.set(bx + sx * R, 3.5, bz + sz * R); t.castShadow = true; g.add(t);
-      this.colliders.push({ x: bx + sx * R, z: bz + sz * R, r: 2 });
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.7, towerH, 6), wall);
+      t.position.set(sx * R, towerH / 2, sz * R); t.castShadow = true; g.add(t);
+      const fire = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.0, 6),
+        new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff6a10, emissiveIntensity: 1.4, roughness: 0.5, flatShading: true }));
+      fire.position.set(sx * R, towerH + 0.4, sz * R); g.add(fire);
+      const w = worldXZ(sx * R, sz * R); this._addBaseCollider(w.x, w.z, 2);
+    }
+    // banner poles flanking the gate
+    for (const side of [-1, 1]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, wallH + 3, 6), metal);
+      pole.position.set(side * (gate / 2 + 0.6), (wallH + 3) / 2, R); g.add(pole);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 1.1), bannerMat);
+      flag.position.set(side * (gate / 2 + 0.6), wallH + 1.4, R - 0.6); g.add(flag);
+    }
+    // palisade spikes along the walls (war-camp flavour)
+    if (Math.random() < 0.6) {
+      for (let i = -R + 2; i <= R - 2; i += 2.2) {
+        for (const [px, pz] of [[i, -R - 0.8], [i, R + 0.8]]) {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 5), metal);
+          spike.position.set(px, 0.7, pz); spike.rotation.x = pz > 0 ? 0.5 : -0.5; g.add(spike);
+        }
+      }
+    }
+    // supply crates stacked inside
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x6a4f2a, roughness: 1, flatShading: true });
+    for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) {
+      const s = 0.9 + Math.random() * 0.5;
+      const cr = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
+      cr.position.set((Math.random() - 0.5) * (R - 3), s / 2, (Math.random() - 0.5) * (R - 3)); cr.castShadow = true; g.add(cr);
     }
     // central reactor core — the destructible target
     const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(3.2, 0),
+      new THREE.IcosahedronGeometry(coreR, 0),
       new THREE.MeshStandardMaterial({ color: 0xff5530, emissive: 0xff3010, emissiveIntensity: 0.85, roughness: 0.4, flatShading: true })
     );
-    core.position.set(bx, 3.6, bz); core.castShadow = true; g.add(core);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(4.4, 0.4, 6, 16), metal);
-    ring.position.set(bx, 3.6, bz); ring.rotation.x = Math.PI / 2; g.add(ring);
-    this.colliders.push({ x: bx, z: bz, r: 4 });
+    core.position.set(0, coreR + 0.4, 0); core.castShadow = true; g.add(core);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(coreR + 1.2, 0.4, 6, 16), metal);
+    ring.position.set(0, coreR + 0.4, 0); ring.rotation.x = Math.PI / 2; g.add(ring);
+    g.position.set(bx, 0, bz);
+    this._addBaseCollider(bx, bz, coreR + 0.8);
     this.root.add(g);
-    this.base = { group: g, core, ring, hp: 2600, maxHp: 2600, x: bx, z: bz, r: 3.8, alive: true, _flash: 0 };
+    const hp = primary ? 2600 : 1200;
+    return { group: g, core, ring, hp, maxHp: hp, x: bx, z: bz, r: coreR + 0.6, coreY: coreR + 0.4, alive: true, _flash: 0, primary };
   }
 
-  baseHpFrac() { return this.base && this.base.alive ? this.base.hp / this.base.maxHp : 0; }
+  _addBaseCollider(x, z, r) {
+    const c = { x, z, r };
+    this.colliders.push(c);
+    if (this._baseColliders) this._baseColliders.add(c);
+  }
 
-  // apply damage; returns true the moment it is destroyed
-  damageBase(amount) {
-    const b = this.base;
+  // Place a primary base plus a few outposts at varied, dry, spread-out spots so
+  // every battlefield feels different. Also seeds tacmap POIs for each.
+  _buildBases() {
+    this.bases = [];
+    const spots = [];
+    const okSpot = (x, z, minSep) => {
+      if (this.waterAt(x, z) || this.waterAt(x + 8, z) || this.waterAt(x, z + 8)) return false;
+      if (Math.hypot(x, z) < 40 || Math.hypot(x, z) > this.bounds - 16) return false; // not on spawn, not off-map
+      if (Math.abs(x) < 8 && z > -110 && z < 30) return false; // keep the spawn lane clear
+      for (const v of (this._villageZones || [])) if (Math.hypot(v.x - x, v.z - z) < v.r + 20) return false; // clear of every hamlet
+      for (const s of spots) if (Math.hypot(s.x - x, s.z - z) < minSep) return false;
+      return true;
+    };
+    const findBaseSpot = (rMin, rMax, minSep) => {
+      for (let t = 0; t < 40; t++) {
+        const a = Math.random() * Math.PI * 2, r = rMin + Math.random() * (rMax - rMin);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (okSpot(x, z, minSep)) { spots.push({ x, z }); return { x, z }; }
+      }
+      return null;
+    };
+    // primary: out toward the far field (findBaseSpot records its own spot; the
+    // fallback needs recording so outposts keep their distance from it)
+    let p = findBaseSpot(this.bounds * 0.6, this.bounds * 0.82, 0);
+    if (!p) { p = { x: 0, z: -this.bounds * 0.75 }; spots.push(p); }
+    this.bases.push(this._buildOneBase(p.x, p.z, true));
+    // 2–3 outposts spread across the map
+    const nOut = 2 + (Math.random() * 2 | 0);
+    for (let i = 0; i < nOut; i++) {
+      const sp = findBaseSpot(this.bounds * 0.4, this.bounds * 0.85, 60);
+      if (sp) this.bases.push(this._buildOneBase(sp.x, sp.z, false));
+    }
+    this.base = this.bases[0]; // primary stays the canonical "the base"
+    // expose as tacmap points of interest (tagged so reshuffle can find its own)
+    this.pois = this.pois || [];
+    this.bases.forEach((b, i) => this.pois.push({ x: b.x, z: b.z, kind: b.primary ? 'objective' : 'alert', label: b.primary ? 'ENEMY BASE' : `OUTPOST ${i}`, base: true }));
+  }
+
+  // Tear down all bases and rebuild them at fresh spots (called between missions
+  // so a replay of the same battlefield still feels new).
+  reshuffleBases() {
+    for (const b of (this.bases || [])) {
+      this.root.remove(b.group);
+      b.group.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) { const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x) => x && x.dispose && x.dispose()); }
+      });
+    }
+    if (this._baseColliders) {
+      this.colliders = this.colliders.filter((c) => !this._baseColliders.has(c));
+      this._baseColliders.clear();
+    }
+    // drop old base POIs (tagged base:true), then rebuild
+    if (this.pois) this.pois = this.pois.filter((p) => !p.base);
+    this._buildBases();
+  }
+
+  _nearestBase(x, z) {
+    let best = null, bd = Infinity;
+    for (const b of (this.bases || [])) {
+      if (!b.alive) continue;
+      const d = Math.hypot(b.x - x, b.z - z);
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+
+  baseHpFrac(x = 0, z = 0) { const b = this._nearestBase(x, z); return b ? b.hp / b.maxHp : 0; }
+
+  // apply damage to a specific base; returns true the moment it is destroyed
+  damageBase(amount, base) {
+    const b = base || this.base;
     if (!b || !b.alive) return false;
     b.hp -= amount; b._flash = 0.12;
     if (b.hp <= 0) { b.hp = 0; b.alive = false; return true; }
     return false;
   }
 
-  // ray–sphere test against the core (for direct bullet hits)
+  // ray–sphere test against every base core; returns the nearest hit (+ its base)
   baseHitPoint(origin, dir) {
-    const b = this.base;
-    if (!b || !b.alive) return null;
-    const ox = origin.x - b.x, oy = origin.y - 3.6, oz = origin.z - b.z, R = b.r + 0.4;
-    const proj = ox * dir.x + oy * dir.y + oz * dir.z;
-    const disc = proj * proj - (ox * ox + oy * oy + oz * oz - R * R);
-    if (disc < 0) return null;
-    const t = -proj - Math.sqrt(disc);
-    if (t < 0) return null;
-    return { point: new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t), distance: t };
+    let best = null;
+    for (const b of (this.bases || [])) {
+      if (!b.alive) continue;
+      const ox = origin.x - b.x, oy = origin.y - b.coreY, oz = origin.z - b.z, R = b.r + 0.4;
+      const proj = ox * dir.x + oy * dir.y + oz * dir.z;
+      const disc = proj * proj - (ox * ox + oy * oy + oz * oz - R * R);
+      if (disc < 0) continue;
+      const t = -proj - Math.sqrt(disc);
+      if (t < 0) continue;
+      if (!best || t < best.distance) best = { point: new THREE.Vector3(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t), distance: t, base: b };
+    }
+    return best;
   }
 
   // ---------- Sky ----------
@@ -644,7 +794,7 @@ export class World {
   }
 
   _buildTerrain() {
-    const size = 360, seg = 90;
+    const size = 520, seg = 130;
     const geo = new THREE.PlaneGeometry(size, size, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
@@ -657,7 +807,7 @@ export class World {
     this.root.add(ground);
 
     const path = new THREE.Mesh(
-      new THREE.PlaneGeometry(8, 320),
+      new THREE.PlaneGeometry(8, 460),
       new THREE.MeshStandardMaterial({ color: 0x8a6a32, roughness: 1, flatShading: true })
     );
     path.rotation.x = -Math.PI / 2; path.position.y = 0.05;
@@ -862,9 +1012,9 @@ export class World {
   _plantForest() {
     // mix of conifers and broadleaf trees, weighted by biome
     const broadleafChance = { plains: 0.4, lowlands: 0.5, highlands: 0.15, mountains: 0.08 }[this.mapId] ?? 0.3;
-    for (let i = 0; i < this.map.treeDensity; i++) {
+    for (let i = 0; i < Math.round(this.map.treeDensity * this._fill); i++) {
       const ang = Math.random() * Math.PI * 2;
-      const dist = 12 + Math.random() * 130;
+      const dist = 12 + Math.random() * (this.bounds - 5);
       const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
       if (Math.abs(x) < 5 && Math.abs(z) < 100) continue;
       if (this.waterAt(x, z)) continue;
@@ -878,10 +1028,10 @@ export class World {
       if (dist < this.bounds + 10) this.colliders.push({ x, z, r: 0.6 * s });
     }
     // scatter low bushes for ground cover (no collision — you can push through)
-    const bushes = Math.round(this.map.treeDensity * 0.9);
+    const bushes = Math.round(this.map.treeDensity * 0.9 * this._fill);
     for (let i = 0; i < bushes; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const dist = 10 + Math.random() * 135;
+      const dist = 10 + Math.random() * (this.bounds);
       const x = Math.cos(ang) * dist, z = Math.sin(ang) * dist;
       if (Math.abs(x) < 4 && Math.abs(z) < 100) continue;
       if (this.waterAt(x, z)) continue;
@@ -952,18 +1102,63 @@ export class World {
   // to terrain, registers solid colliders, and exposes its centre as
   // this.villageAnchor so the medieval landmark can be dropped in its midst.
   _buildVillage() {
+    const dryCand = (x, z) => !(this.waterAt(x, z) || this.waterAt(x + 12, z) || this.waterAt(x, z + 12));
+    // main hamlet
     const cands = [[-66, -70], [70, -66], [-78, 44], [62, 60], [-58, 78]];
     let anchor = null;
-    for (const [x, z] of cands) {
-      if (this.waterAt(x, z) || this.waterAt(x + 12, z) || this.waterAt(x, z + 12)) continue;
-      anchor = { x, z }; break;
-    }
+    for (const [x, z] of cands) { if (dryCand(x, z)) { anchor = { x, z }; break; } }
     if (!anchor) anchor = { x: cands[0][0], z: cands[0][1] };
-    this.villageAnchor = anchor;
-    const { group, colliders, anim } = plantVillage(this, anchor.x, anchor.z, this._seed * 3 + 17);
+    this._plantHamlet(anchor, this._seed * 3 + 17, false);
+    this.villageAnchor = anchor; // main hamlet owns the medieval landmark
+
+    // a smaller satellite hamlet, on the far side of the map from the main one,
+    // dry and well clear of it — gives run-to-run variety without a rival town
+    const B = this.bounds;
+    for (let t = 0; t < 40; t++) {
+      const a = Math.atan2(-anchor.z, -anchor.x) + (Math.random() - 0.5) * 1.6; // roughly opposite side
+      const r = B * (0.45 + Math.random() * 0.3);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!dryCand(x, z) || Math.hypot(x, z) > B - 20) continue;
+      if (Math.hypot(x - anchor.x, z - anchor.z) < 90) continue; // keep the two apart
+      if (Math.abs(x) < 10 && z > -110 && z < 30) continue;      // off the spawn lane
+      this._plantHamlet({ x, z }, this._seed * 7 + 41, true);
+      break;
+    }
+  }
+
+  _plantHamlet(anchor, seed, small) {
+    const { group, colliders, anim } = plantVillage(this, anchor.x, anchor.z, seed, { small });
     this.root.add(group);
-    this._villageAnim = anim;
+    this._villageAnims.push(anim);
+    this._villageZones.push({ x: anchor.x, z: anchor.z, r: small ? 18 : 28 });
     for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
+  }
+
+  // Scatter a couple of crumbling ruin sites — clear of the hamlets, bases and
+  // spawn lane — as atmospheric medieval landmarks to stumble on.
+  _buildRuins() {
+    const B = this.bounds;
+    const clear = (x, z) => {
+      if (this.waterAt(x, z) || this.waterAt(x + 8, z)) return false;
+      if (Math.hypot(x, z) < 34 || Math.hypot(x, z) > B - 24) return false;
+      if (Math.abs(x) < 10 && z > -110 && z < 30) return false; // spawn lane
+      for (const v of (this._villageZones || [])) if (Math.hypot(v.x - x, v.z - z) < v.r + 24) return false;
+      for (const b of (this.bases || [])) if (Math.hypot(b.x - x, b.z - z) < 26) return false;
+      return true;
+    };
+    const n = 1 + (Math.random() * 2 | 0); // 1–2 ruin sites
+    let seed = this._seed * 11 + 5;
+    for (let i = 0; i < n; i++) {
+      for (let t = 0; t < 40; t++) {
+        const a = Math.random() * Math.PI * 2, r = 40 + Math.random() * (B - 66);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (!clear(x, z)) continue;
+        const { group, colliders } = plantRuins(this, x, z, seed++);
+        this.root.add(group);
+        for (const c of colliders) if (Math.hypot(c.x, c.z) < this.bounds) this.colliders.push(c);
+        break;
+      }
+    }
   }
 
   // hollow, enterable building: 4 walls (doorway gap on the +z side), floor, roof
@@ -1162,14 +1357,14 @@ export class World {
     const mossMat = new THREE.MeshStandardMaterial({ color: 0x4f7d1e, roughness: 1, flatShading: true });
 
     // scattered singles
-    for (let i = 0; i < this.map.rockDensity; i++) {
-      const ang = Math.random() * Math.PI * 2, dist = 8 + Math.random() * 118;
+    for (let i = 0; i < Math.round(this.map.rockDensity * this._fill); i++) {
+      const ang = Math.random() * Math.PI * 2, dist = 8 + Math.random() * (this.bounds - 12);
       this._rock(Math.cos(ang) * dist, Math.sin(ang) * dist, 0.4 + Math.random() * 1.0,
         Math.random() < 0.5 ? rockMat : darkRock, mossMat);
     }
     // boulder clusters (cover)
-    for (let c = 0; c < 9; c++) {
-      const ang = Math.random() * Math.PI * 2, dist = 20 + Math.random() * 95;
+    for (let c = 0; c < 14; c++) {
+      const ang = Math.random() * Math.PI * 2, dist = 20 + Math.random() * (this.bounds - 30);
       const cx = Math.cos(ang) * dist, cz = Math.sin(ang) * dist;
       const n = 3 + (Math.random() * 4 | 0);
       for (let k = 0; k < n; k++) {
@@ -1194,10 +1389,11 @@ export class World {
     };
     const blade = new THREE.ConeGeometry(0.2, 1.5, 3);   // taller, lusher blades
     blade.translate(0, 0.75, 0); // pivot at base so the top sways
-    const mesh = new THREE.InstancedMesh(blade, bladeMat, this.map.grass);
+    const grassN = Math.round(this.map.grass * this._fill);
+    const mesh = new THREE.InstancedMesh(blade, bladeMat, grassN);
     const dummy = new THREE.Object3D();
-    for (let i = 0; i < this.map.grass; i++) {
-      const ang = Math.random() * Math.PI * 2, dist = 4 + Math.random() * 90;
+    for (let i = 0; i < grassN; i++) {
+      const ang = Math.random() * Math.PI * 2, dist = 4 + Math.random() * 125;
       const gx = Math.cos(ang) * dist, gz = Math.sin(ang) * dist;
       dummy.position.set(gx, 0, gz);
       dummy.rotation.y = Math.random() * Math.PI;
@@ -1242,11 +1438,29 @@ export class World {
     return res;
   }
 
+  // Iterate colliders that could possibly be within `reach` of (x,z) — via the
+  // spatial grid when it's built, else a brute-force fallback. `reach` must
+  // already include the largest collider radius (callers pass margin + maxR).
+  _collidersNear(x, z, reach, cb) {
+    const grid = this._colliderGrid;
+    if (!grid) { for (const c of this.colliders) cb(c); return; }
+    const cell = this._gridCell;
+    const span = Math.max(1, Math.ceil(reach / cell));
+    const cx = Math.floor(x / cell), cz = Math.floor(z / cell);
+    for (let ix = cx - span; ix <= cx + span; ix++) {
+      for (let iz = cz - span; iz <= cz + span; iz++) {
+        const bucket = grid.get(ix + ',' + iz);
+        if (!bucket) continue;
+        for (const c of bucket) cb(c);
+      }
+    }
+  }
+
   // Lightweight steering: returns a perpendicular nudge away from obstacles
   // that lie ahead, so enemies arc around buildings instead of grinding them.
   steerAround(x, z, dx, dz, radius) {
     let sx = 0, sz = 0;
-    for (const c of this.colliders) {
+    this._collidersNear(x, z, (this._maxColliderR || 0) + radius + 3, (c) => {
       const ox = c.x - x, oz = c.z - z;
       const d = Math.hypot(ox, oz);
       const reach = c.r + radius + 3;
@@ -1259,12 +1473,12 @@ export class World {
           sx += px * side * w; sz += pz * side * w;
         }
       }
-    }
+    });
     return { x: sx, z: sz };
   }
 
   resolve(x, z, radius) {
-    for (const c of this.colliders) {
+    this._collidersNear(x, z, (this._maxColliderR || 0) + radius, (c) => {
       const dx = x - c.x, dz = z - c.z;
       const d = Math.hypot(dx, dz);
       const min = radius + c.r;
@@ -1272,17 +1486,36 @@ export class World {
         const push = (min - d);
         x += (dx / d) * push; z += (dz / d) * push;
       }
-    }
+    });
     const dc = Math.hypot(x, z);
     if (dc > this.bounds) { x = (x / dc) * this.bounds; z = (z / dc) * this.bounds; }
     return { x, z };
   }
 
+  // rebuild the collider spatial grid — cheap (O(colliders), no per-collider
+  // allocation beyond the bucket arrays) so we just do it once every frame
+  // rather than track every mutation site that touches `colliders`
+  _rebuildColliderGrid() {
+    const cell = this._gridCell;
+    const grid = new Map();
+    let maxR = 0;
+    for (const c of this.colliders) {
+      if (c.r > maxR) maxR = c.r;
+      const key = Math.floor(c.x / cell) + ',' + Math.floor(c.z / cell);
+      let bucket = grid.get(key);
+      if (!bucket) { bucket = []; grid.set(key, bucket); }
+      bucket.push(c);
+    }
+    this._colliderGrid = grid;
+    this._maxColliderR = maxR;
+  }
+
   update(dt, camera) {
     this._time += dt;
+    this._rebuildColliderGrid();
     if (this._windTime) this._windTime.value = this._time;
     if (this._critters) this._critters.update(dt, camera);
-    if (this._villageAnim) updateVillage(this._villageAnim, dt, this._time);
+    for (const anim of this._villageAnims) updateVillage(anim, dt, this._time);
     // drifting low haze — wraps around the play area
     if (this._mist) {
       const lim = this.bounds * 0.95;
@@ -1293,9 +1526,8 @@ export class World {
         else if (m.sp.position.x < -lim) m.sp.position.x = lim;
       }
     }
-    // enemy base: spin the core, flash on hit, collapse when destroyed
-    const b = this.base;
-    if (b) {
+    // enemy bases: spin each core, flash on hit, collapse when destroyed
+    for (const b of (this.bases || [])) {
       b.core.rotation.y += dt * 0.6;
       if (b._flash > 0) { b._flash -= dt; b.core.material.emissiveIntensity = 0.85 + 4 * Math.max(0, b._flash / 0.12); }
       else if (b.alive) b.core.material.emissiveIntensity = 0.85 + Math.sin(this._time * 3) * 0.15;

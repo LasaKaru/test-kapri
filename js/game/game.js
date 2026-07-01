@@ -8,6 +8,11 @@ import { CLASSES, Loadout } from './loadout.js';
 import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
 import { Props } from './props.js';
+import { Secrets } from './secrets.js';
+import { Hostages } from './hostages.js';
+import { Underground } from './underground.js';
+import { Villagers } from './villagers.js';
+import { plantLandmarkRing, updateVillage } from './village.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -30,6 +35,7 @@ import { Cheats } from './cheats.js';
 import { Cinematic } from './cinematic.js';
 
 const BASE_FOV = 75;
+const INTERACT_LABEL = { cache: '[E] Search cache', hostage: '[E] Free hostage', hatch: '[E] Descend', exit: '[E] Climb out', hoard: '[E] Take treasure' };
 
 class Game {
   constructor() {
@@ -72,12 +78,23 @@ class Game {
     this.pickups = new Pickups(this.scene);
     this.props = new Props(this.scene);
     this._placeLandmarks();
+    this.secrets = new Secrets(this.scene, this.world);
+    this.hostages = new Hostages(this.scene, this.world);
+    this.underground = new Underground(this.scene, this.world);
+    this.villagers = new Villagers(this.scene, this.world);
     this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
     this.raycaster = new THREE.Raycaster();
     this.minimap = new Minimap(document.getElementById('minimap'));
     this.baseFov = BASE_FOV;
+
+    // cache hot-path DOM refs once — these are touched every frame in loop()
+    this._baseBarWrapEl = document.getElementById('base-bar-wrap');
+    this._baseFillEl = document.getElementById('base-fill');
+    this._interactPromptEl = document.getElementById('interact-prompt');
+    this._baseBarShown = null;
+    this._interactShown = null;
 
     this.state = 'title';
     this.coopMode = false;   // shared-waves co-op (single-player never sets these)
@@ -228,7 +245,7 @@ class Game {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
-      if (e.code === 'KeyE') this.vehicles.toggleMount();
+      if (e.code === 'KeyE') this._interact();
       if (this.vehicles.isMounted()) return; // driving — gun keys disabled
       if (e.code === 'Space') { e.preventDefault(); if (this.player.jump()) this.audio.jump(); }
       if (e.code === 'KeyT') this._toggleThirdPerson();
@@ -546,6 +563,13 @@ class Game {
     this.vehicles.reset();
     this.godmode = false; this.cheatArsenal = false; this.speedRun = false;
     this.world._combatActive = true; // predators (wolves) hunt during a run
+    // fresh single-player mission: reshuffle the enemy bases so the same
+    // battlefield feels new each deployment (co-op mirrors the host, so skip it)
+    if (startWave === 1 && !this.coopMode && this.world.reshuffleBases) this.world.reshuffleBases();
+    if (startWave === 1 && this.secrets) this.secrets.reset();     // fresh caches to discover
+    if (startWave === 1 && this.hostages) this.hostages.reset();   // fresh captives to rescue
+    if (startWave === 1 && this.underground) this.underground.reset(); // fresh hatches + vaults
+    if (startWave === 1 && this.villagers) this.villagers.reset();     // fresh villager NPCs
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -632,6 +656,18 @@ class Game {
         // make the diorama solid: player can't walk through it, enemies arc around.
         // shrink slightly so the collider hugs the rock base, not the outer edge.
         if (w.colliders) w.colliders.push({ x: info.cx, z: info.cz, r: info.r * 0.78 });
+        // a reverent ring of lanterns + banners marking it as a landmark worth finding
+        if (this._landmarkRing) {
+          this.scene.remove(this._landmarkRing);
+          this._landmarkRing.traverse((o) => {
+            if (o.geometry) o.geometry.dispose();
+            if (o.material) { const m = o.material; (Array.isArray(m) ? m : [m]).forEach((x) => x && x.dispose && x.dispose()); }
+          });
+        }
+        const { group: ring, anim } = plantLandmarkRing(w, info.cx, info.cz, info.r, (w._seed || 1) * 5 + 2);
+        this.scene.add(ring);
+        this._landmarkRing = ring;
+        this._landmarkRingAnim = anim;
       },
     });
   }
@@ -875,7 +911,7 @@ class Game {
         const minD = Math.min(baseD, animD, crateD);
         if (bp && baseD === minD && baseD < shot.def.range) {
           endPoint = bp.point; anyHit = true;
-          if (this.world.damageBase(shot.dmg * 6)) this._onBaseDestroyed();
+          if (this.world.damageBase(shot.dmg * 6, bp.base)) this._onBaseDestroyed(bp.base);
           this.effects.impact(endPoint, 0xff7040, false);
         } else if (cr && crateD === minD && crateD < shot.def.range) {
           endPoint = cr.point; anyHit = true;
@@ -1279,23 +1315,120 @@ class Game {
   }
 
   _updateBaseBar() {
-    const wrap = document.getElementById('base-bar-wrap'); if (!wrap) return;
-    const b = this.world.base;
-    const d = b ? Math.hypot(this.player.position.x - b.x, this.player.position.z - b.z) : 1e9;
+    const wrap = this._baseBarWrapEl; if (!wrap) return;
+    const px = this.player.position.x, pz = this.player.position.z;
+    const b = this.world._nearestBase ? this.world._nearestBase(px, pz) : this.world.base;
+    const d = b ? Math.hypot(px - b.x, pz - b.z) : 1e9;
     const show = !!(b && b.alive && (this.vehicles.isMounted() || d < 90));
-    wrap.classList.toggle('hidden', !show);
-    if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac() * 100) + '%'; }
+    if (show !== this._baseBarShown) { this._baseBarShown = show; wrap.classList.toggle('hidden', !show); }
+    if (show && this._baseFillEl) this._baseFillEl.style.width = ((b.hp / b.maxHp) * 100) + '%';
   }
 
-  _onBaseDestroyed() {
-    this.score += 5000;
+  // nearest actionable thing to the player: { kind, obj, d } or null
+  _nearestInteract() {
+    const px = this.player.position.x, pz = this.player.position.z;
+    let best = null;
+    const consider = (kind, x, z, obj) => { const d = Math.hypot(x - px, z - pz); if (!best || d < best.d) best = { kind, obj, d }; };
+    if (this.secrets) { const c = this.secrets.nearest(px, pz); if (c) consider('cache', c.x, c.z, c); }
+    if (this.hostages) { const h = this.hostages.nearest(px, pz); if (h) consider('hostage', h.x, h.z, h); }
+    if (this.underground) {
+      const u = this.underground.nearest(px, pz);
+      if (u) {
+        const c = u.kind === 'hatch' ? { x: u.obj.x, z: u.obj.z }
+          : u.kind === 'exit' ? { x: u.obj.entry.x, z: u.obj.entry.z }
+            : u.obj.hoardPos;
+        consider(u.kind, c.x, c.z, u.obj);
+      }
+    }
+    return best;
+  }
+
+  _teleport(pos) {
+    this.player.position.set(pos.x, pos.y, pos.z);
+    this.player.vy = 0; this.player.onGround = true;
+    this.postfx.pulseBloom(0.6);
+  }
+
+  // descend into a vault; on first entry, its guardian(s) wake to defend the
+  // hoard (skipped for co-op clients — the host owns enemy spawning, not us)
+  _enterVault(hatch) {
+    this._teleport(this.underground.enter(hatch));
+    const v = hatch.vault;
+    const THEME_LABEL = { treasury: 'TREASURY', crypt: 'CRYPT', mine: 'OLD MINE', sanctum: 'SANCTUM' };
+    this.hud.killFeed(`▼ Descended into the ${THEME_LABEL[v.theme] || 'VAULT'}`);
+    const isClient = this.coopMode && !this.coopHost;
+    if (!isClient && !this.pvpMode && !v.guardianSpawned && !v.looted && this.waves && this.waves.spawnAt) {
+      v.guardianSpawned = true;
+      const types = v.guardianTypes || ['shielded'];
+      types.forEach((type, i) => {
+        const spread = (i - (types.length - 1) / 2) * 1.8; // fan multiple guardians out so they don't stack
+        this.waves.spawnAt(type, v.guardianSpot.x + spread, v.guardianSpot.z);
+      });
+      this.hud.killFeed(types.length > 1 ? '⚠ Guardians stir in the dark…' : '⚠ A guardian stirs in the dark…');
+    }
+  }
+
+  // [E]: act on the nearest interactable; otherwise ride or dismount a vehicle
+  _interact() {
+    if (!this.vehicles.isMounted()) {
+      const it = this._nearestInteract();
+      if (it) {
+        switch (it.kind) {
+          case 'cache': this.secrets.open(it.obj, (r, f, t, p) => this._onSecretFound(r, f, t, p)); return;
+          case 'hostage': this.hostages.free(it.obj, (r, f, t, p) => this._onHostageFreed(r, f, t, p)); return;
+          case 'hatch': this._enterVault(it.obj); return;
+          case 'exit': this._teleport(this.underground.exit(it.obj)); this.hud.killFeed('▲ Climbed back to the surface'); return;
+          case 'hoard': { const r = this.underground.loot(it.obj); if (r) this._onSecretFound({ credits: r.credits, item: r.item }, this.underground.looted, this.underground.looted, it.obj.hoardPos); return; }
+        }
+      }
+    }
+    this.vehicles.toggleMount();
+  }
+
+  // keep the shared [E] prompt in sync with the nearest interactable — only
+  // touches the DOM when the shown label actually changes
+  _updateInteractPrompt() {
+    const el = this._interactPromptEl; if (!el) return;
+    const it = this.vehicles.isMounted() ? null : this._nearestInteract();
+    const next = it ? (INTERACT_LABEL[it.kind] || '[E]') : null;
+    if (next === this._interactShown) return;
+    this._interactShown = next;
+    if (next) { el.textContent = next; el.classList.remove('hidden'); }
+    else el.classList.add('hidden');
+  }
+
+  _onHostageFreed(reward, freed, total, pos) {
+    this.credits += reward.credits;
+    this.hud.setCredits(this.credits);
+    if (reward.xp) this._awardXp(reward.xp);
+    this.hud.killFeed(`✚ HOSTAGE RESCUED (${freed}/${total})  +${reward.credits}¢`);
+    try { this.audio.announce('base'); } catch (_) {}
+    this.postfx.pulseBloom(0.5);
+    if (this.ach) this.ach.unlock('liberator');
+  }
+
+  _onSecretFound(reward, found, total, pos) {
+    this.credits += reward.credits;
+    this.hud.setCredits(this.credits);
+    if (reward.item && this.pickups) this.pickups.spawn(reward.item, { x: pos.x, z: pos.z });
+    this.hud.killFeed(`✦ SECRET FOUND (${found}/${total})  +${reward.credits}¢${reward.item ? '  +' + reward.item : ''}`);
+    try { this.audio.swap(); } catch (_) {}
+    this.postfx.pulseBloom(0.5);
+    if (this.ach) this.ach.unlock('treasure');
+  }
+
+  _onBaseDestroyed(base) {
+    const b = base || this.world.base;
+    const primary = !b || b.primary;
+    const reward = primary ? 5000 : 2000;
+    this.score += reward;
     this.hud.setScore(this.score);
     this.hud.popKill();
-    this.hud.killFeed('☠ ENEMY BASE DESTROYED  +5000');
+    this.hud.killFeed(`☠ ${primary ? 'ENEMY BASE' : 'OUTPOST'} DESTROYED  +${reward}`);
     this.audio.announce('base');
     this._triggerKillCam();
     this.ach.unlock('basebuster');
-    this._detonate(this.world.base.x, this.world.base.z, 12, 0, 0);
+    if (b) this._detonate(b.x, b.z, 12, 0, 0);
     this.postfx.pulseBloom(1.0);
   }
 
@@ -1442,6 +1575,12 @@ class Game {
       this.coop.update(dt);
       this.vehicles.update(dt);     // ordnance + driving (sets the camera when mounted)
       this.vehicles.promptTick();
+      if (this.secrets) this.secrets.update(dt);
+      if (this.hostages) this.hostages.update(dt);
+      if (this.underground) this.underground.update(dt);
+      if (this.villagers) this.villagers.update(dt);
+      if (this._landmarkRingAnim) updateVillage(this._landmarkRingAnim, dt, this.world._time || 0);
+      this._updateInteractPrompt();
       this._updateBaseBar();
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);
