@@ -25,6 +25,8 @@ function palette() {
     roof2: mk(0x6a5030),
     stone: mk(0x8a8378),   // well ring
     hay: mk(0xc9a94e),
+    awning1: mk(0x9c3b3b), // market stall awnings (warm reds/blues)
+    awning2: mk(0x37587a),
     win: new THREE.MeshStandardMaterial({ color: 0x120c06, emissive: 0xffb14a, emissiveIntensity: 0.5, roughness: 0.6, flatShading: true }),
   };
 }
@@ -139,6 +141,99 @@ function fenceRun(pal, x0, z0, x1, z1, y0, y1) {
   return g;
 }
 
+// a stone chapel with a small bell tower topped by a cross — the hamlet's centre-piece
+function chapel(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 4.2, d = 6.0, h = 3.4;
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), pal.stone);
+  nave.position.y = h / 2; nave.castShadow = true; nave.receiveShadow = true; g.add(nave);
+
+  // pitched roof over the nave (two slabs + gable ends)
+  const pitch = 1.6;
+  const slabLen = Math.hypot(w / 2 + 0.4, pitch) + 0.1;
+  const ang = Math.atan2(pitch, w / 2 + 0.4);
+  for (const side of [-1, 1]) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(slabLen, 0.16, d + 0.8), pal.roof2);
+    slab.position.set(side * (w / 4), h + pitch / 2, 0);
+    slab.rotation.z = side * (Math.PI / 2 - ang) * -1;
+    slab.castShadow = true; g.add(slab);
+  }
+  const triShape = new THREE.Shape();
+  triShape.moveTo(-w / 2, 0); triShape.lineTo(w / 2, 0); triShape.lineTo(0, pitch); triShape.lineTo(-w / 2, 0);
+  const triGeo = new THREE.ExtrudeGeometry(triShape, { depth: 0.12, bevelEnabled: false });
+  for (const sz of [-1, 1]) { const t = new THREE.Mesh(triGeo, pal.stone); t.position.set(0, h, sz * (d / 2)); g.add(t); }
+
+  // bell tower at the front (+z) end
+  const tw = 1.8, tH = 6.5;
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(tw, tH, tw), pal.stone);
+  tower.position.set(0, tH / 2, d / 2 - tw / 2); tower.castShadow = true; g.add(tower);
+  const belfry = new THREE.Mesh(new THREE.BoxGeometry(tw + 0.2, 1.0, tw + 0.2), pal.stone);
+  belfry.position.set(0, tH, d / 2 - tw / 2); g.add(belfry);
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(tw * 0.8, 2.0, 4), pal.roof);
+  spire.position.set(0, tH + 1.5, d / 2 - tw / 2); spire.rotation.y = Math.PI / 4; spire.castShadow = true; g.add(spire);
+  // cross on top
+  const cv = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), pal.timber);
+  cv.position.set(0, tH + 2.9, d / 2 - tw / 2); g.add(cv);
+  const chz = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.1), pal.timber);
+  chz.position.set(0, tH + 3.0, d / 2 - tw / 2); g.add(chz);
+
+  // arched door + tall glowing windows
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 0.14), pal.timber);
+  door.position.set(0, 1.0, d / 2 + 0.02); g.add(door);
+  for (const sx of [-1, 1]) for (const wz of [-1.4, 1.4]) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.4, 0.6), pal.win.clone());
+    win.material.emissiveIntensity = 0.35 + rnd() * 0.3;
+    win.position.set(sx * (w / 2 + 0.01), 1.8, wz); g.add(win);
+  }
+  g.userData.radius = Math.max(w, d) * 0.5;
+  return g;
+}
+
+// a market stall: four posts, a plank counter and a striped awning
+function stall(rnd, pal, stripe) {
+  const g = new THREE.Group();
+  const w = 2.2, d = 1.6, h = 2.0;
+  const postGeo = new THREE.BoxGeometry(0.12, h, 0.12);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const p = new THREE.Mesh(postGeo, pal.timber);
+    p.position.set(sx * w / 2, h / 2, sz * d / 2); g.add(p);
+  }
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, d), pal.timber);
+  counter.position.y = 0.9; counter.castShadow = true; counter.receiveShadow = true; g.add(counter);
+  // sloped striped awning
+  const awn = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.08, d + 0.6), stripe);
+  awn.position.set(0, h + 0.2, 0.2); awn.rotation.x = -0.32; awn.castShadow = true; g.add(awn);
+  // a few goods on the counter (crates / produce)
+  const goods = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < goods; i++) {
+    const s = 0.18 + rnd() * 0.14;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), rnd() < 0.5 ? pal.hay : pal.roof);
+    box.position.set((rnd() - 0.5) * (w - 0.4), 0.98 + s / 2, (rnd() - 0.5) * (d - 0.4)); g.add(box);
+  }
+  g.userData.radius = Math.max(w, d) * 0.5;
+  return g;
+}
+
+// a simple two-wheeled hand cart
+function cart(pal) {
+  const g = new THREE.Group();
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 1.1), pal.timber);
+  bed.position.y = 0.8; bed.castShadow = true; g.add(bed);
+  for (const side of [-1, 1]) {
+    const sidePanel = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 0.1), pal.timber);
+    sidePanel.position.set(0, 1.0, side * 0.5); g.add(sidePanel);
+  }
+  const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.12, 10);
+  for (const side of [-1, 1]) {
+    const wheel = new THREE.Mesh(wheelGeo, pal.roof2);
+    wheel.rotation.x = Math.PI / 2; wheel.position.set(-0.4, 0.45, side * 0.62); wheel.castShadow = true; g.add(wheel);
+  }
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.1, 0.1), pal.timber);
+  shaft.position.set(1.5, 0.7, 0); g.add(shaft);
+  g.userData.radius = 1.2;
+  return g;
+}
+
 // Build the hamlet around (ax, az). Returns { group, colliders }.
 export function plantVillage(world, ax, az, seed = 7) {
   const rnd = rng32(seed);
@@ -180,6 +275,42 @@ export function plantVillage(world, ax, az, seed = 7) {
     group.add(c);
     colliders.push({ x, z, r: c.userData.radius * 0.85 });
     placed.push({ x, z, a });
+  }
+
+  // chapel with bell tower — set just beyond the cottage ring on flat ground
+  for (let tries = 0; tries < 6; tries++) {
+    const a = rnd() * Math.PI * 2, r = ringR + 4 + rnd() * 2;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z) || Math.hypot(x, z) > world.bounds - 8) continue;
+    const s = slope(x, z, 3.2);
+    if (s.max - s.min > 1.6) continue; // the tall tower wants level ground
+    const ch = chapel(rnd, pal);
+    ch.position.set(x, s.min, z);
+    ch.rotation.y = Math.atan2(ax - x, az - z); // door/tower face the well
+    group.add(ch);
+    colliders.push({ x, z, r: ch.userData.radius * 0.8 });
+    break;
+  }
+
+  // a couple of market stalls ringing the well, plus a cart
+  const stalls = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < stalls; i++) {
+    const a = (i / stalls) * Math.PI * 2 + rnd() * 0.6, r = 3.2 + rnd() * 1.5;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z)) continue;
+    const st = stall(rnd, pal, rnd() < 0.5 ? pal.awning1 : pal.awning2);
+    st.position.set(x, gy(x, z), z);
+    st.rotation.y = Math.atan2(ax - x, az - z); // counter faces the well
+    group.add(st);
+    colliders.push({ x, z, r: st.userData.radius * 0.7 });
+  }
+  {
+    const a = rnd() * Math.PI * 2, r = 4.5 + rnd() * 1.5;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (dry(x, z)) {
+      const ct = cart(pal); ct.position.set(x, gy(x, z), z); ct.rotation.y = rnd() * Math.PI * 2;
+      group.add(ct); colliders.push({ x, z, r: ct.userData.radius * 0.7 });
+    }
   }
 
   // hay bales scattered between houses
