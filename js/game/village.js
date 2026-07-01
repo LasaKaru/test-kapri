@@ -27,7 +27,22 @@ function palette() {
     hay: mk(0xc9a94e),
     awning1: mk(0x9c3b3b), // market stall awnings (warm reds/blues)
     awning2: mk(0x37587a),
+    metal: new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.5, metalness: 0.7, flatShading: true }), // anvil / fittings
+    canvas: mk(0xdcd3bc),  // windmill sails
+    crop: mk(0x6f8f3a),    // field rows
+    soil: mk(0x4a3a28),    // tilled earth
+    banner1: mk(0xa52832), // heraldic cloth
+    banner2: mk(0x2f5aa0),
+    banner3: mk(0x2f7d4a),
+    wool: mk(0xe8e4da),    // sheep
+    pig: mk(0xc98a86),     // pig
+    dark: mk(0x2b2620),    // hooves / snouts / iron
+    grass: mk(0x5f8038),   // pen turf / target rings
+    cloth1: mk(0xcaa15a),  // hanging laundry
+    cloth2: mk(0xb7c2cc),
+    target: mk(0xd8c9a0),  // archery butt straw
     win: new THREE.MeshStandardMaterial({ color: 0x120c06, emissive: 0xffb14a, emissiveIntensity: 0.5, roughness: 0.6, flatShading: true }),
+    fire: new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff6a10, emissiveIntensity: 1.6, roughness: 0.5, flatShading: true }),
   };
 }
 
@@ -273,16 +288,373 @@ function buildSmoke(group, chimneys, rnd) {
   return puffs;
 }
 
-// Advance the smoke plumes: each puff rises, sways, grows and fades, then loops.
-export function updateSmoke(puffs, dt) {
-  for (const p of puffs) {
+// A tower windmill: stone base, timber cap, and four sails on a hub that spins.
+// Returns { group, blades } — the world rotates `blades` each frame.
+function windmill(pal) {
+  const g = new THREE.Group();
+  const baseH = 6.5, topR = 1.6, botR = 2.2;
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(topR, botR, baseH, 8), pal.plaster2);
+  tower.position.y = baseH / 2; tower.castShadow = true; tower.receiveShadow = true; g.add(tower);
+  // timber bands
+  for (const yy of [0.15, 0.55, 0.9]) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(botR - (botR - topR) * yy + 0.06, botR - (botR - topR) * yy + 0.06, 0.18, 8), pal.timber);
+    band.position.y = baseH * yy; g.add(band);
+  }
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(topR + 0.3, 1.6, 8), pal.roof);
+  cap.position.y = baseH + 0.7; cap.castShadow = true; g.add(cap);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.2), pal.timber);
+  door.position.set(0, 0.85, botR - 0.1); g.add(door);
+
+  // sail assembly on a hub, mounted on the +z face near the cap
+  const blades = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.5, 8), pal.timber);
+  hub.rotation.x = Math.PI / 2; blades.add(hub);
+  for (let i = 0; i < 4; i++) {
+    const arm = new THREE.Group();
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.2, 0.14), pal.timber);
+    spar.position.y = 2.1; arm.add(spar);
+    const sail = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3.4, 0.06), pal.canvas);
+    sail.position.set(0.62, 2.2, 0); sail.castShadow = true; arm.add(sail);
+    arm.rotation.z = (i / 4) * Math.PI * 2;
+    blades.add(arm);
+  }
+  blades.position.set(0, baseH + 0.4, topR + 0.4);
+  g.add(blades);
+  g.userData.radius = botR;
+  return { group: g, blades };
+}
+
+// A blacksmith: open timber-framed forge with a glowing hearth and an anvil.
+function forge(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 4.0, d = 3.4, h = 2.6;
+  // back + side walls (open front), stone lower course
+  const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.3), pal.stone);
+  back.position.set(0, h / 2, -d / 2); back.castShadow = true; g.add(back);
+  for (const sx of [-1, 1]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.3, h, d), pal.plaster);
+    side.position.set(sx * w / 2, h / 2, 0); side.castShadow = true; g.add(side);
+  }
+  // lean-to roof
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 0.16, d + 0.6), pal.roof2);
+  roof.position.set(0, h + 0.35, 0.1); roof.rotation.x = -0.28; roof.castShadow = true; g.add(roof);
+  // support posts at the open front
+  for (const sx of [-1, 1]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.18, h, 0.18), pal.timber);
+    p.position.set(sx * (w / 2 - 0.2), h / 2, d / 2 - 0.2); g.add(p);
+  }
+  // stone forge hearth with glowing coals + a small flame
+  const hearth = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.2), pal.stone);
+  hearth.position.set(-w / 4, 0.5, -d / 4); hearth.castShadow = true; g.add(hearth);
+  const coals = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.2, 0.8), pal.fire.clone());
+  coals.position.set(-w / 4, 1.05, -d / 4); g.add(coals);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 5), pal.fire.clone());
+  flame.position.set(-w / 4, 1.4, -d / 4); g.add(flame);
+  // anvil: block + horn on a stump
+  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.7, 8), pal.timber);
+  stump.position.set(w / 4, 0.35, d / 5); g.add(stump);
+  const anvil = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.28, 0.34), pal.metal);
+  anvil.position.set(w / 4, 0.84, d / 5); anvil.castShadow = true; g.add(anvil);
+  const horn = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.4, 6), pal.metal);
+  horn.rotation.z = -Math.PI / 2; horn.position.set(w / 4 + 0.5, 0.84, d / 5); g.add(horn);
+  g.userData.radius = Math.max(w, d) * 0.5;
+  g.userData.flames = [{ mesh: flame, base: 1.0 }, { mesh: coals, base: 1.6 }]; // flicker targets
+  return g;
+}
+
+// A tall pole flying a heraldic pennant that ripples in the wind (animated).
+function banner(pal, clothMat) {
+  const g = new THREE.Group();
+  const poleH = 5.0;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, poleH, 6), pal.timber);
+  pole.position.y = poleH / 2; pole.castShadow = true; g.add(pole);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), pal.metal);
+  knob.position.y = poleH + 0.1; g.add(knob);
+  // triangular pennant built from segments so it can ripple along its length
+  const cloth = new THREE.Group();
+  const segs = 5, segW = 0.44;
+  for (let i = 0; i < segs; i++) {
+    const hgt = 1.0 * (1 - i / segs) + 0.25;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(segW, hgt, 0.04), clothMat);
+    seg.position.set(segW / 2 + i * segW, 0, 0);
+    seg.userData.baseX = seg.position.x; seg.userData.i = i;
+    cloth.add(seg);
+  }
+  cloth.position.set(0.1, poleH - 0.8, 0);
+  g.add(cloth);
+  g.userData.radius = 0.4;
+  return { group: g, cloth };
+}
+
+// A wrought-iron brazier: a bowl of embers on legs with a flame (flickers).
+function brazier(pal) {
+  const g = new THREE.Group();
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.32, 0.4, 8), pal.metal);
+  bowl.position.y = 1.0; bowl.castShadow = true; g.add(bowl);
+  for (let i = 0; i < 3; i++) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.0, 0.07), pal.metal);
+    const a = (i / 3) * Math.PI * 2;
+    leg.position.set(Math.cos(a) * 0.3, 0.5, Math.sin(a) * 0.3); leg.rotation.z = Math.cos(a) * 0.18; leg.rotation.x = -Math.sin(a) * 0.18; g.add(leg);
+  }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.9, 6), pal.fire.clone());
+  flame.position.y = 1.5; g.add(flame);
+  g.userData.radius = 0.5;
+  g.userData.flames = [{ mesh: flame, base: 1.6 }];
+  return g;
+}
+
+// A stone-and-timber gateway arch marking the entrance to the hamlet.
+function gateArch(pal) {
+  const g = new THREE.Group();
+  const pierH = 4.0, gap = 4.0;
+  for (const sx of [-1, 1]) {
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(1.0, pierH, 1.0), pal.stone);
+    pier.position.set(sx * (gap / 2 + 0.5), pierH / 2, 0); pier.castShadow = true; g.add(pier);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.4, 1.3), pal.stone);
+    cap.position.set(sx * (gap / 2 + 0.5), pierH + 0.2, 0); g.add(cap);
+  }
+  // timber lintel beam across the top
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(gap + 1.4, 0.5, 0.6), pal.timber);
+  lintel.position.set(0, pierH + 0.1, 0); lintel.castShadow = true; g.add(lintel);
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.1), pal.plaster);
+  sign.position.set(0, pierH - 0.6, 0.35); g.add(sign);
+  g.userData.piers = [{ x: -(gap / 2 + 0.5), r: 0.6 }, { x: (gap / 2 + 0.5), r: 0.6 }];
+  return g;
+}
+
+// A tilled crop field: dark soil bed with rows of green plants.
+function cropField(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 5 + rnd() * 3, d = 4 + rnd() * 2;
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, d), pal.soil);
+  bed.position.y = 0.07; bed.receiveShadow = true; g.add(bed);
+  const rows = Math.max(3, Math.round(w / 0.7));
+  for (let r = 0; r < rows; r++) {
+    const rx = -w / 2 + 0.5 + r * (w - 1) / (rows - 1);
+    const row = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4 + rnd() * 0.2, d - 0.6), pal.crop);
+    row.position.set(rx, 0.3, 0); g.add(row);
+  }
+  g.userData.radius = Math.max(w, d) * 0.5;
+  return g;
+}
+
+// Advance every animated village element (smoke, windmill sails, banners,
+// flickering fires) one frame. `time` is the world clock for phase coherence.
+export function updateVillage(anim, dt, time) {
+  // drifting chimney smoke
+  for (const p of anim.smoke) {
     p.t += dt * p.speed;
     if (p.t >= 1) p.t -= 1;
     const k = p.t;
     p.mesh.position.set(p.ox + Math.sin(k * 6 + p.sway) * 0.35, p.oy + k * 3.6, p.oz + Math.cos(k * 5 + p.sway) * 0.3);
     p.mesh.scale.setScalar(0.3 + k * 1.3);
-    p.mesh.material.opacity = Math.max(0, 0.45 * (1 - k) * Math.min(1, k * 6)); // fade in fast, out slow
+    p.mesh.material.opacity = Math.max(0, 0.45 * (1 - k) * Math.min(1, k * 6));
   }
+  // turning windmill sails
+  for (const wm of anim.windmills) wm.blades.rotation.z += dt * wm.speed;
+  // rippling banners — each segment lags the one before it for a wave
+  for (const b of anim.banners) {
+    for (const seg of b.cloth.children) {
+      const i = seg.userData.i;
+      const wave = Math.sin(time * 3 + i * 0.9 + b.phase);
+      seg.position.z = wave * 0.12 * (i + 1);
+      seg.rotation.y = wave * 0.18;
+    }
+  }
+  // flickering forge/brazier fires
+  for (const f of anim.flames) {
+    const flick = 0.75 + Math.sin(time * 11 + f.phase) * 0.15 + Math.sin(time * 23 + f.phase) * 0.1;
+    f.mesh.material.emissiveIntensity = f.base * flick;
+    if (f.mesh.geometry.type === 'ConeGeometry') f.mesh.scale.y = 0.85 + flick * 0.3;
+  }
+  // gently swaying hung laundry
+  for (const g of (anim.laundry || [])) g.mesh.rotation.x = Math.sin(time * 1.6 + g.phase) * 0.22;
+}
+
+// A small country graveyard: leaning tombstones, a stone cross and a wispy rail.
+function graveyard(rnd, pal) {
+  const g = new THREE.Group();
+  const rows = 2, cols = 3;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (rnd() < 0.15) continue;
+    const gx = (c - (cols - 1) / 2) * 1.3, gz = (r - (rows - 1) / 2) * 1.4;
+    const kind = rnd();
+    let stone;
+    if (kind < 0.6) { // rounded headstone
+      stone = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.14), pal.stone);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.14, 8, 1, false, 0, Math.PI), pal.stone);
+      top.rotation.z = -Math.PI / 2; top.position.set(gx, 0.8, gz); g.add(top);
+    } else if (kind < 0.85) { // cross
+      stone = new THREE.Group();
+      const v = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.9, 0.16), pal.stone); v.position.y = 0.45; stone.add(v);
+      const h = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.16), pal.stone); h.position.y = 0.62; stone.add(h);
+    } else { // plain slab
+      stone = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.14), pal.stone);
+    }
+    if (stone.isMesh) stone.position.set(gx, 0.4, gz); else stone.position.set(gx, 0, gz);
+    stone.rotation.z = (rnd() - 0.5) * 0.18; // a little lean
+    stone.castShadow = true; g.add(stone);
+  }
+  g.userData.radius = 2.6;
+  return g;
+}
+
+// A simple low-poly farm animal (sheep or pig), standing.
+function animal(pal, kind) {
+  const g = new THREE.Group();
+  const body = kind === 'sheep'
+    ? new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0), pal.wool)
+    : new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.45), pal.pig);
+  body.scale.set(kind === 'sheep' ? 1.3 : 1, 0.85, 1); body.position.y = 0.55; body.castShadow = true; g.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.3), kind === 'sheep' ? pal.dark : pal.pig);
+  head.position.set(kind === 'sheep' ? 0.5 : 0.55, 0.6, 0); g.add(head);
+  if (kind === 'sheep') { // ears
+    for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.14), pal.dark); e.position.set(0.5, 0.66, s * 0.16); g.add(e); }
+  }
+  const legGeo = new THREE.BoxGeometry(0.09, 0.35, 0.09);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const leg = new THREE.Mesh(legGeo, pal.dark);
+    leg.position.set(sx * 0.28, 0.18, sz * 0.16); g.add(leg);
+  }
+  return g;
+}
+
+// A fenced livestock pen with a patch of turf and a couple of animals.
+function pen(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 5.5, d = 4.5;
+  const turf = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), pal.grass);
+  turf.position.y = 0.03; turf.receiveShadow = true; g.add(turf);
+  // rail fence around the perimeter (gap on +x for a gate)
+  const railMat = pal.timber;
+  const seg = (x0, z0, x1, z1) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(z1 - z0, x1 - x0);
+    const posts = Math.max(2, Math.round(len / 1.3));
+    for (let i = 0; i <= posts; i++) {
+      const t = i / posts, p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.12), railMat);
+      p.position.set(x0 + (x1 - x0) * t, 0.45, z0 + (z1 - z0) * t); g.add(p);
+    }
+    for (const ry of [0.35, 0.7]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.07, 0.07), railMat);
+      rail.position.set((x0 + x1) / 2, ry, (z0 + z1) / 2); rail.rotation.y = -ang; g.add(rail);
+    }
+  };
+  seg(-w / 2, -d / 2, w / 2, -d / 2);
+  seg(-w / 2, d / 2, w / 2, d / 2);
+  seg(-w / 2, -d / 2, -w / 2, d / 2);
+  seg(w / 2, -d / 2, w / 2, -0.8); seg(w / 2, 0.8, w / 2, d / 2); // gap = gate
+  const n = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < n; i++) {
+    const a = animal(pal, rnd() < 0.5 ? 'sheep' : 'pig');
+    a.position.set((rnd() - 0.5) * (w - 1.5), 0.06, (rnd() - 0.5) * (d - 1.5));
+    a.rotation.y = rnd() * Math.PI * 2; g.add(a);
+  }
+  g.userData.radius = Math.max(w, d) * 0.5;
+  g.userData.fence = { w, d }; // for perimeter colliders
+  return g;
+}
+
+// A wooden signpost with a couple of directional arms.
+function signpost(rnd, pal) {
+  const g = new THREE.Group();
+  const h = 2.6;
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, h, 0.16), pal.timber);
+  post.position.y = h / 2; post.castShadow = true; g.add(post);
+  const arms = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < arms; i++) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.24, 0.08), pal.plaster);
+    arm.position.set(0.5, h - 0.3 - i * 0.4, 0); arm.rotation.y = rnd() * Math.PI * 2;
+    // point: shift so one end is at the post
+    arm.position.x = Math.cos(arm.rotation.y) * 0.55; arm.position.z = -Math.sin(arm.rotation.y) * 0.55;
+    g.add(arm);
+  }
+  g.userData.radius = 0.4;
+  return g;
+}
+
+// A stacked pile of firewood logs.
+function logPile(rnd, pal) {
+  const g = new THREE.Group();
+  const geo = new THREE.CylinderGeometry(0.16, 0.16, 1.6, 7);
+  const rows = 2 + (rnd() * 2 | 0);
+  for (let r = 0; r < rows; r++) {
+    const n = 4 - r;
+    for (let i = 0; i < n; i++) {
+      const log = new THREE.Mesh(geo, i % 2 ? pal.timber : pal.roof2);
+      log.rotation.x = Math.PI / 2;
+      log.position.set((i - (n - 1) / 2) * 0.34 + (r % 2) * 0.17, 0.16 + r * 0.31, 0);
+      log.castShadow = true; g.add(log);
+    }
+  }
+  g.userData.radius = 0.9;
+  return g;
+}
+
+// A cluster of barrels and a sack or two.
+function barrelCluster(rnd, pal) {
+  const g = new THREE.Group();
+  const n = 2 + (rnd() * 3 | 0);
+  for (let i = 0; i < n; i++) {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.9, 9), pal.roof2);
+    b.position.set((rnd() - 0.5) * 1.4, 0.45, (rnd() - 0.5) * 1.4); b.castShadow = true; g.add(b);
+    const hoop = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 9), pal.metal);
+    hoop.position.copy(b.position); hoop.position.y = 0.6; g.add(hoop);
+  }
+  g.userData.radius = 1.1;
+  return g;
+}
+
+// A clothesline strung between two posts with a few hanging garments (sway).
+function clothesline(pal) {
+  const g = new THREE.Group();
+  const span = 4.0;
+  for (const sx of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.0, 0.1), pal.timber);
+    post.position.set(sx * span / 2, 1.0, 0); g.add(post);
+  }
+  const line = new THREE.Mesh(new THREE.BoxGeometry(span, 0.03, 0.03), pal.dark);
+  line.position.y = 1.9; g.add(line);
+  const garments = [];
+  const n = 3;
+  for (let i = 0; i < n; i++) {
+    const gx = -span / 2 + span * (i + 1) / (n + 1);
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.04), i % 2 ? pal.cloth1 : pal.cloth2);
+    // pivot from the top edge so it swings like hung fabric
+    cloth.geometry.translate(0, -0.45, 0);
+    cloth.position.set(gx, 1.88, 0); g.add(cloth);
+    garments.push(cloth);
+  }
+  g.userData.radius = span * 0.5;
+  g.userData.garments = garments;
+  return g;
+}
+
+// A straw archery butt with painted rings on a low stand.
+function archeryButt(pal) {
+  const g = new THREE.Group();
+  const butt = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.3, 12), pal.target);
+  butt.rotation.x = Math.PI / 2; butt.position.y = 1.0; butt.castShadow = true; g.add(butt);
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.32, 12), pal.awning1);
+  ring.rotation.x = Math.PI / 2; ring.position.set(0, 1.0, 0.01); g.add(ring);
+  const bull = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.34, 10), pal.hay);
+  bull.rotation.x = Math.PI / 2; bull.position.set(0, 1.0, 0.02); g.add(bull);
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.4, 0.1), pal.timber);
+    leg.position.set(sx * 0.4, 0.55, -0.1); leg.rotation.z = sx * 0.14; g.add(leg);
+  }
+  g.userData.radius = 0.8;
+  return g;
+}
+
+// A hollowed-log water trough.
+function trough(pal) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 0.7), pal.timber);
+  body.position.y = 0.35; body.castShadow = true; g.add(body);
+  const water = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.06, 0.55), new THREE.MeshStandardMaterial({ color: 0x2f5d6b, roughness: 0.3, metalness: 0.1 }));
+  water.position.y = 0.56; g.add(water);
+  g.userData.radius = 1.1;
+  return g;
 }
 
 // Build the hamlet around (ax, az). Returns { group, colliders, smoke }.
@@ -402,9 +774,146 @@ export function plantVillage(world, ax, az, seed = 7) {
     group.add(fenceRun(pal, x0, z0, x1, z1, gy(x0, z0), gy(x1, z1)));
   }
 
+  // animation registers, filled as animated structures are placed
+  const windmills = [], banners = [], flames = [], laundry = [];
+  const addFlames = (obj, ox, oz) => { // register flicker targets (phase varies by position)
+    if (!obj.userData.flames) return;
+    for (const f of obj.userData.flames) flames.push({ mesh: f.mesh, base: f.base, phase: (ox + oz) * 0.7 });
+  };
+  // find a dry, sufficiently flat spot on a ring around the anchor
+  const findSpot = (rMin, rMax, flatR, maxSlope, tries = 8) => {
+    for (let t = 0; t < tries; t++) {
+      const a = rnd() * Math.PI * 2, r = rMin + rnd() * (rMax - rMin);
+      const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+      if (!dry(x, z) || Math.hypot(x, z) > world.bounds - 8) continue;
+      const s = slope(x, z, flatR);
+      if (s.max - s.min > maxSlope) continue;
+      return { x, z, y: s.min, a };
+    }
+    return null;
+  };
+
+  // a windmill on the edge of the hamlet (tall — wants flat, open ground)
+  {
+    const sp = findSpot(ringR + 6, ringR + 12, 2.6, 1.4);
+    if (sp) {
+      const { group: wm, blades } = windmill(pal);
+      wm.position.set(sp.x, sp.y, sp.z); wm.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(wm); colliders.push({ x: sp.x, z: sp.z, r: wm.userData.radius });
+      windmills.push({ blades, speed: 0.5 + rnd() * 0.4 });
+    }
+  }
+
+  // a blacksmith forge just off the square
+  {
+    const sp = findSpot(ringR - 2, ringR + 3, 2.4, 1.6);
+    if (sp) {
+      const fg = forge(rnd, pal);
+      fg.position.set(sp.x, sp.y, sp.z); fg.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(fg); colliders.push({ x: sp.x, z: sp.z, r: fg.userData.radius * 0.85 });
+      addFlames(fg, sp.x, sp.z);
+    }
+  }
+
+  // a gateway arch on the approach side (facing the map centre / spawn)
+  {
+    const toC = Math.atan2(-az, -ax); // direction from anchor toward origin
+    const gr = ringR + 9;
+    const x = ax + Math.cos(toC) * gr, z = az + Math.sin(toC) * gr;
+    if (dry(x, z) && Math.hypot(x, z) < world.bounds - 6) {
+      const s = slope(x, z, 3.0);
+      if (s.max - s.min < 1.8) {
+        const ga = gateArch(pal);
+        ga.position.set(x, s.min, z); ga.rotation.y = toC + Math.PI / 2; // arch spans across the path
+        group.add(ga);
+        const cs = Math.cos(ga.rotation.y), sn = Math.sin(ga.rotation.y);
+        for (const p of ga.userData.piers) colliders.push({ x: x + p.x * cs, z: z - p.x * sn, r: p.r });
+      }
+    }
+  }
+
+  // heraldic banners flanking the square + on the gate approach
+  const nBanners = 3 + (rnd() * 2 | 0);
+  const clothMats = [pal.banner1, pal.banner2, pal.banner3];
+  for (let i = 0; i < nBanners; i++) {
+    const a = (i / nBanners) * Math.PI * 2 + 0.7, r = 6 + rnd() * 2;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z)) continue;
+    const { group: bn, cloth } = banner(pal, clothMats[i % clothMats.length]);
+    bn.position.set(x, gy(x, z), z); bn.rotation.y = rnd() * Math.PI * 2;
+    group.add(bn);
+    banners.push({ cloth, phase: rnd() * Math.PI * 2 });
+  }
+
+  // fire braziers for light + warmth around the square
+  const nBraz = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < nBraz; i++) {
+    const a = (i / nBraz) * Math.PI * 2 + 1.3, r = 4 + rnd() * 1.5;
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z)) continue;
+    const br = brazier(pal); br.position.set(x, gy(x, z), z);
+    group.add(br); colliders.push({ x, z, r: br.userData.radius * 0.6 });
+    addFlames(br, x, z);
+  }
+
+  // a couple of crop fields on the outskirts
+  const nFields = 2 + (rnd() * 2 | 0);
+  for (let i = 0; i < nFields; i++) {
+    const sp = findSpot(ringR + 4, ringR + 14, 3.0, 1.2);
+    if (!sp) continue;
+    const fld = cropField(rnd, pal);
+    fld.position.set(sp.x, sp.y, sp.z); fld.rotation.y = rnd() * Math.PI * 2;
+    group.add(fld); // fields are low — no collider, you can walk through the rows
+  }
+
+  // a small graveyard tucked beyond the ring (near the chapel, ideally)
+  {
+    const sp = findSpot(ringR + 3, ringR + 9, 2.8, 1.4);
+    if (sp) {
+      const gv = graveyard(rnd, pal);
+      gv.position.set(sp.x, sp.y, sp.z); gv.rotation.y = rnd() * Math.PI * 2;
+      group.add(gv); colliders.push({ x: sp.x, z: sp.z, r: gv.userData.radius * 0.7 });
+    }
+  }
+
+  // a livestock pen with a rail fence and a couple of animals
+  {
+    const sp = findSpot(ringR + 2, ringR + 8, 3.0, 1.2);
+    if (sp) {
+      const pn = pen(rnd, pal);
+      pn.position.set(sp.x, sp.y, sp.z); pn.rotation.y = rnd() * Math.PI * 2;
+      group.add(pn);
+      // perimeter colliders (four corner posts) so you bump the fence, not the animals
+      const { w, d } = pn.userData.fence, cs = Math.cos(pn.rotation.y), sn = Math.sin(pn.rotation.y);
+      for (const [lx, lz] of [[-w / 2, 0], [w / 2, 0], [0, -d / 2], [0, d / 2]])
+        colliders.push({ x: sp.x + lx * cs + lz * sn, z: sp.z - lx * sn + lz * cs, r: 0.6 });
+    }
+  }
+
+  // scattered utility props: signpost, log piles, barrels, clothesline, trough
+  const propAt = (rMin, rMax, build, colliderR) => {
+    const a = rnd() * Math.PI * 2, r = rMin + rnd() * (rMax - rMin);
+    const x = ax + Math.cos(a) * r, z = az + Math.sin(a) * r;
+    if (!dry(x, z) || Math.hypot(x, z) > world.bounds - 6) return null;
+    const o = build(); o.position.set(x, gy(x, z), z); o.rotation.y = rnd() * Math.PI * 2;
+    group.add(o);
+    if (colliderR) colliders.push({ x, z, r: colliderR });
+    return { obj: o, x, z };
+  };
+  propAt(ringR - 3, ringR + 2, () => signpost(rnd, pal), 0.4);
+  for (let i = 0; i < 2 + (rnd() * 2 | 0); i++) propAt(ringR - 1, ringR + 6, () => logPile(rnd, pal), 0.8);
+  for (let i = 0; i < 2 + (rnd() * 2 | 0); i++) propAt(4, ringR + 3, () => barrelCluster(rnd, pal), 1.0);
+  for (let i = 0; i < 2; i++) propAt(ringR - 2, ringR + 4, () => archeryButt(pal), 0.6);
+  propAt(4, ringR, () => trough(pal), 1.0);
+  // clotheslines — register their garments for sway
+  for (let i = 0; i < 1 + (rnd() * 2 | 0); i++) {
+    const p = propAt(ringR - 3, ringR + 3, () => clothesline(pal), 0);
+    if (p) for (const gm of p.obj.userData.garments) laundry.push({ mesh: gm, phase: rnd() * Math.PI * 2 });
+  }
+
   // drifting smoke from a few chimneys
   const smoke = buildSmoke(group, chimneys, rnd);
 
   group.userData.villagePalette = pal;
-  return { group, colliders, smoke };
+  return { group, colliders, anim: { smoke, windmills, banners, flames, laundry } };
 }
