@@ -8,6 +8,7 @@ import { CLASSES, Loadout } from './loadout.js';
 import { Meta } from './meta.js';
 import { PerksUI } from './perks.js';
 import { Props } from './props.js';
+import { Secrets } from './secrets.js';
 import { Net } from './net.js';
 import { OnlineBoard } from './onlineboard.js';
 import { Chat } from './chat.js';
@@ -72,6 +73,7 @@ class Game {
     this.pickups = new Pickups(this.scene);
     this.props = new Props(this.scene);
     this._placeLandmarks();
+    this.secrets = new Secrets(this.scene, this.world);
     this.postfx = new PostFX(this.renderer, this.scene, this.camera);
     this.hud = new HUD();
     this.audio = new Audio();
@@ -228,7 +230,13 @@ class Game {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       if (this.state !== 'playing') return;
       this.player.onKey(e.code, true);
-      if (e.code === 'KeyE') this.vehicles.toggleMount();
+      if (e.code === 'KeyE') {
+        // search a nearby secret cache first; otherwise ride/dismount a vehicle
+        const searched = !this.vehicles.isMounted() && this.secrets &&
+          this.secrets.tryOpen(this.player.position.x, this.player.position.z,
+            (reward, found, total, pos) => this._onSecretFound(reward, found, total, pos));
+        if (!searched) this.vehicles.toggleMount();
+      }
       if (this.vehicles.isMounted()) return; // driving — gun keys disabled
       if (e.code === 'Space') { e.preventDefault(); if (this.player.jump()) this.audio.jump(); }
       if (e.code === 'KeyT') this._toggleThirdPerson();
@@ -549,6 +557,7 @@ class Game {
     // fresh single-player mission: reshuffle the enemy bases so the same
     // battlefield feels new each deployment (co-op mirrors the host, so skip it)
     if (startWave === 1 && !this.coopMode && this.world.reshuffleBases) this.world.reshuffleBases();
+    if (startWave === 1 && this.secrets) this.secrets.reset(); // fresh caches to discover
     this._clearGrenades();
     this._clearEnemyShots();
     this.hud.showBoss(false);
@@ -1291,6 +1300,16 @@ class Game {
     if (show) { const f = document.getElementById('base-fill'); if (f) f.style.width = (this.world.baseHpFrac(px, pz) * 100) + '%'; }
   }
 
+  _onSecretFound(reward, found, total, pos) {
+    this.credits += reward.credits;
+    this.hud.setCredits(this.credits);
+    if (reward.item && this.pickups) this.pickups.spawn(reward.item, { x: pos.x, z: pos.z });
+    this.hud.killFeed(`✦ SECRET FOUND (${found}/${total})  +${reward.credits}¢${reward.item ? '  +' + reward.item : ''}`);
+    try { this.audio.swap(); } catch (_) {}
+    this.postfx.pulseBloom(0.5);
+    if (this.ach) this.ach.unlock('treasure');
+  }
+
   _onBaseDestroyed(base) {
     const b = base || this.world.base;
     const primary = !b || b.primary;
@@ -1449,6 +1468,7 @@ class Game {
       this.coop.update(dt);
       this.vehicles.update(dt);     // ordnance + driving (sets the camera when mounted)
       this.vehicles.promptTick();
+      if (this.secrets) this.secrets.update(dt, this.player.position.x, this.player.position.z, !this.vehicles.isMounted());
       this._updateBaseBar();
       this.effects.update(dt, this.player.position);
       this.world.update(dt, this.camera);

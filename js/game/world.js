@@ -318,34 +318,81 @@ export class World {
   }
 
   // ---------- Enemy base (vehicle attack objective) ----------
-  // Build one destructible enemy base (a walled compound with a reactor core).
-  // Primary bases are larger and tougher; outposts are smaller. Returns the base.
+  // Build one destructible enemy base — a walled compound with a reactor core.
+  // Each base picks a random theme and dressing (braziers, banners, palisade
+  // spikes, crates) so no two look alike. Primary bases are larger/tougher.
   _buildOneBase(bx, bz, primary) {
     const g = new THREE.Group();
-    const wall = new THREE.MeshStandardMaterial({ color: 0x3a3f33, roughness: 0.9, metalness: 0.2, flatShading: true });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x55303a, roughness: 0.5, metalness: 0.6, flatShading: true });
+    const THEMES = [
+      { wall: 0x3a3f33, trim: 0x55303a, banner: 0x9c2b2b }, // war camp (green-grey)
+      { wall: 0x6b5f47, trim: 0x3a2c1c, banner: 0x2f5aa0 }, // sandstone keep
+      { wall: 0x44474d, trim: 0x2b2d31, banner: 0x2f7d4a }, // iron fortress
+    ];
+    const th = THEMES[Math.random() * THEMES.length | 0];
+    const wall = new THREE.MeshStandardMaterial({ color: th.wall, roughness: 0.9, metalness: 0.2, flatShading: true });
+    const metal = new THREE.MeshStandardMaterial({ color: th.trim, roughness: 0.5, metalness: 0.6, flatShading: true });
+    const bannerMat = new THREE.MeshStandardMaterial({ color: th.banner, roughness: 1, flatShading: true });
     const R = primary ? 14 : 9;
     const coreR = primary ? 3.2 : 2.1;
     const wallH = primary ? 4 : 3;
-    // perimeter walls (visual) + corner towers (solid)
-    for (const [dx, dz, w, d] of [[0, -R, 2 * R, 2], [0, R, 2 * R, 2], [-R, 0, 2, 2 * R], [R, 0, 2, 2 * R]]) {
+    const rot = Math.random() * Math.PI * 2; // whole compound faces a random way
+    g.rotation.y = rot;
+    const cs = Math.cos(rot), sn = Math.sin(rot);
+    const worldXZ = (lx, lz) => ({ x: bx + lx * cs + lz * sn, z: bz - lx * sn + lz * cs });
+
+    // perimeter walls with a gate gap on the +z side
+    const gate = 4;
+    for (const [dx, dz, w, d] of [[0, -R, 2 * R, 1.6], [-R, 0, 1.6, 2 * R], [R, 0, 1.6, 2 * R]]) {
       const seg = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), wall);
-      seg.position.set(bx + dx, wallH / 2, bz + dz); seg.castShadow = true; g.add(seg);
+      seg.position.set(dx, wallH / 2, dz); seg.castShadow = true; g.add(seg);
     }
+    for (const side of [-1, 1]) { // split front wall for the gate
+      const w = R - gate / 2;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, 1.6), wall);
+      seg.position.set(side * (gate / 2 + w / 2), wallH / 2, R); seg.castShadow = true; g.add(seg);
+    }
+    // corner towers (solid) + a brazier glowing atop each
     const towerH = primary ? 7 : 5;
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       const t = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.7, towerH, 6), wall);
-      t.position.set(bx + sx * R, towerH / 2, bz + sz * R); t.castShadow = true; g.add(t);
-      this._addBaseCollider(bx + sx * R, bz + sz * R, 2);
+      t.position.set(sx * R, towerH / 2, sz * R); t.castShadow = true; g.add(t);
+      const fire = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.0, 6),
+        new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff6a10, emissiveIntensity: 1.4, roughness: 0.5, flatShading: true }));
+      fire.position.set(sx * R, towerH + 0.4, sz * R); g.add(fire);
+      const w = worldXZ(sx * R, sz * R); this._addBaseCollider(w.x, w.z, 2);
+    }
+    // banner poles flanking the gate
+    for (const side of [-1, 1]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, wallH + 3, 6), metal);
+      pole.position.set(side * (gate / 2 + 0.6), (wallH + 3) / 2, R); g.add(pole);
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 1.1), bannerMat);
+      flag.position.set(side * (gate / 2 + 0.6), wallH + 1.4, R - 0.6); g.add(flag);
+    }
+    // palisade spikes along the walls (war-camp flavour)
+    if (Math.random() < 0.6) {
+      for (let i = -R + 2; i <= R - 2; i += 2.2) {
+        for (const [px, pz] of [[i, -R - 0.8], [i, R + 0.8]]) {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.4, 5), metal);
+          spike.position.set(px, 0.7, pz); spike.rotation.x = pz > 0 ? 0.5 : -0.5; g.add(spike);
+        }
+      }
+    }
+    // supply crates stacked inside
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x6a4f2a, roughness: 1, flatShading: true });
+    for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) {
+      const s = 0.9 + Math.random() * 0.5;
+      const cr = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
+      cr.position.set((Math.random() - 0.5) * (R - 3), s / 2, (Math.random() - 0.5) * (R - 3)); cr.castShadow = true; g.add(cr);
     }
     // central reactor core — the destructible target
     const core = new THREE.Mesh(
       new THREE.IcosahedronGeometry(coreR, 0),
       new THREE.MeshStandardMaterial({ color: 0xff5530, emissive: 0xff3010, emissiveIntensity: 0.85, roughness: 0.4, flatShading: true })
     );
-    core.position.set(bx, coreR + 0.4, bz); core.castShadow = true; g.add(core);
+    core.position.set(0, coreR + 0.4, 0); core.castShadow = true; g.add(core);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(coreR + 1.2, 0.4, 6, 16), metal);
-    ring.position.set(bx, coreR + 0.4, bz); ring.rotation.x = Math.PI / 2; g.add(ring);
+    ring.position.set(0, coreR + 0.4, 0); ring.rotation.x = Math.PI / 2; g.add(ring);
+    g.position.set(bx, 0, bz);
     this._addBaseCollider(bx, bz, coreR + 0.8);
     this.root.add(g);
     const hp = primary ? 2600 : 1200;

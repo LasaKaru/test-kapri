@@ -10,6 +10,7 @@ export const ACH_LIST = [
   { id: 'globetrotter', name: 'Globetrotter', desc: 'Fight on every map' },
   { id: 'nightmare', name: 'Nightmare', desc: 'Clear a wave on Nightmare' },
   { id: 'basebuster', name: 'Base Buster', desc: 'Destroy the enemy base' },
+  { id: 'treasure', name: 'Treasure Hunter', desc: 'Find a hidden cache' },
 ];
 
 export class Achievements {
