@@ -108,6 +108,170 @@ function cottage(rnd, pal) {
   return g;
 }
 
+// shared gable-roof helper: two pitched slabs + filled gable ends
+function gableRoof(g, w, d, h, pitch, over, roofMat, gableMat) {
+  const slabLen = Math.hypot(w / 2 + over, pitch) + 0.1;
+  const ang = Math.atan2(pitch, w / 2 + over);
+  for (const side of [-1, 1]) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(slabLen, 0.16, d + over * 2), roofMat);
+    slab.position.set(side * (w / 4), h + pitch / 2, 0);
+    slab.rotation.z = side * (Math.PI / 2 - ang) * -1;
+    slab.castShadow = true; g.add(slab);
+  }
+  const triShape = new THREE.Shape();
+  triShape.moveTo(-w / 2, 0); triShape.lineTo(w / 2, 0); triShape.lineTo(0, pitch); triShape.lineTo(-w / 2, 0);
+  const triGeo = new THREE.ExtrudeGeometry(triShape, { depth: 0.12, bevelEnabled: false });
+  for (const sz of [-1, 1]) {
+    const tri = new THREE.Mesh(triGeo, gableMat);
+    tri.position.set(0, h, sz * (d / 2)); tri.castShadow = true; g.add(tri);
+  }
+}
+const glowWin = (pal, rnd) => { const m = pal.win.clone(); m.emissiveIntensity = 0.3 + rnd() * 0.5; return m; };
+
+// a two-storey timber townhouse with a jettied (overhanging) upper floor
+function townhouse(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 3.0 + rnd() * 1.2, d = 2.6 + rnd() * 0.9, h = 2.4, h2 = 1.9, over = 0.3;
+  const wallMat = rnd() < 0.5 ? pal.plaster : pal.plaster2;
+  const gf = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  gf.position.y = h / 2; gf.castShadow = true; gf.receiveShadow = true; g.add(gf);
+  const uf = new THREE.Mesh(new THREE.BoxGeometry(w + over * 2, h2, d + over * 2), rnd() < 0.5 ? pal.plaster2 : pal.plaster);
+  uf.position.y = h + h2 / 2; uf.castShadow = true; g.add(uf);
+  for (const sx of [-1, 1]) { // corner timbers on both floors
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, h, 0.2), pal.timber); p1.position.set(sx * (w / 2 - 0.1), h / 2, d / 2 - 0.1); g.add(p1);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, h2, 0.2), pal.timber); p2.position.set(sx * (w / 2 + over - 0.1), h + h2 / 2, d / 2 + over - 0.1); g.add(p2);
+  }
+  const jetty = new THREE.Mesh(new THREE.BoxGeometry(w + over * 2, 0.18, 0.22), pal.timber);
+  jetty.position.set(0, h - 0.05, d / 2 + over - 0.11); g.add(jetty);
+  gableRoof(g, w + over * 2, d + over * 2, h + h2, 1.4 + rnd() * 0.3, 0.4, rnd() < 0.5 ? pal.roof : pal.roof2, wallMat);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.8, 0.12), pal.timber);
+  door.position.set((rnd() - 0.5) * (w - 1.4), 0.9, d / 2 + 0.02); g.add(door);
+  for (const [wy, wz] of [[1.4, d / 2 + 0.01], [h + 0.9, d / 2 + over + 0.01], [h + 0.9, -(d / 2 + over) - 0.01]]) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.1), glowWin(pal, rnd));
+    win.position.set((rnd() - 0.5) * (w - 1.2), wy, wz); g.add(win);
+  }
+  const chH = 1.3 + rnd() * 0.5, cx = (rnd() - 0.5) * w * 0.4, cz = (rnd() - 0.5) * d * 0.4, cy = h + h2 + 0.9;
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.5, chH, 0.5), pal.stone); ch.position.set(cx, cy, cz); ch.castShadow = true; g.add(ch);
+  g.userData.chimney = { x: cx, y: cy + chH / 2, z: cz };
+  g.userData.radius = Math.max(w + over * 2, d + over * 2) * 0.5;
+  return g;
+}
+
+// a round wattle-and-daub hut with a conical thatch roof
+function roundhut(rnd, pal) {
+  const g = new THREE.Group();
+  const rr = 1.5 + rnd() * 0.7, h = 1.7 + rnd() * 0.4;
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr + 0.15, h, 10), rnd() < 0.5 ? pal.plaster : pal.plaster2);
+  wall.position.y = h / 2; wall.castShadow = true; wall.receiveShadow = true; g.add(wall);
+  const thatchH = 1.6 + rnd() * 0.6;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(rr + 0.5, thatchH, 10), rnd() < 0.5 ? pal.hay : pal.roof2);
+  roof.position.y = h + thatchH / 2; roof.castShadow = true; g.add(roof);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.4, 0.14), pal.timber);
+  door.position.set(0, 0.7, rr + 0.02); g.add(door);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.12), glowWin(pal, rnd));
+  win.position.set(rr * 0.7, 1.1, rr * 0.7); win.rotation.y = -0.8; g.add(win);
+  // smoke vents through the thatch apex
+  g.userData.chimney = { x: 0, y: h + thatchH, z: 0 };
+  g.userData.radius = rr + 0.4;
+  return g;
+}
+
+// a long timber barn with big double doors and a hayloft opening
+function longBarn(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 6 + rnd() * 2.5, d = 3.2 + rnd() * 1.0, h = 2.8 + rnd() * 0.4;
+  const wallMat = rnd() < 0.5 ? pal.roof2 : pal.timber; // darker weathered plank
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  walls.position.y = h / 2; walls.castShadow = true; walls.receiveShadow = true; g.add(walls);
+  // vertical plank battens
+  for (let i = -w / 2 + 0.5; i < w / 2; i += 1.0) {
+    const batten = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, 0.08), pal.timber);
+    batten.position.set(i, h / 2, d / 2 + 0.02); g.add(batten);
+  }
+  gableRoof(g, w, d, h, 1.5 + rnd() * 0.4, 0.5, pal.roof2, wallMat);
+  // big double doors
+  for (const s of [-1, 1]) {
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.14), pal.timber);
+    leaf.position.set(s * 0.62, 1.1, d / 2 + 0.04); g.add(leaf);
+  }
+  // hayloft opening high in the gable, with a hoist beam
+  const loft = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 0.1), new THREE.MeshStandardMaterial({ color: 0x120c06, roughness: 1 }));
+  loft.position.set(0, h + 0.5, d / 2 + 0.02); g.add(loft);
+  const hoist = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 1.0), pal.timber);
+  hoist.position.set(0, h + 1.0, d / 2 + 0.4); g.add(hoist);
+  g.userData.radius = Math.max(w, d) * 0.5;
+  return g;
+}
+
+// an L-shaped manor house with a small square tower at the crook
+function manor(rnd, pal) {
+  const g = new THREE.Group();
+  const wingW = 5.0, wingD = 3.4, h = 3.0;
+  const wallMat = pal.plaster2;
+  // two perpendicular wings
+  const a = new THREE.Mesh(new THREE.BoxGeometry(wingW, h, wingD), wallMat);
+  a.position.set(-wingW * 0.25, h / 2, wingD * 0.35); a.castShadow = true; a.receiveShadow = true; g.add(a);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(wingD, h, wingW), wallMat);
+  b.position.set(wingW * 0.35, h / 2, -wingD * 0.25); b.castShadow = true; b.receiveShadow = true; g.add(b);
+  gableRoof(g, wingW + 0.6, wingD, h, 1.4, 0.4, pal.roof, wallMat);
+  // wing B roof (rotated)
+  const rb = new THREE.Group();
+  gableRoof(rb, wingW + 0.6, wingD, h, 1.4, 0.4, pal.roof, wallMat);
+  rb.rotation.y = Math.PI / 2; rb.position.set(wingW * 0.35 + 0, 0, -wingD * 0.25); g.add(rb);
+  // square corner tower with a pyramidal cap
+  const tw = 1.8, tH = h + 2.2;
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(tw, tH, tw), pal.stone);
+  tower.position.set(wingW * 0.1, tH / 2, wingD * 0.1); tower.castShadow = true; g.add(tower);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(tw * 0.85, 1.6, 4), pal.roof);
+  cap.position.set(wingW * 0.1, tH + 0.8, wingD * 0.1); cap.rotation.y = Math.PI / 4; cap.castShadow = true; g.add(cap);
+  // rows of glowing windows
+  for (let i = 0; i < 5; i++) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.1), glowWin(pal, rnd));
+    win.position.set(-wingW * 0.5 + i * 1.1, 1.5, wingD * 0.85 + 0.01); g.add(win);
+  }
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.0, 0.14), pal.timber);
+  door.position.set(-wingW * 0.25, 1.0, wingD * 0.85 + 0.02); g.add(door);
+  const chH = 1.6, cx = wingW * 0.35, cz = -wingD * 0.45, cy = h + 1.3;
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.6, chH, 0.6), pal.stone); ch.position.set(cx, cy, cz); ch.castShadow = true; g.add(ch);
+  g.userData.chimney = { x: cx, y: cy + chH / 2, z: cz };
+  g.userData.radius = wingW * 0.62;
+  return g;
+}
+
+// a bakery: a cottage with an external domed stone oven venting smoke
+function bakery(rnd, pal) {
+  const g = new THREE.Group();
+  const w = 3.6, d = 3.0, h = 2.4;
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), pal.plaster);
+  walls.position.y = h / 2; walls.castShadow = true; walls.receiveShadow = true; g.add(walls);
+  gableRoof(g, w, d, h, 1.3, 0.4, pal.roof, pal.plaster);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.12), pal.timber);
+  door.position.set(-0.8, 0.85, d / 2 + 0.02); g.add(door);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.1), glowWin(pal, rnd));
+  win.position.set(0.9, 1.4, d / 2 + 0.01); g.add(win);
+  // domed stone oven on the side, glowing mouth
+  const oven = new THREE.Mesh(new THREE.SphereGeometry(0.9, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), pal.stone);
+  oven.scale.set(1, 0.9, 1); oven.position.set(w / 2 + 0.7, 0.4, 0); oven.castShadow = true; g.add(oven);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.0, 0.5, 8), pal.stone);
+  base.position.set(w / 2 + 0.7, 0.25, 0); g.add(base);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.2), pal.fire.clone());
+  mouth.position.set(w / 2 + 0.7, 0.55, 0.85); g.add(mouth);
+  const flue = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 1.4, 6), pal.stone);
+  flue.position.set(w / 2 + 0.7, 1.4, -0.3); g.add(flue);
+  g.userData.chimney = { x: w / 2 + 0.7, y: 2.1, z: -0.3 };
+  g.userData.ovenGlow = mouth; // registered as a flicker target by the caller
+  g.userData.radius = (w / 2 + 1.6);
+  return g;
+}
+
+// pick a random regular dwelling for the cottage ring (weighted toward cottages)
+function houseVariant(rnd, pal) {
+  const r = rnd();
+  if (r < 0.55) return cottage(rnd, pal);
+  if (r < 0.82) return townhouse(rnd, pal);
+  return roundhut(rnd, pal);
+}
+
 // central stone well with a little shingled canopy
 function well(pal) {
   const g = new THREE.Group();
@@ -828,7 +992,7 @@ export function plantVillage(world, ax, az, seed = 7, opts = {}) {
     // skip cliff-side spots where a flat-based hut would float or bury a corner
     const s = slope(x, z, 2.4);
     if (s.max - s.min > 2.0) continue;
-    const c = cottage(rnd, pal);
+    const c = houseVariant(rnd, pal);
     c.position.set(x, s.min, z); // sit on the low corner so nothing floats
     c.rotation.y = Math.atan2(ax - x, az - z) + (rnd() - 0.5) * 0.4; // roughly face the well
     group.add(c);
@@ -963,6 +1127,45 @@ export function plantVillage(world, ax, az, seed = 7, opts = {}) {
       if (dry(bx, bz)) {
         const bt = benchTable(pal); bt.position.set(bx, gy(bx, bz), bz); bt.rotation.y = tv.rotation.y;
         group.add(bt); colliders.push({ x: bx, z: bz, r: bt.userData.radius * 0.6 });
+      }
+    }
+  }
+
+  // a barn out toward the fields (a working farmstead building)
+  if (!small) {
+    const sp = findSpot(ringR + 2, ringR + 9, 3.6, 1.6);
+    if (sp) {
+      const bn = longBarn(rnd, pal);
+      bn.position.set(sp.x, sp.y, sp.z); bn.rotation.y = Math.atan2(ax - sp.x, az - sp.z) + (rnd() - 0.5) * 0.6;
+      group.add(bn); colliders.push({ x: sp.x, z: sp.z, r: bn.userData.radius * 0.8 });
+    }
+  }
+
+  // a manor house — the grandest dwelling, set a little apart from the square
+  if (!small && rnd() < 0.85) {
+    const sp = findSpot(ringR + 1, ringR + 7, 3.4, 1.4);
+    if (sp) {
+      const mn = manor(rnd, pal);
+      mn.position.set(sp.x, sp.y, sp.z); mn.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(mn); colliders.push({ x: sp.x, z: sp.z, r: mn.userData.radius * 0.8 });
+      if (mn.userData.chimney) {
+        const lc = mn.userData.chimney, cs = Math.cos(mn.rotation.y), sn = Math.sin(mn.rotation.y);
+        chimneys.push({ x: sp.x + lc.x * cs + lc.z * sn, y: sp.y + lc.y, z: sp.z - lc.x * sn + lc.z * cs });
+      }
+    }
+  }
+
+  // a bakery with a wood-fired oven (glowing mouth flickers like the forge)
+  if (!small && rnd() < 0.8) {
+    const sp = findSpot(ringR - 2, ringR + 3, 2.6, 1.6);
+    if (sp) {
+      const bk = bakery(rnd, pal);
+      bk.position.set(sp.x, sp.y, sp.z); bk.rotation.y = Math.atan2(ax - sp.x, az - sp.z);
+      group.add(bk); colliders.push({ x: sp.x, z: sp.z, r: bk.userData.radius * 0.75 });
+      if (bk.userData.ovenGlow) flames.push({ mesh: bk.userData.ovenGlow, base: 1.6, phase: (sp.x + sp.z) * 0.7 });
+      if (bk.userData.chimney) {
+        const lc = bk.userData.chimney, cs = Math.cos(bk.rotation.y), sn = Math.sin(bk.rotation.y);
+        chimneys.push({ x: sp.x + lc.x * cs + lc.z * sn, y: sp.y + lc.y, z: sp.z - lc.x * sn + lc.z * cs });
       }
     }
   }
